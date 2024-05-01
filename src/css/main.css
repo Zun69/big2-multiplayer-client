@@ -1,0 +1,353 @@
+/* Styles for desktops and laptops */
+
+/* Media query targeting devices with a minimum screen width of 1000px (typical for desktops and laptops) */
+@media only screen and (min-width: 1000px) {
+    *, *::after, *::before {
+        box-sizing: border-box;
+    }
+    
+    
+    body {
+        font-family: Arial, Helvetica, sans-serif;
+        text-align: center;
+        /*background-color: rgb(11, 173, 11);*/
+        background-image: url('background/Sky-Background.jpg');
+        margin: 0;
+        padding: 0;
+    }
+    
+    #container {
+        background-color: white;
+        width: 1100px;
+        min-height: 1000px; /* Set a minimum height as a fallback */
+        margin: 0 auto; /* Center game container horizontally */
+    }
+
+    /*menu styling*/
+    #startMenu {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 360px; /* Adjust as needed */
+        height: 260px; /* Adjust as needed */
+        background-color: #ffffff; /* White background */
+        border: 1px solid #000; /* Add border with 2px width and black color */
+        border-radius: 10px; /* Rounded corners */
+        display: none;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+    }
+
+    #endMenu{
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 700px; /* Adjust as needed */
+        height: 450px; /* Adjust as needed */
+        background-color: #ffffff; /* White background */
+        border: 1px solid #000; /* Add border with 2px width and black color */
+        border-radius: 10px; /* Rounded corners */
+        display: none;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+    }
+    
+    #startButton {
+        margin-top: 120px;
+        width: 300px;
+        height: 30px;
+        transition-duration: 0.4s;
+        font-size: 15px;
+        font-family: Helvetica, Arial, sans-serif;
+        font-weight: 200;
+        border-radius: 4px;
+    }
+
+    #startButton:hover, #nextGameButton:hover, #play:hover, #pass:hover {
+        background-color: #008000;
+        color: white;
+    }
+
+    #quitGameButton:hover {
+        background-color: #f04034;
+        color: white;
+    }
+
+    #nextGameButton {
+        display: block;
+        margin: 0 auto; /* Center horizontally with 10px top and bottom margin */
+        margin-top: 100px;
+        width: 300px;
+        height: 30px;
+        transition-duration: 0.4s;
+        font-size: 15px;
+        font-family: Helvetica, Arial, sans-serif;
+        font-weight: 200;
+        border-radius: 4px;
+    }
+
+    #quitGameButton {
+        display: block;
+        margin: 0 auto; /* Center horizontally with 10px top and bottom margin */
+        margin-top: 15px;
+        width: 300px;
+        height: 30px;
+        transition-duration: 0.4s;
+        font-size: 15px;
+        font-family: Helvetica, Arial, sans-serif;
+        font-weight: 200;
+        border-radius: 4px;
+    }
+
+    /*leaderboard styling*/
+    #leaderboard {
+        padding: 0 20px; /* Add padding to create a gap on both sides */
+        margin-top: 20px;
+    }
+    
+    #leaderboard table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    
+    #leaderboard th,
+    #leaderboard td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+    }
+    
+    #leaderboard th {
+        background-color: #f2f2f2;
+    }
+    
+    #leaderboard th:first-child,
+    #leaderboard td:first-child {
+        width: 70%; /* Adjust as needed */
+    }
+    
+    h3 {
+        margin-top: 50px;
+    }
+    
+    h4 {
+        font-family: 'Helvetica', sans-serif;
+        font-size: 16px;
+        margin-bottom: -28px;
+    }
+    
+    p {
+        font-family: 'Helvetica', sans-serif;
+        font-size: 16px;
+        line-height: 1.5;
+        text-align: center;
+        max-width: 800px; /* Adjust the maximum width as needed */
+        margin: 0 auto; /* Center the paragraph within the container */
+        margin-top: 30px;
+    }
+    
+    #gameContainer {
+        width: 1000px;
+        height: 650px;
+        background-image: url('background/Wooden-Background.jpg');
+        background-size: cover; /* Scale the image to cover the entire container */
+        background-repeat: no-repeat; /* Prevent the image from repeating */
+        text-align: center;
+        font-size: 0.8rem;
+        position: relative;
+        margin: 0 auto; /* Center game container horizontally */
+    }
+    
+    
+    /*gameDeck styling*/
+    #gameDeck > div {
+        position: absolute;
+        top: 50%; /* Place it vertically in the middle */
+        left: 50%; /* Place it horizontally in the middle */
+        transform: translate(-50%, -50%); /* Center it perfectly */
+    }
+    
+    /*gameDeck styling*/
+    #finishedDeck > div {
+        position: absolute;
+        top: 60%; /* Place it vertically in the middle */
+        left: 50%; /* Place it horizontally in the middle */
+        transform: translate(-50%, -50%); /* Center it perfectly */
+    }
+    
+    #gameInfo {
+        position: absolute;
+        top: 67.8%; /*67.8*/
+        left: 50%;
+        transform: translate(-50%, -50%); /* Center the element precisely */
+        font-size: 15px;
+        background-color: rgba(255, 255, 255, 0.5); /* Transparent white background */
+        padding: 10px;
+        backdrop-filter: blur(1px); /* Adjust the blur value as needed */
+        border-radius: 10px; /* Adjust the border-radius value as needed */
+        display: none;
+    }
+
+    #arrow {
+        position: absolute;
+        top: calc(67.8% - 110px); /* Adjust the value to position it above gameInfo */
+        left: 50%;
+        transform: translateX(-50%);
+    }
+
+    #arrow img {
+        width: 40px;
+        height: 40px;
+        margin-bottom: -65px;
+        position: relative; /* Make the image position relative to its parent */
+        transition: transform 0.20s ease; /* Smooth transition for transform property */
+    }
+    
+    .button {
+        transition-duration: 0.4s;
+        font-size: 15px;
+        font-family: Helvetica, Arial, sans-serif;
+        font-weight: 200;
+        padding: 4px 8px; /* Adjust padding to increase button size */
+        border-radius: 4px;
+    }
+    
+    /* play hand, and pass buttons*/
+    #pass {
+        position: absolute;
+        bottom: 10px; /* Adjust this value to set the distance from the bottom */
+        left: 52%;
+        display: none;
+    }
+    
+    #play{
+        position: absolute;
+        bottom: 10px; /* Adjust this value to set the distance from the bottom */
+        left: 42.5%;
+        display: none;
+    }
+    
+    #turn{
+        display: inline;
+        margin-left: 125px;
+    }
+}
+
+/* Media query targeting devices with a maximum screen width of 780px (iphone 12 mini and smaller in landscape mode) */
+@media only screen and (max-width: 780px) {
+    *, *::after, *::before {
+        box-sizing: border-box;
+    }
+    
+    body {
+        font-family: Arial, Helvetica, sans-serif;
+        text-align: center;
+        /*background-color: rgb(11, 173, 11);*/
+        background-image: url('background/Sky-Background.jpg');
+        margin: 0;
+        padding: 0;
+    }
+    
+    #container {
+        background-color: white;
+        width: 100%; /* Adjusted to fit within the viewport */
+        min-height: 1000px; /* Set a minimum height as a fallback */
+        padding: 0 10px; /* Added padding to maintain readability and spacing */
+    }
+    
+    h3 {
+        margin-top: 30px; /* Reduced margin for smaller screens */
+    }
+    
+    h4 {
+        font-family: 'Helvetica', sans-serif;
+        font-size: 16px;
+        margin-bottom: -20px; /* Adjusted margin for smaller screens */
+    }
+    
+    p {
+        font-family: 'Helvetica', sans-serif;
+        font-size: 14px; /* Reduced font size for smaller screens */
+        line-height: 1.5;
+        text-align: center;
+        max-width: 100%; /* Adjusted to fit within the viewport */
+        margin: 0 auto; /* Center the paragraph within the container */
+        margin-top: 20px; /* Reduced margin for smaller screens */
+    }
+    
+    #gameContainer {
+        width: 100%; /* Adjusted to fit within the viewport */
+        height: 450px; /* Reduced height for smaller screens */
+        background-image: url('background/Wooden-Background.jpg');
+        background-size: cover; /* Scale the image to cover the entire container */
+        background-repeat: no-repeat; /* Prevent the image from repeating */
+        text-align: center;
+        font-size: 0.8rem;
+        position: relative;
+        margin: 0 auto; /* Center game container horizontally */
+    }
+    
+    #gameDeck > div,
+    #finishedDeck > div {
+        position: absolute;
+        top: 50%; /* Place it vertically in the middle */
+        left: 50%; /* Place it horizontally in the middle */
+        transform: translate(-50%, -50%); /* Center it perfectly */
+    }
+    
+    #gameInfo {
+        position: absolute;
+        top: 75%; /* Adjusted position for smaller screens */
+        left: 50%;
+        transform: translate(-50%, -50%); /* Center the element precisely */
+        font-size: 12px; /* Reduced font size for smaller screens */
+        background-color: rgba(255, 255, 255, 0.5); /* Transparent white background */
+        padding: 8px; /* Reduced padding for smaller screens */
+        backdrop-filter: blur(1px); /* Adjust the blur value as needed */
+        border-radius: 10px; /* Adjust the border-radius value as needed */
+    }
+    
+    .button {
+        transition-duration: 0.4s;
+        font-size: 14px; /* Reduced font size for smaller screens */
+        font-family: Helvetica, Arial, sans-serif;
+        font-weight: 200;
+        padding: 4px 8px; /* Adjust padding to increase button size */
+        border-radius: 4px;
+    }
+      
+    .button:hover {
+        background-color: #d2b48c;
+        color: white;
+    }
+    
+    
+    #pass,
+    #play {
+        position: absolute;
+        bottom: 10px; /* Adjust this value to set the distance from the bottom */
+        left: 50%;
+        transform: translateX(-50%); /* Center horizontally */
+    }
+    
+    #play {
+        left: calc(50% - 60px); /* Adjusted position for smaller screens */
+    }
+    
+    #turn {
+        display: inline;
+        margin-left: 0; /* Removed margin for smaller screens */
+    }
+}
+
+/* Media query targeting devices with a screen width between 780px and 999px */
+@media only screen and (min-width: 781px) and (max-width: 999px) {
+    /* Add your styles for devices with a width between 780px and 999px here */
+}
+
+
+

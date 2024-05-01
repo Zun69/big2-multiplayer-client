@@ -1,0 +1,108 @@
+.player {
+  float: left;
+}
+
+.player img{
+  height: 90px;
+  width: 65px;
+}
+
+#play-hand {
+  margin-top: 65px;
+}
+
+/*player 3, starts from top left*/
+.player:nth-child(1){
+  margin-top: 40px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 90px;
+}
+
+.player:nth-child(1) .card {
+  position: absolute;
+  left: 44.8%;
+  top: 250%;
+}
+
+
+.player:nth-child(1) img:hover{
+  transform: translateY(15px);
+}
+
+.player:nth-child(1) .checked{
+  transform: translateY(15px);
+}
+
+/*player 4, starts from top right*/
+.player:nth-child(2){
+  margin-right: 10px;
+  margin-top: -100px;
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 90px;
+  height: 100%;
+}
+
+.player:nth-child(2) .card {
+  position: absolute;
+  top: 56.6%;
+  left: -490%;
+}
+
+.player:nth-child(2) img:hover{
+  transform: translateX(15px) rotate(90deg);
+}
+
+.player:nth-child(2) .checked{
+  transform: translateX(15px) rotate(90deg);
+}
+
+/*player 2, starts from left top*/
+.player:nth-child(3){
+  margin-left: 10px;
+  margin-top: 100px;
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 90px;
+  height: 100%;
+}
+
+/* Adjust the top property to move cards up */
+.player:nth-child(3) .card {
+  position: absolute;
+  top: 26%;
+  left: 500%;
+}
+
+.player:nth-child(3) img:hover{
+  transform: translateX(15px) rotate(90deg);
+}
+
+.player:nth-child(3) .checked{
+  transform: translateX(15px) rotate(90deg);
+}
+
+/*player 1, starts from right bottom*/
+.player:nth-child(4){
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 90px;
+}
+
+/* Adjust the top property to move cards up */
+.player:nth-child(4) .card {
+  position: absolute;
+  top: -292px; /* Adjust this value as needed */
+  left: 44%;
+}
+
+
+
+
