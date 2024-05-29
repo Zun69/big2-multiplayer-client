@@ -647,10 +647,20 @@ const gameLoop = async _ => {
     }
 }
 
-async function startMenu() {
-    const menu = document.getElementById("startMenu");
-    const startButton = document.getElementById("startButton");
+// Function to sanitize the input
+function sanitizeInput(input) {
+    // Replace all non-alphanumeric characters with an empty string
+    return input.replace(/[^a-zA-Z0-9]/g, '');
+}
 
+async function roomMenu() {
+    const menu = document.getElementById("roomMenu");
+    const startButton = document.getElementById("startButton");
+    const playerNameInput = document.getElementById("playerName");
+    const roomCodeInput = document.getElementById("roomCode");
+    const errorMessage = document.getElementById("errorMessage");
+
+    //TO DO change to block when startMenu is resolved
     menu.style.display = "block";
 
     return new Promise((resolve) => {
@@ -658,14 +668,55 @@ async function startMenu() {
         function handleClick() {
             // Remove the click event listener
             startButton.removeEventListener("click", handleClick);
+
+            // Validate and sanitize the player name
+            let playerName = sanitizeInput(playerNameInput.value);
+            playerName = playerName.slice(0, 10); // Limit to 10 characters
+            
+            // Validate and sanitize the room code
+            let roomCode = sanitizeInput(roomCodeInput.value);
+            roomCode = roomCode.slice(0, 6); // Limit to 6 characters
+            
+            // Update input fields with sanitized values
+            playerNameInput.value = playerName;
+            roomCodeInput.value = roomCode;
+
             // Hide the menu
             menu.style.display = "none";
-            // Resolve the promise with the value "startGame"
+
+            // Resolve the promise with the value "startGame" TO DO: only resolve if socket.io returns connected emit, and name and roomcode are valid
             resolve("startGame");
         }
 
         // Add a click event listener to the start button
-        startButton.addEventListener("click", handleClick);
+        startButton.addEventListener("click", () => {
+            //input box validation
+            if (playerNameInput.value.trim() === '' || roomCodeInput.value.trim() === '') {
+                errorMessage.innerText = "Both player name and room code are required.";
+                errorMessage.style.display = "block";
+                return;
+            }
+            
+            if (playerNameInput.value.length > 10 && roomCodeInput.value.length > 6) {
+                errorMessage.innerText = "Both player name and room code exceed character limits.";
+                errorMessage.style.display = "block";
+                return;
+            }
+
+            if (playerNameInput.value.length > 10) {
+                errorMessage.innerText = "Player name should be 10 characters or less.";
+                errorMessage.style.display = "block";
+                return;
+            }
+
+            if (roomCodeInput.value.length > 6) {
+                errorMessage.innerText = "Room code should be 6 characters or less.";
+                errorMessage.style.display = "block";
+                return;
+            }
+
+            handleClick();
+        });
     });
 }
 
@@ -712,8 +763,8 @@ async function endMenu() {
     });
 }
 
-async function startGame(startMenuResolve){
-    if(startMenuResolve == "startGame"){
+async function startGame(roomMenuResolve){
+    if(roomMenuResolve == "startGame"){
         //unhide buttons and gameInfo divs
         const playButton = document.getElementById("play");
         const passButton = document.getElementById("pass");
@@ -798,10 +849,16 @@ function updateLeaderboard() {
 }
 
 window.onload = async function() {
+    const socket = io('http://localhost:3000'); // Connect to the server
+
+    socket.on('connect', () => {
+        console.log('Connected to server');
+    });
+
     let endMenuResolve;
 
     // Return user choice from main menu
-    let startMenuResolve = await startMenu();
+    let roomMenuResolve = await roomMenu();
 
     while(true){
 
@@ -811,11 +868,11 @@ window.onload = async function() {
             console.log('Game quit');
             GameModule.resetAll();
             //return to main menu
-            startMenuResolve = await startMenu();
+            roomMenuResolve = await roomMenu();
         }
 
         // start the game and return results of game
-        let results = await startGame(startMenuResolve);
+        let results = await startGame(roomMenuResolve);
 
         if(results.length == 4){
             console.log('Game complete!');

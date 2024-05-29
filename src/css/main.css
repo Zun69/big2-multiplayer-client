@@ -40,6 +40,22 @@
         align-items: center;
     }
 
+    #roomMenu {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 360px; /* Adjust as needed */
+        height: 260px; /* Adjust as needed */
+        background-color: #ffffff; /* White background */
+        border: 1px solid #000; /* Add border with 2px width and black color */
+        border-radius: 10px; /* Rounded corners */
+        display: none;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+    }
+
     #endMenu{
         position: absolute;
         top: 50%;
@@ -55,9 +71,26 @@
         justify-content: center;
         align-items: center;
     }
+
+    /* Style for the input box */
+    #playerName, #roomCode {
+        padding: 8px;
+        font-size: 16px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        margin-bottom: 10px;
+        width: 250px;
+        text-align: center; /* Center text within the input box */
+    }
+
+    /* style for input box validation message */
+    #errorMessage {
+        display: none;
+        text-align: center;
+    }
     
     #startButton {
-        margin-top: 120px;
+        margin-top: 20px;
         width: 300px;
         height: 30px;
         transition-duration: 0.4s;

@@ -20,7 +20,7 @@
         <script type="module" src="src/js/big2.js"></script>
         <script src="src/js/deck.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.9.0/dist/tf.min.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/ppo-tfjs"></script>
+        <script src="https://cdn.socket.io/4.4.1/socket.io.min.js"></script>
     </head>
     <body>
         <div id ="container">
@@ -38,8 +38,17 @@
                 <button class="button" id="play">Play Hand</button>
                 <button class="button" id="pass">Pass</button>
                 <div id="startMenu">
-                    <h2>Big 2</h2>
-                    <button id="startButton">Start Game</button>
+                    <h2>Big 2 Multiplayer</h2>
+                    <input type="text" id="userName" placeholder="Enter Username">
+                    <input type="text" id="password" placeholder="Enter Password">
+                    <button id="loginButton">Login</button>
+                </div>
+                <div id="roomMenu">
+                    <h2>Big 2 Multiplayer</h2>
+                    <input type="text" id="playerName" placeholder="Enter Your Name">
+                    <input type="text" id="roomCode" placeholder="Enter Room Code">
+                    <div id="errorMessage"></div>
+                    <button id="startButton">Join Game</button>
                 </div>
                 <div id="endMenu">
                     <div id="leaderboard">
