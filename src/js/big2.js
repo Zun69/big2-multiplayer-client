@@ -653,12 +653,19 @@ function sanitizeInput(input) {
     return input.replace(/[^a-zA-Z0-9]/g, '');
 }
 
+async function startMenu() {
+    const menu = document.getElementById("startMenu");
+    const userNameInput = document.getElementById("username");
+    const passwordInput = document.getElementById("password");
+    const errorMessage1 = document.getElementById("errorMessage1");
+}
+
 async function roomMenu() {
     const menu = document.getElementById("roomMenu");
     const startButton = document.getElementById("startButton");
     const playerNameInput = document.getElementById("playerName");
     const roomCodeInput = document.getElementById("roomCode");
-    const errorMessage = document.getElementById("errorMessage");
+    const errorMessage2 = document.getElementById("errorMessage2");
 
     //TO DO change to block when startMenu is resolved
     menu.style.display = "block";
@@ -692,26 +699,26 @@ async function roomMenu() {
         startButton.addEventListener("click", () => {
             //input box validation
             if (playerNameInput.value.trim() === '' || roomCodeInput.value.trim() === '') {
-                errorMessage.innerText = "Both player name and room code are required.";
-                errorMessage.style.display = "block";
+                errorMessage2.innerText = "Both player name and room code are required.";
+                errorMessage2.style.display = "block";
                 return;
             }
             
             if (playerNameInput.value.length > 10 && roomCodeInput.value.length > 6) {
-                errorMessage.innerText = "Both player name and room code exceed character limits.";
-                errorMessage.style.display = "block";
+                errorMessage2.innerText = "Both player name and room code exceed character limits.";
+                errorMessage2.style.display = "block";
                 return;
             }
 
             if (playerNameInput.value.length > 10) {
-                errorMessage.innerText = "Player name should be 10 characters or less.";
-                errorMessage.style.display = "block";
+                errorMessage2.innerText = "Player name should be 10 characters or less.";
+                errorMessage2.style.display = "block";
                 return;
             }
 
             if (roomCodeInput.value.length > 6) {
-                errorMessage.innerText = "Room code should be 6 characters or less.";
-                errorMessage.style.display = "block";
+                errorMessage2.innerText = "Room code should be 6 characters or less.";
+                errorMessage2.style.display = "block";
                 return;
             }
 
@@ -856,6 +863,9 @@ window.onload = async function() {
     });
 
     let endMenuResolve;
+
+    //require username and password to establish connection to socket.io server, then pass in startMenuResolve as a parameter in await roomMenu();
+    //let startMenuResolve = await startMenu()
 
     // Return user choice from main menu
     let roomMenuResolve = await roomMenu();
