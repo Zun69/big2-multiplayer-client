@@ -37,19 +37,29 @@
                 <div id="gameInfo"></div>
                 <button class="button" id="play">Play Hand</button>
                 <button class="button" id="pass">Pass</button>
-                <div id="startMenu">
+                <div id="loginMenu">
                     <h2>Big 2 Multiplayer</h2>
                     <input type="text" id="username" placeholder="Enter Username">
                     <input type="text" id="password" placeholder="Enter Password">
                     <div id="errorMessage1"></div>
                     <button id="loginButton">Login</button>
                 </div>
-                <div id="roomMenu">
+                <div id="joinRoomMenu">
                     <h2>Big 2 Multiplayer</h2>
                     <input type="text" id="playerName" placeholder="Enter Your Name">
                     <input type="text" id="roomCode" placeholder="Enter Room Code">
                     <div id="errorMessage2"></div>
-                    <button id="startButton">Join Game</button>
+                    <button id="joinRoomButton">Join Room</button>
+                </div>
+                <div id="lobbyMenu">
+                    <h2>Lobby</h2>
+                    <div id="connectedClients"></div>
+                    <div id="chatBox">
+                        <div id="messageContainer"></div>
+                        <input type="text" id="messageInput" placeholder="Type Your Message">
+                        <button id="sendMessageButton">Send</button>
+                    </div>
+                    <button id="startGameButton">Start Game</button>
                 </div>
                 <div id="endMenu">
                     <div id="leaderboard">

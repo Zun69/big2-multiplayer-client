@@ -24,7 +24,7 @@
     }
 
     /*menu styling*/
-    #startMenu {
+    #loginMenu {
         position: absolute;
         top: 50%;
         left: 50%;
@@ -40,7 +40,7 @@
         align-items: center;
     }
 
-    #roomMenu {
+    #joinRoomMenu {
         position: absolute;
         top: 50%;
         left: 50%;
@@ -54,6 +54,59 @@
         flex-direction: column;
         justify-content: center;
         align-items: center;
+    }
+
+    #lobbyMenu{
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 700px; /* Adjust as needed */
+        height: 450px; /* Adjust as needed */
+        background-color: #ffffff; /* White background */
+        border: 1px solid #000; /* Add border with 2px width and black color */
+        border-radius: 10px; /* Rounded corners */
+        display: none;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+    }
+
+    /* CSS for connectedClients section */
+    #connectedClients {
+        max-height: auto; /* Remove max-height to prevent scrollbar */
+        margin-bottom: 10px; /* Add some space between connectedClients and chatBox */
+        padding: 10px; /* Add padding for better readability */
+        border-bottom: 1px solid #ccc; /* Add a separating line between connectedClients and chatBox */
+    }
+
+    #connectedClients div {
+        padding: 5px; /* Add padding for each client row */
+    }
+
+    /* CSS for chatBox section */
+    #chatBox {
+        flex: 1; /* Occupy remaining vertical space */
+        overflow-y: auto; /* Enable vertical scrollbar if content exceeds container height */
+        padding: 10px; /* Add padding for better readability */
+    }
+
+    #messageContainer {
+        margin-bottom: 10px; /* Add some space between messages and message input */
+    }
+
+    #messageInput {
+        width: calc(100% - 70px); /* Adjust input width */
+        margin-right: 10px; /* Add some space between input and send button */
+    }
+
+    #sendMessageButton {
+        width: 60px; /* Adjust button width */
+    }
+
+    /* Apply styles to lobbyMenu children */
+    #lobbyMenu > * {
+        margin: 10px 0; /* Add vertical margin for each child element */
     }
 
     #endMenu{
@@ -89,7 +142,8 @@
         text-align: center;
     }
     
-    #startButton, #loginButton {
+    /* style for loginMenu & joinRoomMenu */
+    #loginButton, #joinRoomButton {
         margin-top: 20px;
         width: 300px;
         height: 30px;
@@ -100,7 +154,7 @@
         border-radius: 4px;
     }
 
-    #loginButton:hover, #startButton:hover, #nextGameButton:hover, #play:hover, #pass:hover {
+    #loginButton:hover, #joinRoomButton:hover, #startGameButton, #nextGameButton:hover, #play:hover, #pass:hover {
         background-color: #008000;
         color: white;
     }

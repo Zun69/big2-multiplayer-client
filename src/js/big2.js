@@ -653,15 +653,16 @@ function sanitizeInput(input) {
     return input.replace(/[^a-zA-Z0-9]/g, '');
 }
 
-async function startMenu() {
-    const startMenu = document.getElementById("startMenu");
+//menu that allows users to enter a valid username and password to establish a connection with the server
+async function loginMenu() {
+    const loginMenu = document.getElementById("loginMenu");
     const userNameInput = document.getElementById("username");
     const passwordInput = document.getElementById("password");
     const loginButton = document.getElementById("loginButton");
     const errorMessage1 = document.getElementById("errorMessage1");
 
-    //display the startMenu(login menu)
-    startMenu.style.display = "block";
+    //display the loginMenu(login menu)
+    loginMenu.style.display = "block";
 
     return new Promise((resolve) => {
         function handleClick() {
@@ -697,15 +698,15 @@ async function startMenu() {
                     errorMessage1.innerText = 'Invalid username or password.';
                     errorMessage1.style.display = 'block';
                     // Re-show the login menu if authentication fails
-                    startMenu.style.display = 'block';
+                    loginMenu.style.display = 'block';
                 }
             });
 
             // Handle successful authentication
             socket.on('authenticated', () => {
                 console.log('Authentication successful');
-                // Hide the startMenu
-                startMenu.style.display = "none";
+                // Hide the loginMenu
+                loginMenu.style.display = "none";
                 // Resolve the promise with the socket instance
                 resolve(socket);
             });
@@ -736,21 +737,22 @@ async function startMenu() {
     });
 }
 
-async function roomMenu(startMenuResolve) {
-    const roomMenu = document.getElementById("roomMenu");
-    const startButton = document.getElementById("startButton");
+//menu that allows users to enter a name and room number to join a game room
+async function joinRoomMenu(socket) {
+    const joinRoomMenu = document.getElementById("joinRoomMenu");
+    const joinRoomButton = document.getElementById("joinRoomButton");
     const playerNameInput = document.getElementById("playerName");
     const roomCodeInput = document.getElementById("roomCode");
     const errorMessage2 = document.getElementById("errorMessage2");
 
-    //TO DO change to block when roomMenu is resolved
-    roomMenu.style.display = "block";
+    //TO DO change to block when joinRoomMenu is resolved
+    joinRoomMenu.style.display = "block";
 
     return new Promise((resolve) => {
         // Define the click event listener function
         function handleClick() {
             // Remove the click event listener
-            startButton.removeEventListener("click", handleClick);
+            joinRoomButton.removeEventListener("click", handleClick);
 
             // Validate and sanitize the player name
             let playerName = sanitizeInput(playerNameInput.value);
@@ -764,15 +766,29 @@ async function roomMenu(startMenuResolve) {
             playerNameInput.value = playerName;
             roomCodeInput.value = roomCode;
 
-            // Hide the roomMenu
-            roomMenu.style.display = "none";
+            // Emit joinRoom event to server
+            socket.emit('joinRoom', { roomCode });
 
-            // Resolve the promise with the value "startGame" TO DO: only resolve if socket.io returns connected emit, and name and roomcode are valid
-            resolve("startGame");
+            // Handle invalid room code error from server
+            socket.on('errorMessage', (message) => {
+                errorMessage2.innerText = message;
+                errorMessage2.style.display = 'block';
+                // Re-show the room menu if joining fails
+                joinRoomMenu.style.display = 'block';
+            });
+
+            // Handle successful room join
+            socket.on('joinedRoom', () => {
+                console.log('Joined room successfully');
+                // Hide the joinRoomMenu
+                joinRoomMenu.style.display = "none";
+                // Resolve the promise with the value "startGame"
+                resolve(socket);
+            });
         }
 
         // Add a click event listener to the start button
-        startButton.addEventListener("click", () => {
+        joinRoomButton.addEventListener("click", () => {
             //input box validation
             if (playerNameInput.value.trim() === '' || roomCodeInput.value.trim() === '') {
                 errorMessage2.innerText = "Both player name and room code are required.";
@@ -801,6 +817,10 @@ async function roomMenu(startMenuResolve) {
             handleClick();
         });
     });
+}
+
+async function lobbyMenu(socket){
+
 }
 
 async function endMenu() {
@@ -846,8 +866,8 @@ async function endMenu() {
     });
 }
 
-async function startGame(roomMenuResolve){
-    if(roomMenuResolve == "startGame"){
+async function startGame(joinRoomMenuResolve){
+    if(joinRoomMenuResolve == "startGame"){
         //unhide buttons and gameInfo divs
         const playButton = document.getElementById("play");
         const passButton = document.getElementById("pass");
@@ -934,12 +954,14 @@ function updateLeaderboard() {
 window.onload = async function() {
     let endMenuResolve;
 
-    //require username and password to establish connection to socket.io server
-    //startMenuResolve is now a socket object
-    let startMenuResolve = await startMenu()
+    // require username and password to establish connection to socket.io server and resolve the connected socket object
+    let loginMenuResolve = await loginMenu()
 
-    // Return user choice from main menu
-    let roomMenuResolve = await roomMenu(startMenuResolve);
+    // once client has established connection to the server, require room code to join a game lobby and then resolve the socket object again
+    let joinRoomMenuResolve = await joinRoomMenu(loginMenuResolve);
+
+    // a lobby room where clients wait and can chat with each other until 4 clients join, where they can then start the game, might allow bots as filler
+    let lobbyMenuResolve = await lobbyMenu(joinRoomMenuResolve);
 
     while(true){
 
@@ -949,11 +971,11 @@ window.onload = async function() {
             console.log('Game quit');
             GameModule.resetAll();
             //return to main menu
-            roomMenuResolve = await roomMenu();
+            joinRoomMenuResolve = await joinRoomMenu();
         }
 
         // start the game and return results of game
-        let results = await startGame(roomMenuResolve);
+        let results = await startGame(joinRoomMenuResolve);
 
         if(results.length == 4){
             console.log('Game complete!');
