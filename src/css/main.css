@@ -84,7 +84,7 @@
     }
 
     /* style for input box validation message */
-    #errorMessage {
+    #errorMessage1, #errorMessage2 {
         display: none;
         text-align: center;
     }
@@ -100,7 +100,7 @@
         border-radius: 4px;
     }
 
-    #startButton:hover, #nextGameButton:hover, #play:hover, #pass:hover {
+    #loginButton:hover, #startButton:hover, #nextGameButton:hover, #play:hover, #pass:hover {
         background-color: #008000;
         color: white;
     }

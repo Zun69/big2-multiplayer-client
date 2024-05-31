@@ -654,21 +654,97 @@ function sanitizeInput(input) {
 }
 
 async function startMenu() {
-    const menu = document.getElementById("startMenu");
+    const startMenu = document.getElementById("startMenu");
     const userNameInput = document.getElementById("username");
     const passwordInput = document.getElementById("password");
+    const loginButton = document.getElementById("loginButton");
     const errorMessage1 = document.getElementById("errorMessage1");
+
+    //display the startMenu(login menu)
+    startMenu.style.display = "block";
+
+    return new Promise((resolve) => {
+        function handleClick() {
+            //remove the click event listener for login button
+            loginButton.removeEventListener("click", handleClick);
+
+            // Validate and sanitize the player name
+            let username = sanitizeInput(userNameInput.value);
+            
+            // Validate and sanitize the room code
+            let password = sanitizeInput(passwordInput.value);
+            
+            // Update input fields with sanitized values
+            userNameInput.value = username;
+            passwordInput.value = password;
+
+            const socket = io('http://localhost:3000', {
+                auth: {
+                    username: username,
+                    password: password
+                }
+            });
+
+            // Emit authentication event to server
+            socket.emit('authenticate', { username, password });
+
+            // Attempt authentication by connecting to the server
+            socket.connect();
+
+            // Handle authentication failure (custom error from middleware)
+            socket.on('connect_error', (error) => {
+                if (error.message === 'Authentication failed') {
+                    errorMessage1.innerText = 'Invalid username or password.';
+                    errorMessage1.style.display = 'block';
+                    // Re-show the login menu if authentication fails
+                    startMenu.style.display = 'block';
+                }
+            });
+
+            // Handle successful authentication
+            socket.on('authenticated', () => {
+                console.log('Authentication successful');
+                // Hide the startMenu
+                startMenu.style.display = "none";
+                // Resolve the promise with the socket instance
+                resolve(socket);
+            });
+        }
+
+        loginButton.addEventListener("click", () => {
+            //input box validation
+            if (userNameInput.value.trim() === '' || passwordInput.value.trim() === '') {
+                errorMessage1.innerText = "Both username and password are required.";
+                errorMessage1.style.display = "block";
+                return;
+            }
+
+            if(userNameInput.value.trim() === '') {
+                errorMessage1.innerText = "Username is required.";
+                errorMessage1.style.display = "block";
+                return;
+            }
+
+            if (passwordInput.value.trim() === '') {
+                errorMessage1.innerText = "Password is required.";
+                errorMessage1.style.display = "block";
+                return;
+            }
+
+            handleClick();
+        });
+    });
 }
 
-async function roomMenu() {
-    const menu = document.getElementById("roomMenu");
+async function roomMenu(startMenuResolve) {
+    const roomMenu = document.getElementById("roomMenu");
     const startButton = document.getElementById("startButton");
     const playerNameInput = document.getElementById("playerName");
     const roomCodeInput = document.getElementById("roomCode");
     const errorMessage2 = document.getElementById("errorMessage2");
 
-    //TO DO change to block when startMenu is resolved
-    menu.style.display = "block";
+    //TO DO change to block when roomMenu is resolved
+    roomMenu.style.display = "block";
 
     return new Promise((resolve) => {
         // Define the click event listener function
@@ -688,8 +764,8 @@ async function roomMenu() {
             playerNameInput.value = playerName;
             roomCodeInput.value = roomCode;
 
-            // Hide the menu
-            menu.style.display = "none";
+            // Hide the roomMenu
+            roomMenu.style.display = "none";
 
             // Resolve the promise with the value "startGame" TO DO: only resolve if socket.io returns connected emit, and name and roomcode are valid
             resolve("startGame");
@@ -856,19 +932,14 @@ function updateLeaderboard() {
 }
 
 window.onload = async function() {
-    const socket = io('http://localhost:3000'); // Connect to the server
-
-    socket.on('connect', () => {
-        console.log('Connected to server');
-    });
-
     let endMenuResolve;
 
-    //require username and password to establish connection to socket.io server, then pass in startMenuResolve as a parameter in await roomMenu();
-    //let startMenuResolve = await startMenu()
+    //require username and password to establish connection to socket.io server
+    //startMenuResolve is now a socket object
+    let startMenuResolve = await startMenu()
 
     // Return user choice from main menu
-    let roomMenuResolve = await roomMenu();
+    let roomMenuResolve = await roomMenu(startMenuResolve);
 
     while(true){
 
