@@ -737,7 +737,7 @@ async function loginMenu() {
     });
 }
 
-//menu that allows users to enter a name and room number to join a game room
+//menu that allows users to enter a room number to join an available room
 async function joinRoomMenu(socket) {
     const joinRoomMenu = document.getElementById("joinRoomMenu");
     const availableRoomsDiv = document.getElementById('availableRooms');
@@ -772,7 +772,7 @@ async function joinRoomMenu(socket) {
         }
     });
 
-    // Event listener for the refresh button to request available rooms again
+    // Event listener for the refresh button to request available room information again
     refreshButton.addEventListener('click', () => {
         socket.emit('getAvailableRooms');
     });
@@ -840,6 +840,20 @@ async function lobbyMenu(socket){
     //display lobbyMenu
     lobbyMenu.style.display = "block";
 
+    // Listen for client list updates
+    socket.on('clientList', (clientList) => {
+        // Clear previous content in connectedClientsDiv
+        connectedClientsDiv.innerHTML = '';
+
+        // Iterate over the client list and display usernames
+        clientList.forEach((username) => {
+            const clientElement = document.createElement('p');
+            clientElement.textContent = username;
+            connectedClientsDiv.appendChild(clientElement);
+        });
+    });
+
+    
 }
 
 async function endMenu() {
