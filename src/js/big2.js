@@ -742,12 +742,11 @@ async function joinRoomMenu(socket) {
     const joinRoomMenu = document.getElementById("joinRoomMenu");
     const availableRoomsDiv = document.getElementById('availableRooms');
     const joinRoomButton = document.getElementById("joinRoomButton");
-    const playerNameInput = document.getElementById("playerName");
     const roomCodeInput = document.getElementById("roomCode");
     const errorMessage2 = document.getElementById("errorMessage2");
     const refreshButton = document.getElementById("refreshButton");
 
-    //TO DO change to block when joinRoomMenu is resolved
+    //display joinRoomMenu
     joinRoomMenu.style.display = "block";
 
     // Request available rooms
@@ -783,17 +782,11 @@ async function joinRoomMenu(socket) {
         function handleClick() {
             // Remove the click event listener
             joinRoomButton.removeEventListener("click", handleClick);
-
-            // Validate and sanitize the player name
-            let playerName = sanitizeInput(playerNameInput.value);
-            playerName = playerName.slice(0, 10); // Limit to 10 characters
             
             // Validate and sanitize the room code
             let roomCode = sanitizeInput(roomCodeInput.value);
             roomCode = roomCode.slice(0, 6); // Limit to 6 characters
             
-            // Update input fields with sanitized values
-            playerNameInput.value = playerName;
             roomCodeInput.value = roomCode;
 
             // Emit joinRoom event to server
@@ -820,20 +813,8 @@ async function joinRoomMenu(socket) {
         // Add a click event listener to the start button
         joinRoomButton.addEventListener("click", () => {
             //input box validation
-            if (playerNameInput.value.trim() === '' || roomCodeInput.value.trim() === '') {
-                errorMessage2.innerText = "Both player name and room code are required.";
-                errorMessage2.style.display = "block";
-                return;
-            }
-            
-            if (playerNameInput.value.length > 10 && roomCodeInput.value.length > 6) {
-                errorMessage2.innerText = "Both player name and room code exceed character limits.";
-                errorMessage2.style.display = "block";
-                return;
-            }
-
-            if (playerNameInput.value.length > 10) {
-                errorMessage2.innerText = "Player name should be 10 characters or less.";
+            if (roomCodeInput.value.trim() === '') {
+                errorMessage2.innerText = "Room code is required.";
                 errorMessage2.style.display = "block";
                 return;
             }
@@ -850,6 +831,14 @@ async function joinRoomMenu(socket) {
 }
 
 async function lobbyMenu(socket){
+    const lobbyMenu = document.getElementById("lobbyMenu");
+    const connectedClientsDiv = document.getElementById("connectedClients");
+    const messageContainer = document.getElementById("messageContainer");
+    const messageInput = document.getElementById("messageInput");
+    const sendMessageButton = document.getElementById("sendMessageButton");
+
+    //display lobbyMenu
+    lobbyMenu.style.display = "block";
 
 }
 
@@ -987,14 +976,13 @@ window.onload = async function() {
     // require username and password to establish connection to socket.io server and resolve the connected socket object
     let loginMenuResolve = await loginMenu()
 
-    // once client has established connection to the server, require room code to join a game lobby and then resolve the socket object again
+    // once client has established connection to the server, require room code to join a game lobby and then resolve the socket thats connected to a room
     let joinRoomMenuResolve = await joinRoomMenu(loginMenuResolve);
 
     // a lobby room where clients wait and can chat with each other until 4 clients join, where they can then start the game, might allow bots as filler
     let lobbyMenuResolve = await lobbyMenu(joinRoomMenuResolve);
 
     while(true){
-
         //if user quits game
         if(endMenuResolve=="quitGame"){
             //reset everything including player points
@@ -1005,7 +993,7 @@ window.onload = async function() {
         }
 
         // start the game and return results of game
-        let results = await startGame(joinRoomMenuResolve);
+        let results = await startGame(lobbyMenuResolve);
 
         if(results.length == 4){
             console.log('Game complete!');
@@ -1023,6 +1011,5 @@ window.onload = async function() {
             }
         }
     }
-    
 };
 
