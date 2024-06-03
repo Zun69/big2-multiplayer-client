@@ -740,13 +740,43 @@ async function loginMenu() {
 //menu that allows users to enter a name and room number to join a game room
 async function joinRoomMenu(socket) {
     const joinRoomMenu = document.getElementById("joinRoomMenu");
+    const availableRoomsDiv = document.getElementById('availableRooms');
     const joinRoomButton = document.getElementById("joinRoomButton");
     const playerNameInput = document.getElementById("playerName");
     const roomCodeInput = document.getElementById("roomCode");
     const errorMessage2 = document.getElementById("errorMessage2");
+    const refreshButton = document.getElementById("refreshButton");
 
     //TO DO change to block when joinRoomMenu is resolved
     joinRoomMenu.style.display = "block";
+
+    // Request available rooms
+    socket.emit('getAvailableRooms');
+
+    // Print available rooms in available rooms div
+    socket.on('availableRooms', (availableRooms) => {
+        console.log('Available rooms:', availableRooms);
+
+        // Clear the existing content and add the heading
+        availableRoomsDiv.innerHTML = '<h3>Available Rooms</h3>';
+
+        if (availableRooms.length === 0) {
+            const noRoomsElement = document.createElement('p');
+            noRoomsElement.textContent = 'No available rooms';
+            availableRoomsDiv.appendChild(noRoomsElement);
+        } else {
+            availableRooms.forEach(({ roomCode, numClients }) => {
+                const roomElement = document.createElement('p');
+                roomElement.textContent = `${roomCode} - ${numClients}/4`;
+                availableRoomsDiv.appendChild(roomElement);
+            });
+        }
+    });
+
+    // Event listener for the refresh button to request available rooms again
+    refreshButton.addEventListener('click', () => {
+        socket.emit('getAvailableRooms');
+    });
 
     return new Promise((resolve) => {
         // Define the click event listener function

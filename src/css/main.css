@@ -15,6 +15,26 @@
         margin: 0;
         padding: 0;
     }
+
+    h3 {
+        margin-top: 50px;
+    }
+    
+    h4 {
+        font-family: 'Helvetica', sans-serif;
+        font-size: 16px;
+        margin-bottom: -28px;
+    }
+    
+    p {
+        font-family: 'Helvetica', sans-serif;
+        font-size: 16px;
+        line-height: 1.5;
+        text-align: center;
+        max-width: 800px; /* Adjust the maximum width as needed */
+        margin: 0 auto; /* Center the paragraph within the container */
+        margin-top: 30px;
+    }
     
     #container {
         background-color: white;
@@ -46,7 +66,7 @@
         left: 50%;
         transform: translate(-50%, -50%);
         width: 360px; /* Adjust as needed */
-        height: 260px; /* Adjust as needed */
+        height: 380px; /* Adjust as needed */
         background-color: #ffffff; /* White background */
         border: 1px solid #000; /* Add border with 2px width and black color */
         border-radius: 10px; /* Rounded corners */
@@ -54,6 +74,52 @@
         flex-direction: column;
         justify-content: center;
         align-items: center;
+    }
+
+    #availableRooms {
+        margin-bottom: 20px;
+        color: black;
+        text-align: left;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        padding: 10px;
+        background-color: #f9f9f9;
+    }
+
+    #availableRooms h3 {
+        margin-top: 0;
+        font-size: 16px;
+        text-align: center;
+        color: black;
+    }
+
+    #availableRooms p {
+        margin: 5px 0;
+        text-align: center;
+    }
+
+    .header {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        margin-top: 20px;
+        margin-bottom: 20px;
+    }
+
+    .header h2 {
+        margin: 0;
+    }
+
+    #refreshButton {
+        font-size: 20px;
+        color: #000;
+        margin-left: 10px;
+        cursor: pointer;
+    }
+
+    #refreshButton:hover {
+        color: #007BFF;
     }
 
     #lobbyMenu{
@@ -138,8 +204,11 @@
 
     /* style for input box validation message */
     #errorMessage1, #errorMessage2 {
+        margin-top: 10px;
+        margin-bottom: -5px;
         display: none;
         text-align: center;
+        font-weight: bold;
     }
     
     /* style for loginMenu & joinRoomMenu */
@@ -215,26 +284,6 @@
     #leaderboard th:first-child,
     #leaderboard td:first-child {
         width: 70%; /* Adjust as needed */
-    }
-    
-    h3 {
-        margin-top: 50px;
-    }
-    
-    h4 {
-        font-family: 'Helvetica', sans-serif;
-        font-size: 16px;
-        margin-bottom: -28px;
-    }
-    
-    p {
-        font-family: 'Helvetica', sans-serif;
-        font-size: 16px;
-        line-height: 1.5;
-        text-align: center;
-        max-width: 800px; /* Adjust the maximum width as needed */
-        margin: 0 auto; /* Center the paragraph within the container */
-        margin-top: 30px;
     }
     
     #gameContainer {
