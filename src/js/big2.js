@@ -744,17 +744,19 @@ async function joinRoomMenu(socket) {
     const joinRoomButton = document.getElementById("joinRoomButton");
     const roomCodeInput = document.getElementById("roomCode");
     const errorMessage2 = document.getElementById("errorMessage2");
-    const refreshButton = document.getElementById("refreshButton");
 
-    //display joinRoomMenu
+    // Display joinRoomMenu
     joinRoomMenu.style.display = "block";
 
-    // Request available rooms
-    socket.emit('getAvailableRooms');
+    // Function to request available rooms and update the available rooms div
+    function refreshAvailableRooms() {
+        // Request available rooms
+        socket.emit('getAvailableRooms');
+    }
 
-    // Print available rooms in available rooms div
-    socket.on('availableRooms', (availableRooms) => {
-        console.log('Available rooms:', availableRooms);
+    // Handler for updating available rooms
+    function updateAvailableRooms(availableRooms) {
+        //console.log('Available rooms:', availableRooms);
 
         // Clear the existing content and add the heading
         availableRoomsDiv.innerHTML = '<h3>Available Rooms</h3>';
@@ -770,23 +772,25 @@ async function joinRoomMenu(socket) {
                 availableRoomsDiv.appendChild(roomElement);
             });
         }
-    });
+    }
 
-    // Event listener for the refresh button to request available room information again
-    refreshButton.addEventListener('click', () => {
-        socket.emit('getAvailableRooms');
-    });
+    // Initial request for available rooms, to immediately populate the UI with the current list of available rooms
+    refreshAvailableRooms();
+
+    // Set interval to refresh available rooms every 3 seconds and activate the following lines of code
+    const refreshInterval = setInterval(refreshAvailableRooms, 3000);
+
+    // Ensure the existing event listener is removed before adding a new one, these lines are activated when the setInterval goes off
+    socket.off('availableRooms', updateAvailableRooms);
+    socket.on('availableRooms', updateAvailableRooms);
 
     return new Promise((resolve) => {
         // Define the click event listener function
         function handleClick() {
-            // Remove the click event listener
-            joinRoomButton.removeEventListener("click", handleClick);
-            
             // Validate and sanitize the room code
             let roomCode = sanitizeInput(roomCodeInput.value);
             roomCode = roomCode.slice(0, 6); // Limit to 6 characters
-            
+
             roomCodeInput.value = roomCode;
 
             // Emit joinRoom event to server
@@ -805,14 +809,21 @@ async function joinRoomMenu(socket) {
                 console.log('Joined room successfully');
                 // Hide the joinRoomMenu
                 joinRoomMenu.style.display = "none";
-                // Resolve the promise with the value "startGame"
-                resolve(socket);
+
+                // Clear the refresh interval
+                clearInterval(refreshInterval);
+
+                // Remove the event listener for available rooms
+                socket.off('availableRooms', updateAvailableRooms);
+
+                // Resolve the promise with the socket and roomCode
+                resolve({ socket, roomCode });
             });
         }
 
-        // Add a click event listener to the start button
+        // Add a click event listener to the join room button
         joinRoomButton.addEventListener("click", () => {
-            //input box validation
+            // Input box validation
             if (roomCodeInput.value.trim() === '') {
                 errorMessage2.innerText = "Room code is required.";
                 errorMessage2.style.display = "block";
@@ -830,30 +841,119 @@ async function joinRoomMenu(socket) {
     });
 }
 
-async function lobbyMenu(socket){
+async function lobbyMenu(socket, roomCode){
     const lobbyMenu = document.getElementById("lobbyMenu");
     const connectedClientsDiv = document.getElementById("connectedClients");
     const messageContainer = document.getElementById("messageContainer");
     const messageInput = document.getElementById("messageInput");
     const sendMessageButton = document.getElementById("sendMessageButton");
+    const startGameButton = document.getElementById("startGameButton");
+    const errorMessage3 = document.getElementById("errorMessage3");
+    let localClientList = []; // Define a variable to store the current client list
 
-    //display lobbyMenu
+    // Display lobbyMenu
     lobbyMenu.style.display = "block";
 
-    // Listen for client list updates
-    socket.on('clientList', (clientList) => {
-        // Clear previous content in connectedClientsDiv
-        connectedClientsDiv.innerHTML = '';
+    // Function to request clients and update the connectedClientsDiv
+    function refreshClientList() {
+        // Request client list
+        socket.emit('getClientList', { roomCode: roomCode });
+    }
+    
+    // Function to update the client list, takes in clientList event from server
+    function updateClientList(clientList) {
+        // Update the local client list
+        localClientList = clientList;
 
-        // Iterate over the client list and display usernames
-        clientList.forEach((username) => {
-            const clientElement = document.createElement('p');
-            clientElement.textContent = username;
-            connectedClientsDiv.appendChild(clientElement);
-        });
+        // Extract usernames from clientList
+        const usernames = clientList.map(client => client.username);
+
+        // Clear the existing content and add the heading
+        connectedClientsDiv.innerHTML = `<h3>Players in Room ${roomCode}</h3>`;
+        
+        // Display usernames in a single line
+        const clientElement = document.createElement('p');
+        clientElement.textContent = usernames.join(', '); // Join usernames with a comma and space
+        connectedClientsDiv.appendChild(clientElement);
+    }
+
+    // Function to append a message to the message container
+    function appendMessage(message) {
+        const messageElement = document.createElement('div');
+        messageElement.textContent = message;
+        messageContainer.appendChild(messageElement);
+        messageContainer.scrollTop = messageContainer.scrollHeight; // Auto scroll to the bottom
+    }
+
+    // Function to send a message
+    function sendMessage() {
+        const message = messageInput.value.trim();
+        if (message === '') {
+            return; // Do not send empty messages
+        }
+
+        if (message.length > 100) {
+            alert("Message is too long!");
+            return;
+        }
+
+        // Send the message to the server
+        socket.emit('sendMessage', { roomCode, message });
+        messageInput.value = ''; // Clear the input field
+        sendMessageButton.disabled = true; // Disable the button until there's input again
+    }
+
+    // Event listener for send message button
+    sendMessageButton.addEventListener('click', sendMessage);
+
+    // Enable send button only if there's input
+    messageInput.addEventListener('input', () => {
+        sendMessageButton.disabled = messageInput.value.trim() === '';
     });
 
-    
+    // Listener for receiving messages
+    socket.on('receiveMessage', (message) => {
+        appendMessage(message);
+    });
+
+    // Initial request for clients in the room, to immediately populate the UI with the current list of clients
+    refreshClientList();
+
+    // Set interval to refresh available rooms every 3 seconds and activate the following lines of code
+    const refreshInterval = setInterval(refreshClientList, 500);
+
+    // Ensure the existing event listener is removed before adding a new one
+    socket.off('clientList', updateClientList);
+    socket.on('clientList', updateClientList);
+
+    return new Promise((resolve) => {
+        // Define the click event listener function
+        function handleClick() {
+            // Hide the joinRoomMenu
+            lobbyMenu.style.display = "none";
+
+            // Clear the refresh interval
+            clearInterval(refreshInterval);
+
+            socket.off('clientList', updateClientList);
+
+            // Resolve the promise with the socket
+            resolve(socket);
+        }
+
+        // Add a click event listener to the join room button
+        startGameButton.addEventListener("click", () => {
+            //if 4/4 clients have connected, count the client list above
+            if (localClientList.length != 4) {
+                errorMessage3.innerText = "4 players required to start the game.";
+                errorMessage3.style.display = "block";
+                return;
+            }
+
+            handleClick();
+        });
+
+    });
 }
 
 async function endMenu() {
@@ -991,12 +1091,12 @@ window.onload = async function() {
     let loginMenuResolve = await loginMenu()
 
     // once client has established connection to the server, require room code to join a game lobby and then resolve the socket thats connected to a room
-    let joinRoomMenuResolve = await joinRoomMenu(loginMenuResolve);
+    const { socket: joinedRoomSocket, roomCode } = await joinRoomMenu(loginMenuResolve);
 
     // a lobby room where clients wait and can chat with each other until 4 clients join, where they can then start the game, might allow bots as filler
-    let lobbyMenuResolve = await lobbyMenu(joinRoomMenuResolve);
+    let lobbyMenuResolve = await lobbyMenu(joinedRoomSocket, roomCode);
 
-    while(true){
+    /*while(true){
         //if user quits game
         if(endMenuResolve=="quitGame"){
             //reset everything including player points
@@ -1024,6 +1124,6 @@ window.onload = async function() {
                 console.log("Game Reset")
             }
         }
-    }
+    }*/
 };
 

@@ -88,7 +88,7 @@
 
     #availableRooms h3 {
         margin-top: 0;
-        font-size: 16px;
+        font-size: 14px;
         text-align: center;
         color: black;
     }
@@ -96,30 +96,6 @@
     #availableRooms p {
         margin: 5px 0;
         text-align: center;
-    }
-
-    .header {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 100%;
-        margin-top: 20px;
-        margin-bottom: 20px;
-    }
-
-    .header h2 {
-        margin: 0;
-    }
-
-    #refreshButton {
-        font-size: 20px;
-        color: #000;
-        margin-left: 10px;
-        cursor: pointer;
-    }
-
-    #refreshButton:hover {
-        color: #007BFF;
     }
 
     #lobbyMenu{
@@ -138,41 +114,69 @@
         align-items: center;
     }
 
-    /* CSS for connectedClients section */
-    #connectedClients {
-        max-height: auto; /* Remove max-height to prevent scrollbar */
-        margin-bottom: 10px; /* Add some space between connectedClients and chatBox */
-        padding: 10px; /* Add padding for better readability */
-        border-bottom: 1px solid #ccc; /* Add a separating line between connectedClients and chatBox */
-    }
-
-    #connectedClients div {
-        padding: 5px; /* Add padding for each client row */
-    }
-
-    /* CSS for chatBox section */
-    #chatBox {
-        flex: 1; /* Occupy remaining vertical space */
-        overflow-y: auto; /* Enable vertical scrollbar if content exceeds container height */
-        padding: 10px; /* Add padding for better readability */
-    }
-
-    #messageContainer {
-        margin-bottom: 10px; /* Add some space between messages and message input */
-    }
-
-    #messageInput {
-        width: calc(100% - 70px); /* Adjust input width */
-        margin-right: 10px; /* Add some space between input and send button */
-    }
-
-    #sendMessageButton {
-        width: 60px; /* Adjust button width */
-    }
-
     /* Apply styles to lobbyMenu children */
     #lobbyMenu > * {
         margin: 10px 0; /* Add vertical margin for each child element */
+    }
+
+    /* CSS for connectedClients section */
+    #connectedClients {
+        margin-bottom: 20px;
+        color: black;
+        text-align: left;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        padding: 10px;
+        background-color: #f9f9f9;
+    }
+
+    #connectedClients p {
+        margin: 5px 0;
+        text-align: center;
+    }
+
+    #connectedClients h3 {
+        margin-top: 0;
+        font-size: 14px;
+        text-align: center;
+        color: black;
+    }
+
+    #chatBox {
+        background-color: #fff; /* Background color for the chat box */
+        padding: 10px;
+        margin-bottom: 10px;
+    }
+    
+    #messageContainer {
+        height: 150px;
+        max-height: 150px; /* Increase the maximum height */
+        overflow-y: auto; /* Enable vertical scrolling */
+        border: 1px solid #ccc;
+        padding: 10px;
+        margin-bottom: 10px;
+    }
+    
+    #messageInput {
+        width: calc(100% - 80px); /* Adjust width minus button width */
+        padding: 8px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+        margin-right: 5px;
+    }
+    
+    #sendMessageButton {
+        width: 70px; /* Adjust button width */
+        padding: 8px;
+        background-color: #4CAF50;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+    
+    #sendMessageButton:hover {
+        background-color: #45a049;
     }
 
     #endMenu{
@@ -203,7 +207,8 @@
     }
 
     /* style for input box validation message */
-    #errorMessage1, #errorMessage2 {
+    #errorMessage1, #errorMessage2, #errorMessage3 {
+        font-size: 12px;
         margin-top: 10px;
         margin-bottom: -5px;
         display: none;
@@ -212,7 +217,7 @@
     }
     
     /* style for loginMenu & joinRoomMenu */
-    #loginButton, #joinRoomButton {
+    #loginButton, #joinRoomButton, #startGameButton {
         margin-top: 20px;
         width: 300px;
         height: 30px;
@@ -221,9 +226,10 @@
         font-family: Helvetica, Arial, sans-serif;
         font-weight: 200;
         border-radius: 4px;
+        cursor: pointer;
     }
 
-    #loginButton:hover, #joinRoomButton:hover, #startGameButton, #nextGameButton:hover, #play:hover, #pass:hover {
+    #loginButton:hover, #joinRoomButton:hover, #startGameButton:hover, #nextGameButton:hover, #play:hover, #pass:hover {
         background-color: #008000;
         color: white;
     }
