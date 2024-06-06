@@ -961,6 +961,20 @@ var Deck = (function () {
       card.mount($el);
     }
 
+    // Method to calculate card hash
+    self.cardHash = function() {
+      let i = 0;
+      let cardValueMap = new Map();
+
+      // Loop through the deck and assign a key (card rank + suit) and value for use with sorting a player's hand
+      while (i < cards.length) {
+        cardValueMap.set(cards[i].suit + " " + cards[i].rank, i + 1);
+        i++;
+      }
+
+      return cardValueMap;
+    };
+
     return self;
 
     function mount(root) {

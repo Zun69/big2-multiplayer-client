@@ -27,26 +27,6 @@ const suitLookup = {
     3: '♠', // Spades
 };
 
-//create card Map that maps each card to a value (1-52) for sorting (deck has to be sorted already)
-var cardHashModule = {
-    deck: function (_deck) {
-      _deck.cardHash = function () {
-        let i = 0;
-        let cardValueMap = new Map();
-        let deck = _deck.cards;
-  
-        //loop through the deck(sorted already) and assign a key (card rank + suit) and value for use with sorting a player's hand
-        while (i < deck.length) {
-          cardValueMap.set(deck[i].suit + " " + deck[i].rank, i + 1);
-          i++;
-        }
-  
-        return cardValueMap;
-      };
-    },
-  };
-Deck.modules.cardHash = cardHashModule; //add cardHash function to deck library
-
 //GameModule object encapsulate players, deck, gameDeck, finishedDeck 
 const GameModule = (function() {
     // Initial values
@@ -787,6 +767,9 @@ async function joinRoomMenu(socket) {
     return new Promise((resolve) => {
         // Define the click event listener function
         function handleClick() {
+            //remove the click event listener for joinRoom button
+            joinRoomButton.removeEventListener("click", handleClick);
+
             // Validate and sanitize the room code
             let roomCode = sanitizeInput(roomCodeInput.value);
             roomCode = roomCode.slice(0, 6); // Limit to 6 characters
@@ -847,7 +830,7 @@ async function lobbyMenu(socket, roomCode){
     const messageContainer = document.getElementById("messageContainer");
     const messageInput = document.getElementById("messageInput");
     const sendMessageButton = document.getElementById("sendMessageButton");
-    const startGameButton = document.getElementById("startGameButton");
+    const readyButton = document.getElementById("readyButton");
     const errorMessage3 = document.getElementById("errorMessage3");
     let localClientList = []; // Define a variable to store the current client list
 
@@ -903,8 +886,18 @@ async function lobbyMenu(socket, roomCode){
         sendMessageButton.disabled = true; // Disable the button until there's input again
     }
 
-    // Event listener for send message button
+    // Event listener for send message button, have to remove this event listener as well
     sendMessageButton.addEventListener('click', sendMessage);
+
+    // Event listener for pressing Enter key in the message input
+    function handleEnterKey(event) {
+        if (event.key === 'Enter') {
+            event.preventDefault(); // Prevent the default action (form submission, etc.)
+            sendMessage();
+        }
+    }
+
+    messageInput.addEventListener('keydown', handleEnterKey);
 
     // Enable send button only if there's input
     messageInput.addEventListener('input', () => {
@@ -929,6 +922,15 @@ async function lobbyMenu(socket, roomCode){
     return new Promise((resolve) => {
         // Define the click event listener function
         function handleClick() {
+            //TO DO if(all 4 players are ready) do necessary clean up, emit startGame event which will populate server's gameState with player's client number, etc(so the server can then relay this info back to client)
+ 
+            //remove the click event listener for joinRoom button
+            readyButton.removeEventListener("click", handleClick);
+            // Remove the click event listeners
+            sendMessageButton.removeEventListener('click', sendMessage);
+            // Remove the Enter key event listener
+            messageInput.removeEventListener('keydown', handleEnterKey);
+
             // Hide the joinRoomMenu
             lobbyMenu.style.display = "none";
 
@@ -942,7 +944,7 @@ async function lobbyMenu(socket, roomCode){
         }
 
         // Add a click event listener to the join room button
-        startGameButton.addEventListener("click", () => {
+        readyButton.addEventListener("click", () => {
             //if 4/4 clients have connected, count the client list above
             if (localClientList.length != 4) {
                 errorMessage3.innerText = "4 players required to start the game.";
