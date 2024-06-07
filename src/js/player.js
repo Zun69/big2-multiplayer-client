@@ -5,6 +5,7 @@ export default class Player{
         this.wonRound = false;
         this.wonGame = false;
         this.passed = false;
+        this.clientID = null; // Set to null initially, will set later in the lobbyMenu
         this.points = 0;
         this.wins = 0;
         this.seconds = 0;

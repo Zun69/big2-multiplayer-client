@@ -31,10 +31,10 @@ const suitLookup = {
 const GameModule = (function() {
     // Initial values
     //let initialPlayer1 = new Player();
-    let player1 = new Opponent("Kulin");
-    let player2 = new Opponent("Zheng"); //ai player
-    let player3 = new Opponent("Jason");
-    let player4 = new Opponent("Wong");
+    let player1 = new Player();
+    let player2 = new Opponent(); //ai player
+    let player3 = new Opponent();
+    let player4 = new Opponent();
     
     // Current values
     let players = [player1, player2, player3, player4];
@@ -49,6 +49,7 @@ const GameModule = (function() {
             player.wonRound = false;
             player.wonGame = false;
             player.passed = false;
+            player.readyState = false;
         });
         gameDeck.length = 0;
         finishedDeck = Deck();
@@ -62,6 +63,7 @@ const GameModule = (function() {
             player.wonRound = false;
             player.wonGame = false;
             player.passed = false;
+            player.readyState = false;
             player.points = 0;
             player.wins = 0;
             player.seconds = 0;
@@ -833,6 +835,8 @@ async function lobbyMenu(socket, roomCode){
     const readyButton = document.getElementById("readyButton");
     const errorMessage3 = document.getElementById("errorMessage3");
     let localClientList = []; // Define a variable to store the current client list
+    let readyPlayersCount = 0;
+    let isReady = false; // Track the local client's ready state
 
     // Display lobbyMenu
     lobbyMenu.style.display = "block";
@@ -886,9 +890,6 @@ async function lobbyMenu(socket, roomCode){
         sendMessageButton.disabled = true; // Disable the button until there's input again
     }
 
-    // Event listener for send message button, have to remove this event listener as well
-    sendMessageButton.addEventListener('click', sendMessage);
-
     // Event listener for pressing Enter key in the message input
     function handleEnterKey(event) {
         if (event.key === 'Enter') {
@@ -897,6 +898,8 @@ async function lobbyMenu(socket, roomCode){
         }
     }
 
+    // Event listener for send message button, have to remove this event listener as well
+    sendMessageButton.addEventListener('click', sendMessage);
     messageInput.addEventListener('keydown', handleEnterKey);
 
     // Enable send button only if there's input
@@ -919,42 +922,30 @@ async function lobbyMenu(socket, roomCode){
     socket.off('clientList', updateClientList);
     socket.on('clientList', updateClientList);
 
+    //TO DO I want the text content of the ready button to update when player clicks on the ready up button ('ready up 1/4', the server should keep track of clients ready state)
+    //If the client is readied up the text content of the button should change to ('unready up 1/4' and then if the client clicks the button again the button should read 'ready up 0/4')
+    function toggleReadyState() {
+        isReady = !isReady;
+        socket.emit('toggleReadyState', { roomCode, isReady });
+        readyButton.textContent = isReady ? `Unready up ${readyPlayersCount}/4` : `Ready up ${readyPlayersCount}/4`;
+    }
+
+    readyButton.addEventListener("click", toggleReadyState);
+
     return new Promise((resolve) => {
-        // Define the click event listener function
-        function handleClick() {
-            //TO DO if(all 4 players are ready) do necessary clean up, emit startGame event which will populate server's gameState with player's client number, etc(so the server can then relay this info back to client)
- 
-            //remove the click event listener for joinRoom button
-            readyButton.removeEventListener("click", handleClick);
-            // Remove the click event listeners
-            sendMessageButton.removeEventListener('click', sendMessage);
-            // Remove the Enter key event listener
-            messageInput.removeEventListener('keydown', handleEnterKey);
-
-            // Hide the joinRoomMenu
-            lobbyMenu.style.display = "none";
-
-            // Clear the refresh interval
-            clearInterval(refreshInterval);
-
-            socket.off('clientList', updateClientList);
-
-            // Resolve the promise with the socket
-            resolve(socket);
-        }
-
-        // Add a click event listener to the join room button
-        readyButton.addEventListener("click", () => {
-            //if 4/4 clients have connected, count the client list above
-            if (localClientList.length != 4) {
-                errorMessage3.innerText = "4 players required to start the game.";
-                errorMessage3.style.display = "block";
-                return;
+        socket.on('updateReadyState', (clientList) => {
+            updateClientList(clientList);
+            
+            if (readyPlayersCount === 4) {
+                readyButton.removeEventListener("click", toggleReadyState);
+                sendMessageButton.removeEventListener('click', sendMessage);
+                messageInput.removeEventListener('keydown', handleEnterKey);
+                lobbyMenu.style.display = "none";
+                clearInterval(refreshInterval);
+                socket.off('clientList', updateClientList);
+                resolve(socket);
             }
-
-            handleClick();
         });
-
     });
 }
 
