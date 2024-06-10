@@ -833,9 +833,6 @@ async function lobbyMenu(socket, roomCode){
     const messageInput = document.getElementById("messageInput");
     const sendMessageButton = document.getElementById("sendMessageButton");
     const readyButton = document.getElementById("readyButton");
-    const errorMessage3 = document.getElementById("errorMessage3");
-    let localClientList = []; // Define a variable to store the current client list
-    let readyPlayersCount = 0;
     let isReady = false; // Track the local client's ready state
 
     // Display lobbyMenu
@@ -915,7 +912,7 @@ async function lobbyMenu(socket, roomCode){
     // Initial request for clients in the room, to immediately populate the UI with the current list of clients
     refreshClientList();
 
-    // Set interval to refresh available rooms every 3 seconds and activate the following lines of code
+    // Set interval to refresh available rooms every 0.5 seconds and activate the following lines of code
     const refreshInterval = setInterval(refreshClientList, 500);
 
     // Ensure the existing event listener is removed before adding a new one
@@ -927,7 +924,6 @@ async function lobbyMenu(socket, roomCode){
     function toggleReadyState() {
         isReady = !isReady;
         socket.emit('toggleReadyState', { roomCode, isReady });
-        readyButton.textContent = isReady ? `Unready up ${readyPlayersCount}/4` : `Ready up ${readyPlayersCount}/4`;
     }
 
     readyButton.addEventListener("click", toggleReadyState);
@@ -935,6 +931,12 @@ async function lobbyMenu(socket, roomCode){
     return new Promise((resolve) => {
         socket.on('updateReadyState', (clientList) => {
             updateClientList(clientList);
+
+            // Update readyPlayersCount
+            const readyPlayersCount = clientList.filter(client => client.isReady).length; // Updated to get the actual ready count
+
+            // Update the button text
+            readyButton.textContent = isReady ? `Unready up ${readyPlayersCount}/4` : `Ready up ${readyPlayersCount}/4`; // Update button text
             
             if (readyPlayersCount === 4) {
                 readyButton.removeEventListener("click", toggleReadyState);
@@ -993,6 +995,7 @@ async function endMenu() {
 }
 
 async function startGame(joinRoomMenuResolve){
+    //emit startGame, put client usernames into server gameState object, and then receive gameState object
     if(joinRoomMenuResolve == "startGame"){
         //unhide buttons and gameInfo divs
         const playButton = document.getElementById("play");
@@ -1088,6 +1091,9 @@ window.onload = async function() {
 
     // a lobby room where clients wait and can chat with each other until 4 clients join, where they can then start the game, might allow bots as filler
     let lobbyMenuResolve = await lobbyMenu(joinedRoomSocket, roomCode);
+
+    // once code reaches here, it means 4 clients have readied up
+    let results = await startGame(lobbyMenuResolve, roomCode);
 
     /*while(true){
         //if user quits game
