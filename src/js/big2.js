@@ -994,28 +994,29 @@ async function endMenu() {
     });
 }
 
-async function startGame(joinRoomMenuResolve){
+async function startGame(socket, roomCode){
     //emit startGame, put client usernames into server gameState object, and then receive gameState object
-    if(joinRoomMenuResolve == "startGame"){
-        //unhide buttons and gameInfo divs
-        const playButton = document.getElementById("play");
-        const passButton = document.getElementById("pass");
-        const gameInfo = document.getElementById("gameInfo");
+    socket.emit('startGame', { roomCode });
+    
+    //unhide buttons and gameInfo divs
+    const playButton = document.getElementById("play");
+    const passButton = document.getElementById("pass");
+    const gameInfo = document.getElementById("gameInfo");
 
-        playButton.style.display = "block";
-        passButton.style.display = "block";
-        gameInfo.style.display = "block";
+    playButton.style.display = "block";
+    passButton.style.display = "block";
+    gameInfo.style.display = "block";
 
-        // deal cards to all players and return resolve when animations are complete
-        let dealResolve = await dealCards(GameModule.players);
+    // deal cards to all players and return resolve when animations are complete
+    let dealResolve = await dealCards(GameModule.players);
 
-        if(dealResolve === 'dealingComplete'){
-            // Cards have been dealt and animations are complete
-            console.log('Dealing complete');
-            let results = await gameLoop();
-            return results; //return results
-        }
+    if(dealResolve === 'dealingComplete'){
+        // Cards have been dealt and animations are complete
+        console.log('Dealing complete');
+        let results = await gameLoop();
+        return results; //return results
     }
+    
 }
 
 //take in results array and assign points to each player
