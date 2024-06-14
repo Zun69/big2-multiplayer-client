@@ -826,6 +826,7 @@ async function joinRoomMenu(socket) {
     });
 }
 
+// Handles the lobbyMenu, which allows players in the same room to chat and ready up for the game, once all players are ready it will resolve socket
 async function lobbyMenu(socket, roomCode){
     const lobbyMenu = document.getElementById("lobbyMenu");
     const connectedClientsDiv = document.getElementById("connectedClients");
@@ -834,6 +835,7 @@ async function lobbyMenu(socket, roomCode){
     const sendMessageButton = document.getElementById("sendMessageButton");
     const readyButton = document.getElementById("readyButton");
     let isReady = false; // Track the local client's ready state
+    const errorMessage3 = document.getElementById("errorMessage3");
 
     // Display lobbyMenu
     lobbyMenu.style.display = "block";
@@ -846,14 +848,17 @@ async function lobbyMenu(socket, roomCode){
     
     // Function to update the client list, takes in clientList event from server
     function updateClientList(clientList) {
-        // Update the local client list
-        localClientList = clientList;
-
-        // Extract usernames from clientList
-        const usernames = clientList.map(client => client.username);
-
-        // Clear the existing content and add the heading
+       // Clear the existing content and add the heading
         connectedClientsDiv.innerHTML = `<h3>Players in Room ${roomCode}</h3>`;
+
+        // Extract usernames from clientList & create an array to hold usernames with (host) tag if applicable
+        const usernames = clientList.map(client => {
+            if (client.isHost) {
+                return `${client.username} (host)`;
+            } else {
+                return client.username;
+            }
+        });
         
         // Display usernames in a single line
         const clientElement = document.createElement('p');
@@ -927,6 +932,12 @@ async function lobbyMenu(socket, roomCode){
     }
 
     readyButton.addEventListener("click", toggleReadyState);
+
+    // Handle invalid room code error from server
+    socket.on('errorMessage', (message) => {
+        errorMessage3.innerText = message;
+        errorMessage3.style.display = 'block';
+    });
 
     return new Promise((resolve) => {
         socket.on('updateReadyState', (clientList) => {
@@ -1007,6 +1018,23 @@ async function startGame(socket, roomCode){
     passButton.style.display = "block";
     gameInfo.style.display = "block";
 
+    // Remove any existing event listeners for these events to avoid multiple listeners
+    socket.off('shuffledDeck');
+    socket.off('initialGameState');
+ 
+    // Set up the event listener for the shuffled deck
+    socket.on('shuffledDeck', ({ cards }) => {
+    console.log('Received shuffled deck:', cards);
+    // Handle the shuffled deck (e.g., display it to the players)
+    });
+
+    // Set up the event listener for the initial game state
+    socket.on('initialGameState', ({ gameState }) => {
+    console.log('Received initial game state:', gameState);
+    // Handle the initial game state (e.g., update UI with player information)
+    });
+
+    /*
     // deal cards to all players and return resolve when animations are complete
     let dealResolve = await dealCards(GameModule.players);
 
@@ -1016,7 +1044,7 @@ async function startGame(socket, roomCode){
         let results = await gameLoop();
         return results; //return results
     }
-    
+    */
 }
 
 //take in results array and assign points to each player

@@ -207,7 +207,7 @@
     }
 
     /* style for input box validation message */
-    #errorMessage1, #errorMessage2{
+    #errorMessage1, #errorMessage2, #errorMessage3{
         font-size: 12px;
         margin-top: 10px;
         margin-bottom: -5px;
