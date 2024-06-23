@@ -66,7 +66,7 @@
         left: 50%;
         transform: translate(-50%, -50%);
         width: 400px; /* Adjust as needed */
-        height: 380px; /* Adjust as needed */
+        height: 360px; /* Adjust as needed */
         background-color: #ffffff; /* White background */
         border: 1px solid #000; /* Add border with 2px width and black color */
         border-radius: 10px; /* Rounded corners */
@@ -104,7 +104,7 @@
         left: 50%;
         transform: translate(-50%, -50%);
         width: 700px; /* Adjust as needed */
-        height: 450px; /* Adjust as needed */
+        height: 480px; /* Adjust as needed */
         background-color: #ffffff; /* White background */
         border: 1px solid #000; /* Add border with 2px width and black color */
         border-radius: 10px; /* Rounded corners */
@@ -217,8 +217,9 @@
     }
     
     /* style for loginMenu & joinRoomMenu */
-    #loginButton, #joinRoomButton, #readyButton {
-        margin-top: 20px;
+    #loginButton, #joinRoomButton {
+        display: block;
+        margin: 20px auto; /* Center horizontally with margin */
         width: 300px;
         height: 30px;
         transition-duration: 0.4s;
@@ -229,7 +230,20 @@
         cursor: pointer;
     }
 
-    #loginButton:hover, #joinRoomButton:hover, #readyButton:hover, #nextGameButton:hover, #play:hover, #pass:hover {
+    #readyButton, #startGameButton {
+        display: block;
+        margin: 15px auto; /* Center horizontally with margin */
+        width: 300px;
+        height: 30px;
+        transition-duration: 0.4s;
+        font-size: 15px;
+        font-family: Helvetica, Arial, sans-serif;
+        font-weight: 200;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    #loginButton:hover, #joinRoomButton:hover, #readyButton:hover, #startGameButton:hover, #nextGameButton:hover, #play:hover, #pass:hover {
         background-color: #008000;
         color: white;
     }

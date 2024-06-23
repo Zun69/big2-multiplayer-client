@@ -436,53 +436,6 @@ function findMissingPlayer(playersFinished) {
     return allPlayers[0];
 }
 
-//point arrow at player with 3 of diamonds
-function initialAnimateArrow(playerIndex) {
-    const arrowImg = document.querySelector('#arrow img');
-    console.log("ROTATE TURN: " + playerIndex);
-
-    // store initial rotation based on turn
-    let initialRotation;
-    
-    // Adjust arrow rotation based on player index
-    switch (playerIndex) {
-      case 0: // Down
-        initialRotation = 90;
-        break;
-      case 1: // Left
-        initialRotation = 180;
-        break;
-      case 2: // Up
-        initialRotation = 270;
-        break;
-      case 3: // Right
-        initialRotation = 0;
-        break;
-    }
-    
-    //rotate arrow towards player with 3 of diamonds
-    arrowImg.style.transform = `rotate(${initialRotation}deg)`;
-
-    //return rotation so that the actual function that takes care of animating the arrow can increment on it by 90
-    return initialRotation;
-}
-
-function animateArrow(rotation){
-    // Set the new rotation angle
-    const arrowImg = document.querySelector('#arrow img');
-
-    //increase initial rotation by 90
-    rotation += 90;
-
-    console.log("ROTATE: " + rotation);
-    
-    //rotate arrow by 90 degrees
-    arrowImg.style.transform = `rotate(${rotation}deg)`;
-
-    //return rotation so I can feed it back into this function to keep increasing rotation by 90
-    return rotation;
-}
-
 //Actual game loop, 1 loop represents a turn
 const gameLoop = async _ => {
     // Empty the finished deck of all its cards, so it can store post round cards
@@ -834,8 +787,9 @@ async function lobbyMenu(socket, roomCode){
     const messageInput = document.getElementById("messageInput");
     const sendMessageButton = document.getElementById("sendMessageButton");
     const readyButton = document.getElementById("readyButton");
+    const startGameButton = document.getElementById("startGameButton");
+    startGameButton.disabled = true; //disable startGameButton until 4 players are ready and current client is the host of the room
     let isReady = false; // Track the local client's ready state
-    const errorMessage3 = document.getElementById("errorMessage3");
 
     // Display lobbyMenu
     lobbyMenu.style.display = "block";
@@ -933,12 +887,6 @@ async function lobbyMenu(socket, roomCode){
 
     readyButton.addEventListener("click", toggleReadyState);
 
-    // Handle invalid room code error from server
-    socket.on('errorMessage', (message) => {
-        errorMessage3.innerText = message;
-        errorMessage3.style.display = 'block';
-    });
-
     return new Promise((resolve) => {
         socket.on('updateReadyState', (clientList) => {
             updateClientList(clientList);
@@ -950,16 +898,115 @@ async function lobbyMenu(socket, roomCode){
             readyButton.textContent = isReady ? `Unready up ${readyPlayersCount}/4` : `Ready up ${readyPlayersCount}/4`; // Update button text
             
             if (readyPlayersCount === 4) {
-                readyButton.removeEventListener("click", toggleReadyState);
-                sendMessageButton.removeEventListener('click', sendMessage);
-                messageInput.removeEventListener('keydown', handleEnterKey);
-                lobbyMenu.style.display = "none";
-                clearInterval(refreshInterval);
-                socket.off('clientList', updateClientList);
-                resolve(socket);
+                //if player is host enable start button
+                // Request to check if the client is the host of a room
+                socket.emit('checkHost', { roomCode: roomCode });
             }
         });
+
+        // When 4 players are ready and current client is the host, enable startGameButton
+        socket.on('hostStatus', ({ isHost, error }) => {
+            if (error) {
+                console.error(error);
+            } else {
+                if (isHost) {
+                    console.log('You are the host of the room.');
+                    startGameButton.disabled = false;
+
+                    startGameButton.addEventListener("click", () => {
+                        handleStartClick();
+                    });
+                    
+                } else {
+                    console.log('You are not the host of the room.');
+                }
+            }
+        });
+
+        // Client performs clean up and resolves socket when host starts the game
+        socket.on('gameStarted', () => {
+            //remove all event listeners and sockets
+            startGameButton.removeEventListener("click", handleStartClick);
+            readyButton.removeEventListener("click", toggleReadyState);
+            sendMessageButton.removeEventListener('click', sendMessage);
+            messageInput.removeEventListener('keydown', handleEnterKey);
+
+            socket.off('clientList', updateClientList);
+            socket.off('updateReadyState');
+            socket.off('receiveMessage');
+            socket.off('hostStatus');
+            socket.off('gameStarted');
+        
+            // Hide the lobby menu and clear the interval
+            lobbyMenu.style.display = "none";
+            clearInterval(refreshInterval);
+
+            resolve(socket);
+        });
+
+        // if client(host) clicks on startGameButton
+        function handleStartClick() {
+            //remove all event listeners and sockets
+            startGameButton.removeEventListener("click", handleStartClick);
+            readyButton.removeEventListener("click", toggleReadyState);
+            sendMessageButton.removeEventListener('click', sendMessage);
+            messageInput.removeEventListener('keydown', handleEnterKey);
+
+            socket.off('clientList', updateClientList);
+            socket.off('updateReadyState');
+            socket.off('receiveMessage');
+            socket.off('hostStatus');
+            socket.off('gameStarted');
+        
+            // Hide the lobby menu and clear the interval
+            lobbyMenu.style.display = "none";
+            clearInterval(refreshInterval);
+
+            //emit startGame, put client usernames into server gameState object, and then receive gameState object
+            socket.emit('startGame', { roomCode });
+
+            resolve(socket);
+        }
     });
+}
+
+async function startGame(socket, roomCode){
+    //unhide buttons and gameInfo divs
+    const playButton = document.getElementById("play");
+    const passButton = document.getElementById("pass");
+    const gameInfo = document.getElementById("gameInfo");
+
+    playButton.style.display = "block";
+    passButton.style.display = "block";
+    gameInfo.style.display = "block";
+
+    // Remove any existing event listeners for these events to avoid multiple listeners
+    socket.off('shuffledDeck');
+    socket.off('initialGameState');
+ 
+    // Set up the event listener for the shuffled deck
+    socket.on('shuffledDeck', ({ cards }) => {
+    console.log('Received shuffled deck:', cards);
+    // Handle the shuffled deck (e.g., display it to the players)
+    });
+
+    // Set up the event listener for the initial game state
+    socket.on('initialGameState', ({ gameState }) => {
+    console.log('Received initial game state:', gameState);
+    // Handle the initial game state (e.g., update UI with player information)
+    });
+
+    /*
+    // deal cards to all players and return resolve when animations are complete
+    let dealResolve = await dealCards(GameModule.players);
+
+    if(dealResolve === 'dealingComplete'){
+        // Cards have been dealt and animations are complete
+        console.log('Dealing complete');
+        let results = await gameLoop();
+        return results; //return results
+    }
+    */
 }
 
 async function endMenu() {
@@ -1003,48 +1050,6 @@ async function endMenu() {
         nextGameButton.addEventListener("click", handleNextGameClick);
         quitGameButton.addEventListener("click", handleQuitGameClick);
     });
-}
-
-async function startGame(socket, roomCode){
-    //emit startGame, put client usernames into server gameState object, and then receive gameState object
-    socket.emit('startGame', { roomCode });
-    
-    //unhide buttons and gameInfo divs
-    const playButton = document.getElementById("play");
-    const passButton = document.getElementById("pass");
-    const gameInfo = document.getElementById("gameInfo");
-
-    playButton.style.display = "block";
-    passButton.style.display = "block";
-    gameInfo.style.display = "block";
-
-    // Remove any existing event listeners for these events to avoid multiple listeners
-    socket.off('shuffledDeck');
-    socket.off('initialGameState');
- 
-    // Set up the event listener for the shuffled deck
-    socket.on('shuffledDeck', ({ cards }) => {
-    console.log('Received shuffled deck:', cards);
-    // Handle the shuffled deck (e.g., display it to the players)
-    });
-
-    // Set up the event listener for the initial game state
-    socket.on('initialGameState', ({ gameState }) => {
-    console.log('Received initial game state:', gameState);
-    // Handle the initial game state (e.g., update UI with player information)
-    });
-
-    /*
-    // deal cards to all players and return resolve when animations are complete
-    let dealResolve = await dealCards(GameModule.players);
-
-    if(dealResolve === 'dealingComplete'){
-        // Cards have been dealt and animations are complete
-        console.log('Dealing complete');
-        let results = await gameLoop();
-        return results; //return results
-    }
-    */
 }
 
 //take in results array and assign points to each player
