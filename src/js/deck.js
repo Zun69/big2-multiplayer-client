@@ -5,6 +5,7 @@ var Deck = (function () {
 
   var ticking;
   var animations = [];
+  var serverDeck;
 
   function animationFrames(delay, duration) {
     var now = Date.now();
@@ -554,6 +555,24 @@ var Deck = (function () {
     return array;
   }
 
+  function rearrangeDeck(array) {
+    // Create a map to quickly find indices of cards in serverDeck
+    const indexMap = new Map();
+
+    serverDeck.forEach((card, index) => {
+        indexMap.set(card.rank.toString() + card.suit.toString(), index);
+    });
+
+    // Sort array based on the order in serverDeck
+    array.sort((a, b) => {
+        const indexA = indexMap.get(a.rank.toString() + a.suit.toString());
+        const indexB = indexMap.get(b.rank.toString() + b.suit.toString());
+        return indexA - indexB;
+    });
+
+    return array;
+}
+
   function fontSize() {
     return window.getComputedStyle(document.body).getPropertyValue('font-size').slice(0, -2);
   }
@@ -830,6 +849,67 @@ var Deck = (function () {
     }
   };
 
+  var copyDeck = {
+    deck: function deck(_deck8) {
+      _deck8.copyDeck = _deck8.queued(copyDeck);
+
+      function copyDeck(next) {
+        var cards = _deck8.cards;
+
+        ____fontSize = fontSize();
+
+        //rearrange deck based on serverDeck order
+        rearrangeDeck(cards);
+
+        cards.forEach(function (card, i) {
+          card.pos = i;
+
+          card.copyDeck(function (i) {
+            if (i === cards.length - 1) {
+              next();
+            }
+          });
+        });
+        return;
+      }
+    },
+
+    card: function card(_card8) {
+      var $el = _card8.$el;
+
+      _card8.copyDeck = function (cb) {
+        var i = _card8.pos;
+        var z = i / 4;
+        var delay = i * 2;
+
+        _card8.animateTo({
+          delay: delay,
+          duration: 200,
+
+          x: plusminus(Math.random() * 40 + 20) * ____fontSize / 16,
+          y: -z,
+          rot: 0
+        });
+        _card8.animateTo({
+          delay: 100 + delay,
+          duration: 100,
+
+          x: -z,
+          y: -z,
+          rot: 0,
+
+          onStart: function onStart() {
+            $el.style.zIndex = i;
+          },
+
+          onComplete: function onComplete() {
+            cb(i);
+          }
+        });
+      };
+    }
+  };
+
   function queue(target) {
     var array = Array.prototype;
 
@@ -930,9 +1010,12 @@ var Deck = (function () {
     }
   }
 
-  function Deck(jokers) {
+  //arr represents the shuffled deck from the game server
+  function Deck(jokers, arr) {
     // init cards array
     var cards = new Array(jokers ? 55 : 52);
+    serverDeck = arr;
+    console.log(serverDeck);
 
     var $el = createElement('div');
     var self = observable({ mount: mount, unmount: unmount, cards: cards, $el: $el });
@@ -961,6 +1044,7 @@ var Deck = (function () {
       card.mount($el);
     }
 
+
     // Method to calculate card hash
     self.cardHash = function() {
       let i = 0;
@@ -973,6 +1057,14 @@ var Deck = (function () {
       }
 
       return cardValueMap;
+    };
+
+    self.removeAllCards = function() {
+      // Clear the cards array
+      cards.length = 0;
+    
+      // Clear the DOM elements
+      $el.innerHTML = ''; // This will remove all child elements from $el
     };
 
     return self;
@@ -994,7 +1086,18 @@ var Deck = (function () {
   }
   Deck.animationFrames = animationFrames;
   Deck.ease = ease;
-  Deck.modules = { bysuit: bysuit, fan: fan, intro: intro, poker: poker, shuffle: shuffle, sort: sort, flip: flip };
+
+  Deck.modules = {
+    bysuit: bysuit,
+    fan: fan, 
+    intro: intro, 
+    poker: poker,
+    shuffle: shuffle,
+    copyDeck: copyDeck,
+    sort: sort,
+    flip: flip 
+  };
+
   Deck.Card = _card;
   Deck.prefix = prefix;
   Deck.translate = translate;

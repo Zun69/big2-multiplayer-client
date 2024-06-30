@@ -27,17 +27,10 @@ const suitLookup = {
     3: '♠', // Spades
 };
 
-//GameModule object encapsulate players, deck, gameDeck, finishedDeck 
+//GameModule object encapsulate players, deck, gameDeck, finishedDeck (it represents the local gameState)
 const GameModule = (function() {
-    // Initial values
-    //let initialPlayer1 = new Player();
-    let player1 = new Player();
-    let player2 = new Opponent(); //ai player
-    let player3 = new Opponent();
-    let player4 = new Opponent();
-    
     // Current values
-    let players = [player1, player2, player3, player4];
+    let players = [];
     let gameDeck = [];
     let finishedDeck = Deck();
 
@@ -103,7 +96,7 @@ async function sortPlayerHandAfterTurn(players,turn){
     return Promise.resolve('sortAfterTurnComplete');
 }
 
-//function sorts everybody's cards and plays the animation, resolves when animations finish
+// Sorts everybody's cards and plays the animation, resolves when animations finish
 async function sortHands(players){ 
     const animationPromises = [];
 
@@ -123,7 +116,7 @@ async function sortHands(players){
     return Promise.resolve('sortComplete');
 }
 
-//purpose is to wait for shuffle animation finish before resolving promise back to dealCards function
+// Purpose is to wait for shuffle animation finish before resolving promise back to dealCards function
 function shuffleDeckAsync(deck, times, delayBetweenShuffles) {
     return new Promise((resolve) => {
       const shufflePromises = [];
@@ -147,8 +140,9 @@ function shuffleDeckAsync(deck, times, delayBetweenShuffles) {
     });
 }
 
-async function dealCards(players) {
-    return new Promise(function (resolve, reject) {
+// Animate and assign cards to GameModule.players
+async function dealCards(players, serverDeck) {
+    return new Promise(function (resolve) {
         //assign each player's div's so cards can be mounted to them
         var p1Div = document.getElementById('0');
         var p2Div = document.getElementById('1');
@@ -167,6 +161,7 @@ async function dealCards(players) {
         deck.mount($container);
         console.log("deck mounted")
 
+        // change this to an await??
         let shufflePromise = shuffleDeckAsync(deck, 1, 0);
 
         // Use a for...of loop to iterate over the cards with asynchronous behavior
@@ -449,7 +444,7 @@ const gameLoop = async _ => {
         let playedHand = 0; //stores returned hand length from playCard function
         let lastValidHand; //stores a number that lets program know if last turn was a pass or turn
         let turn = await determineTurn(GameModule.players); //return player number of player who has 3d
-        let rotation = initialAnimateArrow(turn); //return initial Rotation so I can use it to animate arrow
+        //let rotation = initialAnimateArrow(turn); //return initial Rotation so I can use it to animate arrow
         let gameInfoDiv = document.getElementById("gameInfo");
         let playersFinished = []; //stores finishing order
         let lastHand = []; //stores last hand played
@@ -481,7 +476,7 @@ const gameLoop = async _ => {
             gameInfoDiv.innerHTML = "Last Played: " + lastHand + "<br>Current Turn: " + GameModule.players[turn].name;
 
             //animate arrow by incrementing rotation found initially by 90
-            rotation = animateArrow(rotation);
+            //rotation = animateArrow(rotation);
 
             //reset all player's wonRound status
             for(let i = 0; i < GameModule.players.length; i++) {
@@ -552,8 +547,8 @@ const gameLoop = async _ => {
                             if(finishGameResolve == "finishGameComplete")
                             {
                                 //reset arrow image back to original rotation
-                                const arrowImg = document.querySelector('#arrow img');
-                                arrowImg.style.transform = 'rotate(0deg)';
+                                //const arrowImg = document.querySelector('#arrow img');
+                                //arrowImg.style.transform = 'rotate(0deg)';
 
                                 return new Promise(resolve => {
                                     //unmount finishedDeck
@@ -674,62 +669,68 @@ async function loginMenu() {
 
 //menu that allows users to enter a room number to join an available room
 async function joinRoomMenu(socket) {
-    const joinRoomMenu = document.getElementById("joinRoomMenu");
-    const availableRoomsDiv = document.getElementById('availableRooms');
-    const joinRoomButton = document.getElementById("joinRoomButton");
-    const roomCodeInput = document.getElementById("roomCode");
-    const errorMessage2 = document.getElementById("errorMessage2");
+    return new Promise((resolve, reject) => {
+        const joinRoomMenu = document.getElementById("joinRoomMenu");
+        const availableRoomsDiv = document.getElementById('availableRooms');
+        const errorMessage2 = document.getElementById("errorMessage2");
 
-    // Display joinRoomMenu
-    joinRoomMenu.style.display = "block";
+        // Display joinRoomMenu
+        joinRoomMenu.style.display = "block";
 
-    // Function to request available rooms and update the available rooms div
-    function refreshAvailableRooms() {
-        // Request available rooms
-        socket.emit('getAvailableRooms');
-    }
-
-    // Handler for updating available rooms
-    function updateAvailableRooms(availableRooms) {
-        //console.log('Available rooms:', availableRooms);
-
-        // Clear the existing content and add the heading
-        availableRoomsDiv.innerHTML = '<h3>Available Rooms</h3>';
-
-        if (availableRooms.length === 0) {
-            const noRoomsElement = document.createElement('p');
-            noRoomsElement.textContent = 'No available rooms';
-            availableRoomsDiv.appendChild(noRoomsElement);
-        } else {
-            availableRooms.forEach(({ roomCode, numClients }) => {
-                const roomElement = document.createElement('p');
-                roomElement.textContent = `${roomCode} - ${numClients}/4`;
-                availableRoomsDiv.appendChild(roomElement);
-            });
+        // Function to request available rooms and update the available rooms div
+        function refreshAvailableRooms() {
+            // Request available rooms
+            socket.emit('getAvailableRooms');
         }
-    }
 
-    // Initial request for available rooms, to immediately populate the UI with the current list of available rooms
-    refreshAvailableRooms();
+        // Handler for updating available rooms
+        function updateAvailableRooms(availableRooms) {
+            //console.log('Available rooms:', availableRooms);
 
-    // Set interval to refresh available rooms every 3 seconds and activate the following lines of code
-    const refreshInterval = setInterval(refreshAvailableRooms, 3000);
+            // Clear the existing content and add the heading
+            availableRoomsDiv.innerHTML = '<h3>Available Rooms</h3>';
 
-    // Ensure the existing event listener is removed before adding a new one, these lines are activated when the setInterval goes off
-    socket.off('availableRooms', updateAvailableRooms);
-    socket.on('availableRooms', updateAvailableRooms);
+            if (availableRooms.length === 0) {
+                const noRoomsElement = document.createElement('p');
+                noRoomsElement.textContent = 'No available rooms';
+                availableRoomsDiv.appendChild(noRoomsElement);
+            } else {
+                availableRooms.forEach(({ roomCode, numClients }) => {
+                    const roomButton = document.createElement('button');
+                    roomButton.textContent = `${roomCode}: ${numClients}/4`;
+                    roomButton.classList.add('room-button'); // Optional: Add a class for styling purposes
+                    roomButton.dataset.roomCode = roomCode; // Assign roomCode to dataset
 
-    return new Promise((resolve) => {
+                    // Disable button if there are already 4 clients
+                    if (numClients >= 4) {
+                        roomButton.disabled = true;
+                    }
+                    
+                    roomButton.addEventListener('click', handleJoinRoom);
+                    availableRoomsDiv.appendChild(roomButton);
+                });
+            }
+        }
+
+        // Initial request for available rooms, to immediately populate the UI with the current list of available rooms
+        refreshAvailableRooms();
+
+        // Set interval to refresh available rooms every 3 seconds and activate the following lines of code
+        const refreshInterval = setInterval(refreshAvailableRooms, 3000);
+
+        // Ensure the existing event listener is removed before adding a new one, these lines are activated when the setInterval goes off
+        socket.off('availableRooms', updateAvailableRooms);
+        socket.on('availableRooms', updateAvailableRooms);
+
         // Define the click event listener function
-        function handleClick() {
-            //remove the click event listener for joinRoom button
-            joinRoomButton.removeEventListener("click", handleClick);
+        function handleJoinRoom(event) {
+            // Remove all button click listeners here to avoid multiple click handling issues
+            const roomButtons = document.querySelectorAll('.room-button');
+            roomButtons.forEach(button => {
+                button.removeEventListener('click', handleJoinRoom);
+            });
 
-            // Validate and sanitize the room code
-            let roomCode = sanitizeInput(roomCodeInput.value);
-            roomCode = roomCode.slice(0, 6); // Limit to 6 characters
-
-            roomCodeInput.value = roomCode;
+            const roomCode = event.target.dataset.roomCode; // Retrieve roomCode from dataset
 
             // Emit joinRoom event to server
             socket.emit('joinRoom', { roomCode });
@@ -758,24 +759,6 @@ async function joinRoomMenu(socket) {
                 resolve({ socket, roomCode });
             });
         }
-
-        // Add a click event listener to the join room button
-        joinRoomButton.addEventListener("click", () => {
-            // Input box validation
-            if (roomCodeInput.value.trim() === '') {
-                errorMessage2.innerText = "Room code is required.";
-                errorMessage2.style.display = "block";
-                return;
-            }
-
-            if (roomCodeInput.value.length > 6) {
-                errorMessage2.innerText = "Room code should be 6 characters or less.";
-                errorMessage2.style.display = "block";
-                return;
-            }
-
-            handleClick();
-        });
     });
 }
 
@@ -975,6 +958,7 @@ async function startGame(socket, roomCode){
     const playButton = document.getElementById("play");
     const passButton = document.getElementById("pass");
     const gameInfo = document.getElementById("gameInfo");
+    let serverDeck;
 
     playButton.style.display = "block";
     passButton.style.display = "block";
@@ -984,22 +968,37 @@ async function startGame(socket, roomCode){
     socket.off('shuffledDeck');
     socket.off('initialGameState');
  
-    // Set up the event listener for the shuffled deck
-    socket.on('shuffledDeck', ({ cards }) => {
-    console.log('Received shuffled deck:', cards);
-    // Handle the shuffled deck (e.g., display it to the players)
+    // Set up a promise to wait for the shuffledDeck event
+    const shuffledDeckPromise = new Promise(resolve => {
+        socket.on('shuffledDeck', ({ cards }) => {
+            serverDeck = cards;
+
+            resolve(); // Resolve the promise when serverDeck is set
+        });
     });
 
-    // Set up the event listener for the initial game state
+    // Set up the event listener for the initial game state, might need to await promise this as well
     socket.on('initialGameState', ({ gameState }) => {
-    console.log('Received initial game state:', gameState);
-    // Handle the initial game state (e.g., update UI with player information)
+        // update local GameModule.players with server gameState players
+        GameModule.players = gameState.players;
+
+        console.log('Received initial game state:', GameModule.players);
     });
+
+    // Wait for the shuffledDeck event to be received
+    await shuffledDeckPromise;
+
+    // Create deck, pass in serverDeck, then copy in serverDeck to the new deck, then display the deck in an HTML container
+    let deck = Deck(false, serverDeck);
+    let $container = document.getElementById('gameDeck');
+
+    deck.mount($container);
+    deck.copyDeck(serverDeck);
+    
+    // deal cards to all players and return resolve when animations are complete
+    //let dealResolve = await dealCards(GameModule.players, serverDeck);
 
     /*
-    // deal cards to all players and return resolve when animations are complete
-    let dealResolve = await dealCards(GameModule.players);
-
     if(dealResolve === 'dealingComplete'){
         // Cards have been dealt and animations are complete
         console.log('Dealing complete');

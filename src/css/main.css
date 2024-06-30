@@ -66,7 +66,7 @@
         left: 50%;
         transform: translate(-50%, -50%);
         width: 400px; /* Adjust as needed */
-        height: 360px; /* Adjust as needed */
+        height: 280px; /* Adjust as needed */
         background-color: #ffffff; /* White background */
         border: 1px solid #000; /* Add border with 2px width and black color */
         border-radius: 10px; /* Rounded corners */
@@ -91,11 +91,6 @@
         font-size: 14px;
         text-align: center;
         color: black;
-    }
-
-    #availableRooms p {
-        margin: 5px 0;
-        text-align: center;
     }
 
     #lobbyMenu{
@@ -196,7 +191,7 @@
     }
 
     /* Style for the input box */
-    #roomCode, #username, #password {
+    #username, #password {
         padding: 8px;
         font-size: 16px;
         border: 1px solid #ccc;
@@ -217,7 +212,7 @@
     }
     
     /* style for loginMenu & joinRoomMenu */
-    #loginButton, #joinRoomButton {
+    #loginButton {
         display: block;
         margin: 20px auto; /* Center horizontally with margin */
         width: 300px;
@@ -226,6 +221,21 @@
         font-size: 15px;
         font-family: Helvetica, Arial, sans-serif;
         font-weight: 200;
+        border: 1px solid #ccc; /* Subtle gray border */
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    .room-button {
+        display: block;
+        margin: 20px auto; /* Center horizontally with margin */
+        width: 300px;
+        height: 30px;
+        transition-duration: 0.4s;
+        font-size: 15px;
+        font-family: Helvetica, Arial, sans-serif;
+        font-weight: 200;
+        border: 1px solid #ccc; /* Subtle gray border */
         border-radius: 4px;
         cursor: pointer;
     }
@@ -239,12 +249,13 @@
         font-size: 15px;
         font-family: Helvetica, Arial, sans-serif;
         font-weight: 200;
+        border: 1px solid #ccc; /* Subtle gray border */
         border-radius: 4px;
         cursor: pointer;
     }
 
-    #loginButton:hover, #joinRoomButton:hover, #readyButton:hover, #startGameButton:hover, #nextGameButton:hover, #play:hover, #pass:hover {
-        background-color: #008000;
+    #loginButton:hover, #joinRoomButton:hover, .room-button:hover, #readyButton:hover, #startGameButton:hover, #nextGameButton:hover, #play:hover, #pass:hover {
+        background-color: #249924;
         color: white;
     }
 
