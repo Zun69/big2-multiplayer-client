@@ -5,7 +5,8 @@ export default class Player{
         this.wonRound = false;
         this.wonGame = false;
         this.passed = false;
-        this.clientID = null; // Set to null initially, will set later in the lobbyMenu
+        this.clientId = null; // Set to null initially, will set later in the lobbyMenu
+        this.playerDiv = null;
         this.points = 0;
         this.wins = 0;
         this.seconds = 0;
@@ -16,7 +17,6 @@ export default class Player{
     get numberOfCards() { 
         return this.cards.length;
     }
-
 
     addCard(card){
         //add cards to hand

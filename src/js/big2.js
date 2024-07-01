@@ -29,10 +29,17 @@ const suitLookup = {
 
 //GameModule object encapsulate players, deck, gameDeck, finishedDeck (it represents the local gameState)
 const GameModule = (function() {
+    //let initialPlayer1 = new Player();
+    let player1 = new Player();
+    let player2 = new Opponent(); //ai player that will mirror other player's real time moves
+    let player3 = new Opponent();
+    let player4 = new Opponent();
+
     // Current values
-    let players = [];
+    let players = [player1, player2, player3, player4];
     let gameDeck = [];
     let finishedDeck = Deck();
+
 
     // reset everything except points, wins, seconds, etc (next game)
     function reset() {
@@ -73,7 +80,7 @@ const GameModule = (function() {
         gameDeck,
         finishedDeck,
         reset,
-        resetAll
+        resetAll,
     };
 })();
 
@@ -117,7 +124,7 @@ async function sortHands(players){
 }
 
 // Purpose is to wait for shuffle animation finish before resolving promise back to dealCards function
-function shuffleDeckAsync(deck, times, delayBetweenShuffles) {
+function shuffleDeckAsync(deck, times, delayBetweenShuffles, serverDeck) {
     return new Promise((resolve) => {
       const shufflePromises = [];
   
@@ -125,7 +132,7 @@ function shuffleDeckAsync(deck, times, delayBetweenShuffles) {
         shufflePromises.push(
           new Promise((innerResolve) => {
             setTimeout(() => {
-              deck.shuffle();
+              deck.copyDeck(serverDeck);
               innerResolve();
             }, i * delayBetweenShuffles);
           })
@@ -135,13 +142,13 @@ function shuffleDeckAsync(deck, times, delayBetweenShuffles) {
       Promise.all(shufflePromises).then(() => {
         setTimeout(() => {
           resolve('shuffleComplete');
-        }, 300); //default 2100 7 shuffles  (3 shuffles = 850, etc)
+        }, 850); //default 2100 7 shuffles  (3 shuffles = 850, etc)
       });
     });
 }
 
 // Animate and assign cards to GameModule.players
-async function dealCards(players, serverDeck) {
+async function dealCards(players, serverDeck, socket, roomCode) {
     return new Promise(function (resolve) {
         //assign each player's div's so cards can be mounted to them
         var p1Div = document.getElementById('0');
@@ -155,23 +162,31 @@ async function dealCards(players, serverDeck) {
         let p3Promise;
         let p4Promise;
 
-        // Display the deck in an HTML container
-        let deck = Deck();
+        // Create deck, pass in serverDeck, then copy in serverDeck to the new deck, then display the deck in an HTML container
+        let deck = Deck(false, serverDeck);
         let $container = document.getElementById('gameDeck');
         deck.mount($container);
-        console.log("deck mounted")
 
         // change this to an await??
-        let shufflePromise = shuffleDeckAsync(deck, 1, 0);
+        let shufflePromise = shuffleDeckAsync(deck, 3, 0, serverDeck);
 
         // Use a for...of loop to iterate over the cards with asynchronous behavior
         var playerIndex = 0;
+
+        //start dealing at player with clientId 0
+        GameModule.players.forEach(function (player, index) {
+            if(player.clientId == 0){
+                console.log("PLAYER INDEX: " + index);
+                playerIndex = index; //if player has clientId of 0, start the playerIndex at the player's index in the GameModule.players array
+            }
+        });
 
         shufflePromise.then(function(value) {
             if(value == "shuffleComplete"){
                 const animationPromises = []; // Array to store animation promises
 
                 deck.cards.reverse().forEach(function (card, i) {
+                    //keeps playerIndex within a 0-3 range
                     if (playerIndex == 4) {
                         playerIndex = 0;
                     }
@@ -197,7 +212,7 @@ async function dealCards(players, serverDeck) {
                                 },50 + i * 28);
                             });
                             animationPromises.push(p1Promise); //add animation promise to promise array
-                            players[playerIndex].addCard(card); //add card to player's hand
+                            GameModule.players[playerIndex].addCard(card); //add card to player's hand
                             playerIndex++;
                             break;
                         case 1:
@@ -272,6 +287,8 @@ async function dealCards(players, serverDeck) {
                 Promise.all(animationPromises).then(() => {
                     //Unmount the deck from the DOM
                     deck.unmount();
+
+                    socket.emit('dealComplete', { roomCode });
 
                     //Remove reference to the deck instance
                     deck = null; 
@@ -637,8 +654,9 @@ async function loginMenu() {
                 console.log('Authentication successful');
                 // Hide the loginMenu
                 loginMenu.style.display = "none";
+
                 // Resolve the promise with the socket instance
-                resolve(socket);
+                resolve({ socket, username });
             });
         }
 
@@ -705,7 +723,6 @@ async function joinRoomMenu(socket) {
                     if (numClients >= 4) {
                         roomButton.disabled = true;
                     }
-                    
                     roomButton.addEventListener('click', handleJoinRoom);
                     availableRoomsDiv.appendChild(roomButton);
                 });
@@ -953,13 +970,13 @@ async function lobbyMenu(socket, roomCode){
     });
 }
 
-async function startGame(socket, roomCode){
+async function startGame(socket, roomCode, username){
     //unhide buttons and gameInfo divs
     const playButton = document.getElementById("play");
     const passButton = document.getElementById("pass");
     const gameInfo = document.getElementById("gameInfo");
     let serverDeck;
-
+    
     playButton.style.display = "block";
     passButton.style.display = "block";
     gameInfo.style.display = "block";
@@ -967,36 +984,44 @@ async function startGame(socket, roomCode){
     // Remove any existing event listeners for these events to avoid multiple listeners
     socket.off('shuffledDeck');
     socket.off('initialGameState');
+
+    // Set up a promise to wait for the initial game state event
+    const initialGamestatePromise = new Promise(resolve => {
+        socket.on('initialGameState', ({ gameState }) => {
+            console.log(gameState.players);
+
+            // Find the index of the local player in gameState.players
+            const localPlayerIndex = gameState.players.findIndex(player => player.name === username);
+
+            if (localPlayerIndex !== -1) {
+                // Iterate over gameState.players and assign each player to GameModule.players
+                gameState.players.forEach((gsPlayer, index) => {
+                    const gameModuleIndex = (index - localPlayerIndex + 4) % 4; // Calculate GameModule index
+
+                    GameModule.players[gameModuleIndex].name = gsPlayer.name;
+                    GameModule.players[gameModuleIndex].clientId = gsPlayer.clientId;
+                });
+            }
+
+            resolve();
+        });
+    });
  
     // Set up a promise to wait for the shuffledDeck event
     const shuffledDeckPromise = new Promise(resolve => {
         socket.on('shuffledDeck', ({ cards }) => {
             serverDeck = cards;
-
             resolve(); // Resolve the promise when serverDeck is set
         });
     });
 
-    // Set up the event listener for the initial game state, might need to await promise this as well
-    socket.on('initialGameState', ({ gameState }) => {
-        // update local GameModule.players with server gameState players
-        GameModule.players = gameState.players;
-
-        console.log('Received initial game state:', GameModule.players);
-    });
-
-    // Wait for the shuffledDeck event to be received
+    await initialGamestatePromise;
+    console.log(GameModule.players);
     await shuffledDeckPromise;
-
-    // Create deck, pass in serverDeck, then copy in serverDeck to the new deck, then display the deck in an HTML container
-    let deck = Deck(false, serverDeck);
-    let $container = document.getElementById('gameDeck');
-
-    deck.mount($container);
-    deck.copyDeck(serverDeck);
+    
     
     // deal cards to all players and return resolve when animations are complete
-    //let dealResolve = await dealCards(GameModule.players, serverDeck);
+    let dealResolve = await dealCards(GameModule.players, serverDeck, socket, roomCode);
 
     /*
     if(dealResolve === 'dealingComplete'){
@@ -1117,16 +1142,16 @@ window.onload = async function() {
     let endMenuResolve;
 
     // require username and password to establish connection to socket.io server and resolve the connected socket object
-    let loginMenuResolve = await loginMenu()
+    const { socket: loginMenuSocket, username }  = await loginMenu()
 
     // once client has established connection to the server, require room code to join a game lobby and then resolve the socket thats connected to a room
-    const { socket: joinedRoomSocket, roomCode } = await joinRoomMenu(loginMenuResolve);
+    const { socket: joinedRoomSocket, roomCode } = await joinRoomMenu(loginMenuSocket);
 
     // a lobby room where clients wait and can chat with each other until 4 clients join, where they can then start the game, might allow bots as filler
     let lobbyMenuResolve = await lobbyMenu(joinedRoomSocket, roomCode);
 
     // once code reaches here, it means 4 clients have readied up
-    let results = await startGame(lobbyMenuResolve, roomCode);
+    let results = await startGame(lobbyMenuResolve, roomCode, username);
 
     /*while(true){
         //if user quits game
