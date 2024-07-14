@@ -18,6 +18,23 @@ export default class Player{
         return this.cards.length;
     }
 
+    // Serialize Player to a plain object so I can update player properties to the server
+    serialize() {
+        return {
+            name: this.name,
+            cards: this.cards.map(card => ({ rank: card.rank, suit: card.suit })),
+            wonRound: this.wonRound,
+            wonGame: this.wonGame,
+            passed: this.passed,
+            clientId: this.clientId,
+            points: this.points,
+            wins: this.wins,
+            seconds: this.seconds,
+            thirds: this.thirds,
+            losses: this.losses,
+        };
+    }
+
     addCard(card){
         //add cards to hand
         this.cards.push(card);

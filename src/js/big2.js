@@ -288,11 +288,16 @@ async function dealCards(players, serverDeck, socket, roomCode) {
                     //Unmount the deck from the DOM
                     deck.unmount();
 
-                    socket.emit('dealComplete', { roomCode });
+                    //socket.emit('dealComplete', { roomCode, GameModule.players });
+                    // Serialize players before emitting
+
+                    const serializedLocalPlayer = GameModule.players[0].serialize();
+                    console.log(serializedLocalPlayer);
+                    socket.emit('dealComplete', { roomCode, player: serializedLocalPlayer });
 
                     //Remove reference to the deck instance
                     deck = null; 
-                    resolve('dealingComplete');
+                    resolve(socket);
                 });
             }
         });       
@@ -456,7 +461,9 @@ const gameLoop = async _ => {
     });
     GameModule.finishedDeck.cards = [];
 
-    let sortResolve = await sortHands(GameModule.players); //sort all player's cards
+    //sort all player's cards( since its online, each client should emit a sortHand event which lets other clients select opponent to sort with clientId)
+    let sortResolve = await sortHands(GameModule.players); 
+
     if(sortResolve === 'sortComplete'){
         let playedHand = 0; //stores returned hand length from playCard function
         let lastValidHand; //stores a number that lets program know if last turn was a pass or turn
@@ -976,6 +983,7 @@ async function startGame(socket, roomCode, username){
     const passButton = document.getElementById("pass");
     const gameInfo = document.getElementById("gameInfo");
     let serverDeck;
+    let allDealsComplete = false; // Boolean variable to track deal completion
     
     playButton.style.display = "block";
     passButton.style.display = "block";
@@ -984,6 +992,7 @@ async function startGame(socket, roomCode, username){
     // Remove any existing event listeners for these events to avoid multiple listeners
     socket.off('shuffledDeck');
     socket.off('initialGameState');
+    socket.off('allDealsComplete');
 
     // Set up a promise to wait for the initial game state event
     const initialGamestatePromise = new Promise(resolve => {
@@ -1021,16 +1030,21 @@ async function startGame(socket, roomCode, username){
     
     
     // deal cards to all players and return resolve when animations are complete
-    let dealResolve = await dealCards(GameModule.players, serverDeck, socket, roomCode);
+    let dealSocket = await dealCards(GameModule.players, serverDeck, socket, roomCode);
 
-    /*
-    if(dealResolve === 'dealingComplete'){
+    // Event listener for the allDealsComplete event
+    socket.on('allDealsComplete', () => {
+        allDealsComplete = true;
+    });
+
+    
+    if(allDealsComplete){
         // Cards have been dealt and animations are complete
         console.log('Dealing complete');
         let results = await gameLoop();
         return results; //return results
     }
-    */
+    
 }
 
 async function endMenu() {
