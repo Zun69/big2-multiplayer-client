@@ -104,7 +104,7 @@ async function sortPlayerHandAfterTurn(players,turn){
 }
 
 // Sorts everybody's cards and plays the animation, resolves when animations finish
-async function sortHands(players){ 
+async function sortHands(players, socket, roomCode){ 
     const animationPromises = [];
 
     players.forEach(function(player){
@@ -117,10 +117,22 @@ async function sortHands(players){
     }
 
     // Wait for all animation promises to resolve
-    await Promise.all(animationPromises);
+    await Promise.all(animationPromises);    
 
-    // You can return a resolved promise if needed
-    return Promise.resolve('sortComplete');
+    const serializedLocalPlayer = GameModule.players[0].serialize();
+
+    console.log(serializedLocalPlayer);
+    
+    // Emit serialized local player's sorted cards to the server to update room's gameState
+    socket.emit('sortHandsComplete', { roomCode, player: serializedLocalPlayer });
+
+    // Return a promise that resolves when all sorting is complete
+    return new Promise(resolve => {
+        socket.on('allSortingComplete', () => {
+            console.log('All players have completed sorting their hands.');
+            resolve('sortComplete');
+        });
+    });
 }
 
 // Purpose is to wait for shuffle animation finish before resolving promise back to dealCards function
@@ -292,7 +304,7 @@ async function dealCards(players, serverDeck, socket, roomCode) {
                     // Serialize players before emitting
 
                     const serializedLocalPlayer = GameModule.players[0].serialize();
-                    console.log(serializedLocalPlayer);
+
                     socket.emit('dealComplete', { roomCode, player: serializedLocalPlayer });
 
                     //Remove reference to the deck instance
@@ -454,7 +466,7 @@ function findMissingPlayer(playersFinished) {
 }
 
 //Actual game loop, 1 loop represents a turn
-const gameLoop = async _ => {
+const gameLoop = async (socket, roomCode) => {
     // Empty the finished deck of all its cards, so it can store post round cards
     GameModule.finishedDeck.cards.forEach(function (card) {
         card.unmount();
@@ -462,25 +474,27 @@ const gameLoop = async _ => {
     GameModule.finishedDeck.cards = [];
 
     //sort all player's cards( since its online, each client should emit a sortHand event which lets other clients select opponent to sort with clientId)
-    let sortResolve = await sortHands(GameModule.players); 
+    let sortResolve = await sortHands(GameModule.players, socket, roomCode); 
 
     if(sortResolve === 'sortComplete'){
         let playedHand = 0; //stores returned hand length from playCard function
         let lastValidHand; //stores a number that lets program know if last turn was a pass or turn
-        let turn = await determineTurn(GameModule.players); //return player number of player who has 3d
+        let turn = await determineTurn(GameModule.players); //return player number of player who has 3d (do i need to emit this to server?)
+
         //let rotation = initialAnimateArrow(turn); //return initial Rotation so I can use it to animate arrow
         let gameInfoDiv = document.getElementById("gameInfo");
         let playersFinished = []; //stores finishing order
         let lastHand = []; //stores last hand played
         let playedHistory = [] //stores played card history
 
-        const gameState = new GameState(GameModule.players, GameModule.gameDeck, lastHand, turn, lastValidHand, GameModule.finishedDeck, playersFinished, playedHistory, playedHand);
+        //const gameState = new GameState(GameModule.players, GameModule.gameDeck, lastHand, turn, lastValidHand, GameModule.finishedDeck, playersFinished, playedHistory, playedHand);
 
         //GAME LOOP, each loop represents a single turn
         for(let i = 0; i < 100; i++){
             //used for displaying last played hand with actual suit icons 
             lastHand = printLastPlayedHand(GameModule.gameDeck, lastValidHand);
             
+            /*
             // Update gameState properties with new values
             gameState.lastHand = lastHand;
             gameState.lastValidHand = lastValidHand;
@@ -495,12 +509,12 @@ const gameLoop = async _ => {
             console.log("GameState Turn:", gameState.turn);
             console.log("GameState Finished Deck:", gameState.finishedDeck);
             console.log("GameState Players Finished:", gameState.playersFinished);
-            console.log("GameState playedHand:", gameState.playedHand);
+            console.log("GameState playedHand:", gameState.playedHand);*/
 
-            gameInfoDiv.innerHTML = "Last Played: " + lastHand + "<br>Current Turn: " + GameModule.players[turn].name;
+            gameInfoDiv.innerHTML = "Last Played: " + lastHand;
 
-            //animate arrow by incrementing rotation found initially by 90
-            //rotation = animateArrow(rotation);
+            //Change turn here
+            //displayTurn(turn);
 
             //reset all player's wonRound status
             for(let i = 0; i < GameModule.players.length; i++) {
@@ -982,12 +996,13 @@ async function startGame(socket, roomCode, username){
     const playButton = document.getElementById("play");
     const passButton = document.getElementById("pass");
     const gameInfo = document.getElementById("gameInfo");
+    const playerInfo = document.getElementsByClassName("playerInfo");
     let serverDeck;
-    let allDealsComplete = false; // Boolean variable to track deal completion
     
     playButton.style.display = "block";
     passButton.style.display = "block";
     gameInfo.style.display = "block";
+
 
     // Remove any existing event listeners for these events to avoid multiple listeners
     socket.off('shuffledDeck');
@@ -1003,13 +1018,20 @@ async function startGame(socket, roomCode, username){
             const localPlayerIndex = gameState.players.findIndex(player => player.name === username);
 
             if (localPlayerIndex !== -1) {
-                // Iterate over gameState.players and assign each player to GameModule.players
+                // Iterate over gameState.players and assign each player to GameModule.players based on local player's position in gameState array
+                // every local client will have a different gameModule.players order (e.g. if local player(players[0]) is clientId3, players[1]=clientId1, players[2]=clientId2, etc)
                 gameState.players.forEach((gsPlayer, index) => {
                     const gameModuleIndex = (index - localPlayerIndex + 4) % 4; // Calculate GameModule index
 
                     GameModule.players[gameModuleIndex].name = gsPlayer.name;
                     GameModule.players[gameModuleIndex].clientId = gsPlayer.clientId;
                 });
+            }
+
+            // Loop through the playerInfo elements and set their display property to block and appropriate player name to elements
+            for (var i = 0; i < playerInfo.length; i++) {
+                playerInfo[i].style.display = 'block';
+                playerInfo[i].innerHTML = GameModule.players[i].name; //maybe add points here as well?
             }
 
             resolve();
@@ -1030,21 +1052,21 @@ async function startGame(socket, roomCode, username){
     
     
     // deal cards to all players and return resolve when animations are complete
-    let dealSocket = await dealCards(GameModule.players, serverDeck, socket, roomCode);
+    await dealCards(GameModule.players, serverDeck, socket, roomCode);
 
-    // Event listener for the allDealsComplete event
-    socket.on('allDealsComplete', () => {
-        allDealsComplete = true;
+    // Set up a promise to wait for the allDealsComplete event
+    const allDealsCompletePromise = new Promise(resolve => {
+        socket.on('allDealsComplete', () => {
+            resolve(); // Resolve the promise when allDealsComplete event is received
+        });
     });
 
-    
-    if(allDealsComplete){
-        // Cards have been dealt and animations are complete
-        console.log('Dealing complete');
-        let results = await gameLoop();
-        return results; //return results
-    }
-    
+    await allDealsCompletePromise;
+
+    // Cards have been dealt and animations are complete
+    console.log('Dealing complete');
+    let results = await gameLoop(socket, roomCode);
+    return results; //return results
 }
 
 async function endMenu() {

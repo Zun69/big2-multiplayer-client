@@ -348,30 +348,52 @@
     
     #gameInfo {
         position: absolute;
-        top: 67.8%; /*67.8*/
-        left: 50%;
-        transform: translate(-50%, -50%); /* Center the element precisely */
-        font-size: 15px;
-        background-color: rgba(255, 255, 255, 0.5); /* Transparent white background */
-        padding: 10px;
-        backdrop-filter: blur(1px); /* Adjust the blur value as needed */
-        border-radius: 10px; /* Adjust the border-radius value as needed */
         display: none;
+        top: 95%; /*67.8*/
+        left: 92.5%;
+        transform: translate(-50%, -50%); /* Center the element precisely */
+        font-size: 13px;
+        background-color: rgba(255, 255, 255, 0.7); /* Transparent white background */
+        padding: 8px;
+        backdrop-filter: blur(1px); /* Adjust the blur value as needed */
+        border-radius: 8px; /* Adjust the border-radius value as needed */
     }
 
-    #arrow {
+    .playerInfo {
+        display: none;
+        background-color: rgba(255, 255, 255, 0.7); /* Transparent white background */
+        font-size: 13px;
+        padding: 10px; 
+        backdrop-filter: blur(1px); 
+        border-radius: 8px; 
+    }
+
+    #p0Info{
         position: absolute;
-        top: calc(67.8% - 110px); /* Adjust the value to position it above gameInfo */
+        top: 70%;
         left: 50%;
-        transform: translateX(-50%);
+        transform: translate(-50%, -50%);
     }
 
-    #arrow img {
-        width: 40px;
-        height: 40px;
-        margin-bottom: -65px;
-        position: relative; /* Make the image position relative to its parent */
-        transition: transform 0.20s ease; /* Smooth transition for transform property */
+    #p1Info{
+        position: absolute;
+        top: 50%;
+        left: 15%;
+        transform: translate(-50%, -50%);
+    }
+
+    #p2Info{
+        position: absolute;
+        top: 22.8%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+    }
+
+    #p3Info{
+        position: absolute;
+        top: 50%;
+        left: 85%;
+        transform: translate(-50%, -50%);
     }
     
     .button {
@@ -403,6 +425,9 @@
         margin-left: 125px;
     }
 }
+
+
+
 
 /* Media query targeting devices with a maximum screen width of 780px (iphone 12 mini and smaller in landscape mode) */
 @media only screen and (max-width: 780px) {
