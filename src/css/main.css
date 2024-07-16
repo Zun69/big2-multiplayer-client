@@ -352,9 +352,10 @@
         top: 95%; /*67.8*/
         left: 92.5%;
         transform: translate(-50%, -50%); /* Center the element precisely */
-        font-size: 13px;
+        font-family: "Helvetica", Arial, sans-serif;
+        font-size: 12px;
         background-color: rgba(255, 255, 255, 0.7); /* Transparent white background */
-        padding: 8px;
+        padding: 6px;
         backdrop-filter: blur(1px); /* Adjust the blur value as needed */
         border-radius: 8px; /* Adjust the border-radius value as needed */
     }
@@ -362,7 +363,9 @@
     .playerInfo {
         display: none;
         background-color: rgba(255, 255, 255, 0.7); /* Transparent white background */
-        font-size: 13px;
+        font-family: "Helvetica", Arial, sans-serif;
+        font-size: 12px;
+        font-weight: bold;
         padding: 10px; 
         backdrop-filter: blur(1px); 
         border-radius: 8px; 

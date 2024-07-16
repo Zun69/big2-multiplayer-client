@@ -18,23 +18,6 @@ export default class Player{
         return this.cards.length;
     }
 
-    // Serialize Player to a plain object so I can update player properties to the server
-    serialize() {
-        return {
-            name: this.name,
-            cards: this.cards.map(card => ({ rank: card.rank, suit: card.suit })),
-            wonRound: this.wonRound,
-            wonGame: this.wonGame,
-            passed: this.passed,
-            clientId: this.clientId,
-            points: this.points,
-            wins: this.wins,
-            seconds: this.seconds,
-            thirds: this.thirds,
-            losses: this.losses,
-        };
-    }
-
     addCard(card){
         //add cards to hand
         this.cards.push(card);
@@ -640,7 +623,7 @@ export default class Player{
     }
 
     //function takes care of selecting cards and inserting cards into hand, sorting the hand, validating move and inserting the hand onto the game deck, and returning promise
-    async playCard(gameDeck, lastValidHand, playersFinished){
+    async playCard(gameDeck, lastValidHand, playersFinished, roomCode, socket){
         var playButton = document.getElementById("play"); //set player class to active if its their turn
         var passButton = document.getElementById("pass");
         var placeCardAudio = new Audio("audio/flipcard.mp3");
@@ -782,8 +765,10 @@ export default class Player{
                         }
                     });
                         
-                    resolve(hand.length); //return amount of cards played, to move forward for loop
+                    // emit hand played, and update server side cards, and gameDeck maybe?
+                    socket.emit('playedHand', roomCode, hand, self, gameDeck, playersFinished);
                     hand.length = 0; //clear hand after playing it
+                    resolve(); //return amount of cards played, to move forward for loop
                 });
 
                 //remove click listener on card, so they dont stack up
@@ -827,8 +812,13 @@ export default class Player{
                 //remove play button listener, when player passes so event listeners dont propogate
                 playButton.removeEventListener('click', playClickListener); 
 
+
                 //remove all selected cards, play pass audio and resolve 0
                 hand.length = 0
+
+                // emit that player passed (hand.length = 0)
+                socket.emit('playedHand', roomCode, hand, self, gameDeck, playersFinished);
+
                 passAudio.play(); 
                 resolve(0); 
             }
