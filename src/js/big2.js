@@ -1,6 +1,5 @@
 import Player from "./player.js"
 import Opponent from "./opponent.js"
-import GameState from "./gameState.js"
 
 // Lookup table for printing actual rank in last played hand
 const rankLookup = {
@@ -39,11 +38,14 @@ const GameModule = (function() {
     let players = [player1, player2, player3, player4];
     let gameDeck = [];
     let playersFinished = []; //stores finishing order
+    let lastHand = []; //stores last hand played
+    let playedHistory = [] //stores played card history
+
     let lastValidHand; //stores a number that lets program know if last turn was a pass or turn
     let turn;
     let finishedDeck = Deck();
     let playedHand = 0; //stores returned hand length from playCard function
-    // playedHistory & lastHand here as well
+    let losingPlayer;
 
     // reset everything except points, wins, seconds, etc (next game)
     function reset() {
@@ -51,15 +53,18 @@ const GameModule = (function() {
             // Reset player properties
             player.cards = [];
             player.wonRound = false;
-            player.wonGame = false;
+            player.finishedGame = false;
             player.passed = false;
             player.readyState = false;
         });
         gameDeck.length = 0;
+        playersFinished.length = 0;
+        lastHand.length = 0;
+        playedHistory.length = 0;
         finishedDeck = Deck();
-        playersFinished = [];
         turn = undefined;
         lastValidHand = undefined; 
+        losingPlayer = undefined;
         playedHand = 0;
     }
 
@@ -69,7 +74,7 @@ const GameModule = (function() {
             // Reset player properties
             player.cards = [];
             player.wonRound = false;
-            player.wonGame = false;
+            player.finishedGame = false;
             player.passed = false;
             player.readyState = false;
             player.points = 0;
@@ -79,10 +84,13 @@ const GameModule = (function() {
             player.losses = 0;
         });
         gameDeck.length = 0;
+        playersFinished.length = 0;
+        lastHand.length = 0;
+        playedHistory.length = 0;
         finishedDeck = Deck();
-        playersFinished = [];
         turn = undefined;
-        lastValidHand = undefined; 
+        lastValidHand = undefined;
+        losingPlayer = undefined;
         playedHand = 0;
     }
 
@@ -90,30 +98,18 @@ const GameModule = (function() {
     return {
         players,
         gameDeck,
+        playersFinished,
+        lastHand,
+        playedHistory,
         finishedDeck,
+        turn, // Expose turn
+        lastValidHand, // Expose lastValidHand
+        playedHand, // Expose playedHand
+        losingPlayer, // Expose losingPlayer
         reset,
         resetAll,
     };
 })();
-
-async function sortPlayerHandAfterTurn(players,turn){
-    const animationPromises = [];
-
-    //sort player's card after turn
-    //players[turn].sortHand();
-
-    console.log("TURN: " + turn);
-    // Push the animation promise into the array
-    animationPromises.push(players[turn].sortingAnimationAfterTurn(turn));
-
-    // Wait for all animation promises to resolve
-    await Promise.all(animationPromises);
-
-    console.log("hand sorted after turn")
-
-    // return resolve, to let game loop know that player's cards have been sorted
-    return Promise.resolve('sortAfterTurnComplete');
-}
 
 // Sorts everybody's cards and plays the animation, resolves when animations finish
 async function sortHands(players, socket, roomCode){ 
@@ -139,6 +135,29 @@ async function sortHands(players, socket, roomCode){
         socket.on('allSortingComplete', () => {
             console.log('All players have completed sorting their hands.');
             resolve('sortComplete');
+        });
+    });
+}
+
+async function sortPlayerHandAfterTurn(socket, roomCode){
+    const animationPromises = [];
+    
+    // When player plays their hand, its already sorted so no need to sort, just animate cards to new index positions
+    // Push the animation promise into the array
+    animationPromises.push(GameModule.players[GameModule.turn].sortingAnimationAfterTurn(GameModule.turn));
+
+    // Wait for all animation promises to resolve
+    await Promise.all(animationPromises);
+
+    // Emit player's sorted cards after their turn to the server to update room's gameState
+    // Only the host's emitted player will update the gameState
+    socket.emit('sortPlayerHandAfterTurn',roomCode, GameModule.players[GameModule.turn]);
+
+     // Return a promise that resolves when all sorting is complete
+    return new Promise(resolve => {
+        socket.on('sortAfterTurnComplete', () => {
+            console.log('After turn sorting complete for all clients');
+            resolve('sortAfterTurnComplete');
         });
     });
 }
@@ -353,8 +372,7 @@ function displayTurn(turn) {
 // Reset wonRound status of players using info from players array sent from server
 function resetWonRoundStatus(socket) {
     return new Promise((resolve) => {
-        const listener = (data) => {
-            const players = data.players; // Access the players array
+        const listener = (players) => {
 
             // Loop through received players and update wonRound status of GameModule.players
             for (let serverPlayer of players) {
@@ -380,9 +398,7 @@ function resetWonRoundStatus(socket) {
 // Reset passed status of players if server emits wonRound event
 function checkThreePasses(socket) {
     return new Promise((resolve) => {
-        const wonRoundListener = (data) => {
-            const players = data.players; // Access the players array
-
+        const wonRoundListener = (players) => {
             // Loop through received players and update passed status of GameModule.players
             for (let serverPlayer of players) {
                 for (let localPlayer of GameModule.players) {
@@ -421,8 +437,8 @@ function finishWonRound(socket) {
                     break;
                 }
             }
-            // Update local gameDeck to server gameDeck
-            GameModule.gameDeck = serverGameDeck;
+
+            GameModule.gameDeck.length = serverGameDeck.length;
 
             // Remove the listener after updating the status
             socket.off('finishDeckComplete', listener);
@@ -438,6 +454,8 @@ function finishWonRound(socket) {
 function receivePlayerHand(socket, turn) {
     return new Promise((resolve) => {
         const listener = async (serverHand, serverPlayer, serverGameDeck, serverPlayersFinished) => {
+            let opponentHandLength;
+            console.log("server hand: " + serverHand);
             // If received hand is not from local client
             if(GameModule.players[turn].clientId !== GameModule.players[0].clientId) {
                 // Receive other client's hand and make appropriate opponent play that hand
@@ -446,24 +464,22 @@ function receivePlayerHand(socket, turn) {
                 for (let localOpponent of GameModule.players) {
                     if (localOpponent.clientId === serverPlayer.clientId) {
                         console.log("found corresponding opponent");
-                        console.log(serverHand);
-
+                        
                         // Make opponent AI play serverHand received from corresponding client
-                        await localOpponent.playCard(GameModule.gameDeck, GameModule.turn, serverHand);
+                        opponentHandLength = await localOpponent.playCard(GameModule.gameDeck, GameModule.turn, serverHand);
 
                         // This might not be needed because cards will already be the same
-                        localOpponent.cards = serverPlayer.cards; // this might cause an error
+                        //localOpponent.cards = serverPlayer.cards; // this might cause an error
                         break;
                     }
                 }
                 // Update local gameState to server gameState
-                GameModule.gameDeck = serverGameDeck;
                 GameModule.playersFinished = serverPlayersFinished; 
                 
                 // Remove the listener after updating the status
                 socket.off('receivePlayerHand', listener);
                 // Resolve the promise with serverHand length
-                resolve(serverHand.length);
+                resolve(opponentHandLength);
             } 
             // Else if its local client's hand
             else {
@@ -474,12 +490,11 @@ function receivePlayerHand(socket, turn) {
                         console.log(serverHand);
 
                         // This might not be needed because cards will already be the same
-                        localPlayer.cards = serverPlayer.cards;
+                        //localPlayer.cards = serverPlayer.cards;
                         break;
                     }
                 }
                 // Update local gameState to server gameState
-                GameModule.gameDeck = serverGameDeck;
                 GameModule.playersFinished = serverPlayersFinished; 
                 
                 // Remove the listener after updating the status
@@ -495,9 +510,103 @@ function receivePlayerHand(socket, turn) {
     });
 }
 
-async function finishGameAnimation(gameDeck, finishedDeck, players, losingPlayer){
+// Reset passed property of players using info from players array sent from server
+function resetPlayersPassed(socket) {
+    return new Promise((resolve) => {
+        const listener = (players) => {
+            //const players = data.players; // Access the players array
+
+            // Loop through received players and update passed property of GameModule.players
+            for (let serverPlayer of players) {
+                for (let localPlayer of GameModule.players) {
+                    if (localPlayer.clientId === serverPlayer.clientId) {
+                        console.log("reset passed status");
+                        localPlayer.passed = serverPlayer.passed;
+                        break;
+                    }
+                }
+            }
+
+            // Remove the listener after updating the status
+            socket.off('resetPassedComplete', listener);
+            // Resolve the promise after updating the status
+            resolve();
+        };
+
+        socket.on('resetPassedComplete', listener);
+    });
+}
+
+// Update GameModule.playedHand and lastPlayedHand to server values
+function setValidHand(socket) {
+    return new Promise((resolve) => {
+        const listener = (serverPlayedHand, serverLastValidHand) => {
+            GameModule.playedHand = serverPlayedHand;
+            GameModule.lastValidHand = serverLastValidHand;
+
+            // Remove the listener after updating the status
+            socket.off('setLastValidHandComplete', listener);
+            // Resolve the promise after updating the status
+            resolve();
+        };
+
+        socket.on('setLastValidHandComplete', listener);
+    });
+}
+
+function finishedGameCheckComplete(socket) {
+    return new Promise((resolve) => {
+        // If server has 4 clientId's in playersFinished array, update local playersFinished array & resolve gameFinished
+        const gameFinishedListener = (serverPlayersFinished, serverLosingPlayer) => {
+            GameModule.playersFinished = serverPlayersFinished;
+            GameModule.losingPlayer = serverLosingPlayer;
+
+            // Remove the listener after updating the status
+            socket.off('gameHasFinished', gameFinishedListener);
+
+            // Resolve the promise after updating the status
+            resolve("gameFinished");
+        };
+
+        // If server's playersFinished array has more than 1 clientId
+        const gameNotFinishedListener = (serverPlayer, serverPlayersFinished) => {
+            const clientPlayer = GameModule.players.find(p => p.clientId === serverPlayer.clientId);
+
+            // Update finished client's finishedGame property and local playersFinished array to reflect server
+            clientPlayer.finishedGame = serverPlayer.finishedGame;
+            GameModule.playersFinished = serverPlayersFinished;
+
+            // Remove the listener after updating the status
+            socket.off('gameHasNotFinished', gameNotFinishedListener);
+
+            // Resolve the promise after updating the status
+            resolve("gameNotFinished");
+        }
+
+        // If server's playersFinished array has more than 1 clientId
+        const noClientHasFinishedListener = (serverPlayersFinished) => {
+            // Update local playersFinished array to reflect server
+            GameModule.playersFinished = serverPlayersFinished;
+
+            // Remove the listener after updating the status
+            socket.off('noClientHasFinished', gameNotFinishedListener);
+
+            // Resolve the promise after updating the status
+            resolve("gameNotFinished");
+        }
+
+        socket.on('gameHasFinished', gameFinishedListener);
+        socket.on('gameHasNotFinished', gameNotFinishedListener);
+        socket.on('noClientHasFinished', noClientHasFinishedListener);
+    });
+}
+
+async function finishGameAnimation(gameDeck, players, losingPlayer){
     return new Promise(async function (resolve, reject) {
         let finishedDeckDiv = document.getElementById("finishedDeck");
+
+        // Find player who came last
+        const lastPlacePlayer = GameModule.players.find(p => p.clientId === losingPlayer);
 
         for (let i = 0; i < gameDeck.length; i++) {
             //loop through all game deck cards
@@ -527,8 +636,8 @@ async function finishGameAnimation(gameDeck, finishedDeck, players, losingPlayer
         }
 
         //loop through losing player's cards
-        for (let i = 0; i < players[losingPlayer].numberOfCards; i++){
-            let losingCard = players[losingPlayer].cards[i];
+        for (let i = 0; i < lastPlacePlayer.numberOfCards; i++){
+            let losingCard = lastPlacePlayer.cards[i];
             losingCard.setSide('back');
             
             //wait until each card is finished animating
@@ -553,19 +662,24 @@ async function finishGameAnimation(gameDeck, finishedDeck, players, losingPlayer
             });
         }
 
+        
+        // Let server know that client has finished deck animation and send player who won the round, finishedDeck, and GameDeck
+        // Server will only accept the player and arrays from the host, but clients will still increment finishedDeck count
+        socket.emit('finishGameAnimation', roomCode, players, gameDeck, GameModule.finishedDeck);
+        
         // All card animations are complete, mount finishedDeck to finish deck div and return resolve
-        resolve('finishGameComplete');
+        resolve();
     });
 }
 
 //after round ends, adds all played cards into finished deck and animates them as well
-async function finishDeckAnimation(gameDeck) {
+async function finishDeckAnimation(socket, roomCode) {
     return new Promise(async function (resolve, reject) {
         let finishedDeckDiv = document.getElementById("finishedDeck");
 
-        for (let i = 0; i < gameDeck.length; i++) {
+        for (let i = 0; i < GameModule.gameDeck.length; i++) {
             //loop through all game deck cards
-            let card = gameDeck[i];
+            let card = GameModule.gameDeck[i];
             card.setSide('back');
             
             //wait until each card is finished animating
@@ -590,8 +704,90 @@ async function finishDeckAnimation(gameDeck) {
             });
         }
 
+        // Let server know that client has finished deck animation and send player who won the round, finishedDeck, and GameDeck
+        // Server will only accept the player and arrays from the host, but clients will still increment finishedDeck count
+        socket.emit('finishDeckAnimation', roomCode, GameModule.players[GameModule.turn], GameModule.finishedDeck);
+
         // All card animations are complete, mount finishedDeck to finish deck div and return resolve
         resolve('finishDeckComplete');
+    });
+}
+
+function incrementedTurn(socket) {
+    return new Promise((resolve) => {
+        const listener = (serverCurrentTurnClientId) => {
+            // Find index of player who's turn it is using the clientId from the server
+            const clientPlayerIndex = GameModule.players.findIndex(p => p.clientId === serverCurrentTurnClientId);
+
+            if (clientPlayerIndex !== -1) {
+                // Update local gameState turn to match server's turn
+                GameModule.turn = clientPlayerIndex;
+
+                //go back to player 1's turn after player 4's turn
+                if (GameModule.turn > 3) GameModule.turn = 0;
+
+                // Remove the listener after updating the status
+                socket.off('turnIncremented', listener);
+
+                // Resolve the promise after updating the status
+                resolve();
+            } else {
+                console.log('Client player not found');
+            }
+        };
+
+        socket.on('turnIncremented', listener);
+    });
+}
+
+function passedTurn(socket) {
+    return new Promise((resolve) => {
+        const listener = (serverPlayer, serverCurrentTurnClientId) => {
+            console.log("server player")
+            console.log(serverPlayer);
+            // Find index of player who's turn it is server side, using the clientId from the server
+            const clientPlayerIndex = GameModule.players.findIndex(p => p.clientId === serverCurrentTurnClientId);
+            
+            if (clientPlayerIndex !== -1) {
+                // update local equivalent to match server 
+                GameModule.players[clientPlayerIndex].passed = serverPlayer.passed;
+
+                // Update local gameState turn to match server's turn
+                GameModule.turn = clientPlayerIndex;
+
+                //go back to player 1's turn after player 4's turn
+                if (GameModule.turn > 3) GameModule.turn = 0;
+                console.log("Player passed");
+
+                // Remove the listener after updating the status
+                socket.off('passedTurn', listener);
+
+                // Resolve the promise after updating the status
+                resolve();
+            } else {
+                console.log('Client player not found');
+            }
+        };
+
+        socket.on('passedTurn', listener);
+    });
+}
+
+async function finishedGame(socket) {
+    return new Promise((resolve) => {
+        const listener = (serverGameDeck, serverFinishedDeck) => {
+            // Update local gameDeck to server gameDeck (this might cause an error)
+
+            GameModule.finishedDeck = serverFinishedDeck;
+
+            // Remove the listener after updating the status
+            socket.off('finishGameAnimationComplete', listener);
+                        
+            //return results of game in GameModule.playersFinished array e.g [0, 2, 1, 3] (player 1, player 3, player 2, player 4)
+            resolve();
+        };
+
+        socket.on('finishGameAnimationComplete', listener);
     });
 }
 
@@ -614,20 +810,29 @@ function printLastPlayedHand(gameDeck, lastValidHand){
     return lastPlayedHand;
 }
 
-function findMissingPlayer(playersFinished) {
-    // Create an array to hold all players from 0 to 3
-    let allPlayers = [0, 1, 2, 3];
+function gotLastHand(socket) {
+    return new Promise((resolve) => {
+        const listener = (serverLastHand) => {
+            if(serverLastHand.length > 0){
+                GameModule.lastHand = serverLastHand;
 
-    // Loop through the GameModule.playersFinished array to remove players who have finished
-    for (let i = 0; i < playersFinished.length; i++) {
-        let index = allPlayers.indexOf(playersFinished[i]);
-        if (index !== -1) {
-            allPlayers.splice(index, 1); // Remove the player who has finished
-        }
-    }
+                // Remove the listener after updating the status
+                socket.off('gotLastHand', listener);
 
-    // Return the missing player
-    return allPlayers[0];
+                // Resolve the promise after updating the status
+                resolve();
+            }
+            else {
+                // Remove the listener after updating the status
+                socket.off('gotLastHand', listener);
+
+                // Resolve the promise after updating the status
+                resolve();
+            }
+        };
+
+        socket.on('gotLastHand', listener);
+    });
 }
 
 //Actual game loop, 1 loop represents a turn
@@ -643,42 +848,33 @@ const gameLoop = async (roomCode, socket) => {
 
     if(sortResolve === 'sortComplete'){
         socket.emit('getFirstTurn', roomCode);
-        //let turn = await determineTurn(GameModule.players); //return player number of player who has 3d (do i need to emit this to server?)
+
         GameModule.turn = await getFirstTurn(socket);
         console.log("TURN IS: " + GameModule.turn);
 
         //let rotation = initialAnimateArrow(turn); //return initial Rotation so I can use it to animate arrow
         let gameInfoDiv = document.getElementById("gameInfo");
-        let lastHand = []; //stores last hand played
-        let playedHistory = [] //stores played card history
-
-        //const gameState = new GameState(GameModule.players, GameModule.gameDeck, lastHand, turn, lastValidHand, GameModule.finishedDeck, GameModule.playersFinished, playedHistory, playedHand);
 
         //GAME LOOP, each loop represents a single turn
         for(let i = 0; i < 100; i++){
-            //used for displaying last played hand with actual suit icons (need to change this to display lastPlayedHand from the server)
-            lastHand = printLastPlayedHand(GameModule.gameDeck, GameModule.lastValidHand);
-
-            //emit updateGamestate after a player plays their hand
-
-            /*
-            // Update gameState properties with new values
-            gameState.lastHand = lastHand;
-            gameState.lastValidHand = lastValidHand;
-            gameState.turn = turn;
-            gameState.playedHistory = playedHistory;
-            gameState.playedHand = playedHand;
-
             //log gameState values
-            console.log("GameState Players:", gameState.players);
-            console.log("GameState Game Deck:", gameState.gameDeck);
-            console.log("GameState Last Hand:", gameState.lastHand);
-            console.log("GameState Turn:", gameState.turn);
-            console.log("GameState Finished Deck:", gameState.finishedDeck);
-            console.log("GameState Players Finished:", gameState.GameModule.playersFinished);
-            console.log("GameState playedHand:", gameState.playedHand);*/
+            console.log("GameState LastValidHand:", GameModule.lastValidHand);
+            console.log("GameState Players:", GameModule.players);
+            console.log("GameState Game Deck:", GameModule.gameDeck);
+            console.log("GameState Last Hand:", GameModule.lastHand);
+            console.log("GameState Turn:", GameModule.turn);
+            console.log("GameState Finished Deck:", GameModule.finishedDeck);
+            console.log("GameState Players Finished:", GameModule.playersFinished);
+            console.log("GameState playedHand:", GameModule.playedHand);
 
-            gameInfoDiv.innerHTML = "Last Played: " + lastHand;
+            // Emit the last played hand array (it will be the rank + appropriate suit icon)
+            const lastHand = printLastPlayedHand(GameModule.gameDeck, GameModule.lastValidHand)
+            
+            socket.emit('getLastHand', roomCode, lastHand);
+            
+            await gotLastHand(socket);
+
+            gameInfoDiv.innerHTML = "Last Hand: " + GameModule.lastHand;
 
             //Change turn here
             displayTurn(GameModule.turn);
@@ -694,19 +890,16 @@ const gameLoop = async (roomCode, socket) => {
 
             // Reset passed property to false if three players have passed and resolve wonRound
             let checkWonRound = await checkThreePasses(socket);
-
+            
             // All players have passed, perform necessary actions
             // If player has won a round, play finishDeck animation,
             // and set gameDeck length to 0 which gives player a free turn
             if (checkWonRound == "wonRound") {
-                //wait for finish deck animations
-                await finishDeckAnimation(GameModule.gameDeck, finishedDeck);
+                console.log("reached here");
+                //wait for finish deck animations, and send local gameDeck and finishedDeck to sever so it can emit it to all clients
+                await finishDeckAnimation(socket, roomCode);
 
-                // Let server know that client has finished deck animation and send player who won the round, finishedDeck, and GameDeck
-                // Server will only accept the player and arrays from the host, but clients will still increment finishedDeck count
-                socket.emit('finishDeckAnimation', roomCode, GameModule.players[GameModule.turn], GameModule.finishedDeck);
-
-                // Update player who won the round's wonRound to true and update local gameDeck to match server (server emptied it) 
+                // Update player who won the round's wonRound to true and update local gameDeck, and finishedDeck to match server 
                 await finishWonRound(socket);
 
                 console.log("Player " + GameModule.turn + " has won the round, has a free turn");
@@ -720,84 +913,70 @@ const gameLoop = async (roomCode, socket) => {
             // Return playedHand length from server (if its not clients turn then they will listen for other clients hand emit and then mirror move with opponent)
             GameModule.playedHand = await receivePlayerHand(socket, GameModule.turn);
 
-            /*//if opponent's turn
-            if(GameModule.players[GameModule.turn].isOpponent){
-                //playedHand = resolved hand.length, function also validates hand
-                //socket.on(opponentPlayedHand)
-                // opponent playCard function should take in hand array and play and remove those cards from their decks
-                playedHand = await GameModule.players[GameModule.turn].playCard(GameModule.gameDeck, GameModule.turn, GameModule.lastValidHand, GameModule.players);
-            }
-            //else if user's turn
-            else{
-                // make playedHand from server
-                //playedHand = await GameModule.players[turn].playCard(GameModule.gameDeck, lastValidHand, GameModule.playersFinished, socket);
-                //socket.on('playedHand')
-                await GameModule.players[GameModule.turn].playCard(GameModule.gameDeck, GameModule.lastValidHand, GameModule.playersFinished, roomCode, socket);
-            }*/
+            console.log("STUCK HERE: " + GameModule.playedHand)
 
             //if player played a valid hand
             if(GameModule.playedHand >= 1 && GameModule.playedHand <= 5){
-                playedHistory.push(lastHand); //push last valid hand into playedHistory array
+                //GameModule.playedHistory.push(GameModule.lastHand); //push last valid hand into playedHistory array
 
                 console.log("played hand debug: " + GameModule.playedHand);
 
+                // Each client sets their passed property to false and emits to server gamestate
+                socket.emit('resetPlayersPassed', roomCode, GameModule.players[0].clientId);
+
                 //once a player plays a valid hand, pass tracker should be reset to 0, so all players pass property should reset to false
-                GameModule.players.forEach(player => {
-                    player.passed = false;
-                });
+                // Update passed status to server gameState values
+                await resetPlayersPassed(socket);
 
                 // do a new function here input current turn, instead so theres only one animation per turn instead of all cards being sorted after each turn
                 //if player or ai play a valid hand, sort their cards
-                let resolve = await sortPlayerHandAfterTurn(GameModule.players,GameModule.turn);
+                // WORKS UP TO HERE
+                await sortPlayerHandAfterTurn(socket, roomCode);
+
+                //GameModule.lastValidHand = GameModule.playedHand; //store last played hand length, even after a player passes (so I dont pass 0 into the card validate function in player class)
+                // emit this change to server and then receive it from server
+                socket.emit('setLastValidHand', roomCode, GameModule.playedHand);
+
+                // Update GameModule.playedHand and lastPlayedHand to server values
+                await setValidHand(socket);
                 
-                if(resolve == 'sortAfterTurnComplete'){
-                    GameModule.lastValidHand = GameModule.playedHand; //store last played hand length, even after a player passes (so I dont pass 0 into the card validate function in player class)
-    
-                    //check if current player has 0 cards
-                    if (GameModule.players[GameModule.turn].numberOfCards == 0){
-                        //add player number to GameModule.playersFinished array
-                        GameModule.players[GameModule.turn].wonGame = true;
-                        GameModule.playersFinished.push(GameModule.turn);
+                // Emit current turn's player to server and check if they have 0 cards left so server can check if game is over
+                socket.emit('checkIfPlayerHasFinished', roomCode, GameModule.players[GameModule.turn], GameModule.playersFinished)
+                
+                // Return appropriate resolve based on gameFinished checks from the server
+                let checkFinishedGame = await finishedGameCheckComplete(socket);
+
+                // If server returns a full playersFinished array
+                if(checkFinishedGame == "gameFinished") {
+                    // send an emit to server once client finish game animation has finished
+                    await finishGameAnimation(GameModule.gameDeck, GameModule.players, GameModule.losingPlayer, roomCode);
+                        
+                    // await response from server once all 4 clients have finished their animations and resolve the results back to startGame function
+                    await finishedGame(socket);
+
+                    // emit here to let server know that game is over and to get the results
+                    return new Promise(resolve => {
+                        //unmount finishedDeck
+                        GameModule.finishedDeck.unmount();
+                        
+                        //return results of game in GameModule.playersFinished array e.g [0, 2, 1, 3] (player 1, player 3, player 2, player 4)
+                        resolve(GameModule.playersFinished);
+                    });
+                }
+                // Else if game has not finished yet
+                else {
+                    // clients will emit the clientId of current player's turn (server will only accept hosts clientId emit)
+                    socket.emit('incrementTurn', roomCode, GameModule.players[GameModule.turn].clientId); //server counts 4 emits, then socket.on clientside to increment turn
                     
-                        //if 3 players have no cards left, means game is over
-                        if(GameModule.playersFinished.length == 3){
-                            //find the player that came last (0-3)
-                            let losingPlayer = findMissingPlayer(GameModule.playersFinished);
-                            //push losing player to GameModule.playersFinished array (used for leaderboard)
-                            GameModule.playersFinished.push(losingPlayer);
-
-                            let finishGameResolve = await finishGameAnimation(GameModule.gameDeck, finishedDeck, GameModule.players, losingPlayer);
-                            
-                            if(finishGameResolve == "finishGameComplete")
-                            {
-                                //reset arrow image back to original rotation
-                                //const arrowImg = document.querySelector('#arrow img');
-                                //arrowImg.style.transform = 'rotate(0deg)';
-
-                                return new Promise(resolve => {
-                                    //unmount finishedDeck
-                                    GameModule.finishedDeck.unmount();
-                                    
-                                    //return results of game in GameModule.playersFinished array e.g [0, 2, 1, 3] (player 1, player 3, player 2, player 4)
-                                    resolve(GameModule.playersFinished);
-                                });
-                            }   
-                        }
-                    }
-                    //go to next player's turn
-                    GameModule.turn += 1;
-
-                    //go back to player 1's turn after player 4's turn
-                    if (GameModule.turn > 3) GameModule.turn = 0; 
+                    await incrementedTurn(socket);
                 }
             }
             else if(GameModule.playedHand == 0){ //else if player passed
-                GameModule.players[GameModule.turn].passed = true; //if player passes, set passed property to true
-                GameModule.turn += 1;
-                console.log("Player passed");
-                if (GameModule.turn > 3) GameModule.turn = 0;
+                // clients will emit the clientId of current player's turn (server will only accept hosts clientId emit)
+                socket.emit('passTurn', roomCode, GameModule.players[GameModule.turn].clientId); //server counts 4 emits, then socket.on clientside to increment turn
+                    
+                await passedTurn(socket);
             }
-            
         }
     }
 }
@@ -1192,15 +1371,29 @@ async function startGame(socket, roomCode, username){
 
 
     // Remove any existing event listeners for these events to avoid multiple listeners
+    socket.off('clientSocketId');
     socket.off('shuffledDeck');
     socket.off('initialGameState');
     socket.off('allDealsComplete');
 
+    // Assign local player with unique socket id
+    const socketIdPromise = new Promise(resolve => {
+        socket.on('clientSocketId', (clientId) => {
+            console.log('Received client ID from server:', clientId);
+            GameModule.players[0].socketId = clientId;
+            resolve();
+        })
+    });
+
+    await socketIdPromise;
+
     // Set up a promise to wait for the initial game state event
     const initialGamestatePromise = new Promise(resolve => {
         socket.on('initialGameState', ({ gameState }) => {
-            // Find the index of the local player in gameState.players
-            const localPlayerIndex = gameState.players.findIndex(player => player.name === username);
+
+            // Using unique socket id, assign the appropriate index
+            const localPlayerIndex = gameState.players.findIndex(player => player.socketId === GameModule.players[0].socketId);
+            console.log("LOCAL PLAYER INDEX:" + localPlayerIndex)
 
             if (localPlayerIndex !== -1) {
                 // Iterate over gameState.players and assign each player to GameModule.players based on local player's position in gameState array
@@ -1216,7 +1409,7 @@ async function startGame(socket, roomCode, username){
             // Loop through the playerInfo elements and set their display property to block and appropriate player name to elements
             for (var i = 0; i < playerInfo.length; i++) {
                 playerInfo[i].style.display = 'block';
-                playerInfo[i].innerHTML = GameModule.players[i].name; //maybe add points here as well?
+                playerInfo[i].innerHTML = GameModule.players[i].name + " " + GameModule.players[i].clientId; //maybe add points here as well?
             }
 
             resolve();
@@ -1231,6 +1424,7 @@ async function startGame(socket, roomCode, username){
         });
     });
 
+    
     await initialGamestatePromise;
     console.log(GameModule.players);
     await shuffledDeckPromise;

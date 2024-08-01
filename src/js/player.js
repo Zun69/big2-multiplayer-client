@@ -1,11 +1,12 @@
 export default class Player{ 
-    constructor(name, cards = []){ // Player object, which will contain name, cards, wonRound & wonGame & pass status, point tally 
+    constructor(name, cards = []){ // Player object, which will contain name, cards, wonRound & finishedGame & pass status, point tally 
         this.name = name;
         this.cards = cards;
         this.wonRound = false;
-        this.wonGame = false;
+        this.finishedGame = false;
         this.passed = false;
         this.clientId = null; // Set to null initially, will set later in the lobbyMenu
+        this.socketId = null; //unique socketId from server
         this.playerDiv = null;
         this.points = 0;
         this.wins = 0;
@@ -197,7 +198,7 @@ export default class Player{
         
                     onComplete: () => {
                         card.$el.style.zIndex = this.sortingAnimationZ(i, playerNum);
-                        console.log("rotate after turn") //why does it remove the rotate property after two turns wtf?
+                        console.log("rotate after turn") 
                         resolve(); // Resolve the promise when this animation is completed
                       },
                 });
