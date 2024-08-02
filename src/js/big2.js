@@ -372,17 +372,15 @@ function displayTurn(turn) {
 // Reset wonRound status of players using info from players array sent from server
 function resetWonRoundStatus(socket) {
     return new Promise((resolve) => {
-        const listener = (players) => {
+        const listener = (serverPlayer) => {
+            const clientPlayer = GameModule.players.find(p => p.clientId === serverPlayer.clientId);
 
-            // Loop through received players and update wonRound status of GameModule.players
-            for (let serverPlayer of players) {
-                for (let localPlayer of GameModule.players) {
-                    if (localPlayer.clientId === serverPlayer.clientId) {
-                        console.log("reset wonRound status");
-                        localPlayer.wonRound = serverPlayer.wonRound;
-                        break;
-                    }
-                }
+            if(clientPlayer) {
+                clientPlayer.wonRound = serverPlayer.wonRound;
+                console.log("reset wonRound status for local player");
+            }
+            else {
+                console.log("wonRoundReset player not found");
             }
 
             // Remove the listener after updating the status
@@ -399,6 +397,7 @@ function resetWonRoundStatus(socket) {
 function checkThreePasses(socket) {
     return new Promise((resolve) => {
         const wonRoundListener = (players) => {
+            console.log("reached here")
             // Loop through received players and update passed status of GameModule.players
             for (let serverPlayer of players) {
                 for (let localPlayer of GameModule.players) {
@@ -880,16 +879,18 @@ const gameLoop = async (roomCode, socket) => {
             displayTurn(GameModule.turn);
             
             // Send message to server to change client's wonRound status to false
-            socket.emit('resetPlayerWonRoundStatus', roomCode, GameModule.players[0].clientId) 
+            socket.emit('resetPlayerWonRoundStatus', roomCode) 
 
             // Update local GameModule players with info from server
             await resetWonRoundStatus(socket);
 
             // Check with the server if three players have passed
             socket.emit('checkWonRound', roomCode)
-
+            console.log("checkWonRound emitted");
             // Reset passed property to false if three players have passed and resolve wonRound
             let checkWonRound = await checkThreePasses(socket);
+
+            console.log(checkWonRound);
             
             // All players have passed, perform necessary actions
             // If player has won a round, play finishDeck animation,
@@ -976,6 +977,8 @@ const gameLoop = async (roomCode, socket) => {
                 socket.emit('passTurn', roomCode, GameModule.players[GameModule.turn].clientId); //server counts 4 emits, then socket.on clientside to increment turn
                     
                 await passedTurn(socket);
+
+                console.log(GameModule.players[GameModule.turn].clientId + " clientId passed");
             }
         }
     }
