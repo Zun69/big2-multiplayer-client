@@ -365,6 +365,11 @@ export default class Player{
         var lastPlayedHand = []; //card array holds the hand that we will use to validate
         var lastPlayedHandIndex = gameDeck.length - lastValidHand;
 
+        console.log("gameDeck length: " + gameDeck.length);
+        console.log("lastVlaidHand: " + lastValidHand);
+
+        console.log("last played hand index card logic" + lastPlayedHandIndex)
+
         //loop from last hand played until end of gamedeck
         for(let i = lastPlayedHandIndex; i < gameDeck.length; i++){
             //if i less than 0 (happens after user wins a round, because gamedeck length is 0 and lastValidHand stores length of winning hand)
