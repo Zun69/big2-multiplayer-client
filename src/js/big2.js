@@ -544,6 +544,7 @@ function setValidHand(socket) {
 }
 
 function finishedGameCheckComplete(socket) {
+    console.log("reached finishedGame")
     return new Promise((resolve) => {
         // If server has 4 clientId's in playersFinished array, update local playersFinished array & resolve gameFinished
         const gameFinishedListener = (serverPlayersFinished, serverLosingPlayer) => {
@@ -558,11 +559,7 @@ function finishedGameCheckComplete(socket) {
         };
 
         // If server's playersFinished array has more than 1 clientId
-        const gameNotFinishedListener = (serverPlayer, serverPlayersFinished) => {
-            const clientPlayer = GameModule.players.find(p => p.clientId === serverPlayer.clientId);
-
-            // Update finished client's finishedGame property and local playersFinished array to reflect server
-            clientPlayer.finishedGame = serverPlayer.finishedGame;
+        const gameNotFinishedListener = (serverPlayersFinished) => {
             GameModule.playersFinished = serverPlayersFinished;
 
             // Remove the listener after updating the status
@@ -590,7 +587,7 @@ function finishedGameCheckComplete(socket) {
     });
 }
 
-async function finishGameAnimation(gameDeck, players, losingPlayer){
+async function finishGameAnimation(roomCode, socket, gameDeck, players, losingPlayer){
     return new Promise(async function (resolve, reject) {
         let finishedDeckDiv = document.getElementById("finishedDeck");
 
@@ -762,17 +759,13 @@ function passedTurn(socket) {
     });
 }
 
+// Listen for finishGameAnimationComplete event when all 4 clients finishedDeck animation has finished
 async function finishedGame(socket) {
     return new Promise((resolve) => {
-        const listener = (serverGameDeck, serverFinishedDeck) => {
-            // Update local gameDeck to server gameDeck (this might cause an error)
-
-            GameModule.finishedDeck = serverFinishedDeck;
-
+        const listener = () => {
             // Remove the listener after updating the status
             socket.off('finishGameAnimationComplete', listener);
                         
-            //return results of game in GameModule.playersFinished array e.g [0, 2, 1, 3] (player 1, player 3, player 2, player 4)
             resolve();
         };
 
@@ -905,7 +898,7 @@ const gameLoop = async (roomCode, socket) => {
             // Return playedHand length from server (if its not clients turn then they will listen for other clients hand emit and then mirror move with opponent)
             GameModule.playedHand = await receivePlayerHand(socket, GameModule.turn);
 
-            console.log("STUCK HERE: " + GameModule.playedHand)
+            console.log("Played Hand Length: " + GameModule.playedHand)
 
             //if player played a valid hand
             if(GameModule.playedHand >= 1 && GameModule.playedHand <= 5){
@@ -932,6 +925,13 @@ const gameLoop = async (roomCode, socket) => {
                 // Update GameModule.playedHand and lastPlayedHand to server values
                 await setValidHand(socket);
                 
+                // if current turn's player has no cards left, add their clientId to playersFinished array
+                if (GameModule.players[GameModule.turn].numberOfCards === 0) {
+                    GameModule.players[GameModule.turn].finishedGame = true;
+                    GameModule.playersFinished.push(GameModule.players[GameModule.turn].clientId);
+                }
+
+                console.log("PLAYERS FINISHED LENGTH: " + GameModule.playersFinished.length)
                 // Emit current turn's player to server and check if they have 0 cards left so server can check if game is over
                 socket.emit('checkIfPlayerHasFinished', roomCode, GameModule.players[GameModule.turn], GameModule.playersFinished)
                 
@@ -941,7 +941,7 @@ const gameLoop = async (roomCode, socket) => {
                 // If server returns a full playersFinished array
                 if(checkFinishedGame == "gameFinished") {
                     // send an emit to server once client finish game animation has finished
-                    await finishGameAnimation(GameModule.gameDeck, GameModule.players, GameModule.losingPlayer, roomCode);
+                    await finishGameAnimation(roomCode, socket, GameModule.gameDeck, GameModule.players, GameModule.losingPlayer);
                         
                     // await response from server once all 4 clients have finished their animations and resolve the results back to startGame function
                     await finishedGame(socket);
@@ -1561,6 +1561,8 @@ window.onload = async function() {
 
     // once code reaches here, it means 4 clients have readied up
     let results = await startGame(lobbyMenuResolve, roomCode, username);
+
+    console.log(results);
 
     /*while(true){
         //if user quits game

@@ -7,7 +7,6 @@ export default class Player{
         this.passed = false;
         this.clientId = null; // Set to null initially, will set later in the lobbyMenu
         this.socketId = null; //unique socketId from server
-        this.playerDiv = null;
         this.points = 0;
         this.wins = 0;
         this.seconds = 0;
@@ -715,12 +714,18 @@ export default class Player{
             let cardsToRemove = []; //holds indexes of cards to be removed
             let i = 0; //for staggered placing down animations (remove if i dont like it)
 
-            //if player has no cards left, automatically pass
-            if(this.numberOfCards == 0){
+            //if player has finished game, automatically pass
+            if(this.finishedGame == true) {
+                //remove all selected cards, play pass audio and resolve 0
+                console.log("finished game true, passing");
+
                 //remove all selected cards, play pass audio and resolve 0
                 hand.length = 0
-                passAudio.play();
-                resolve(0); 
+
+                // emit that player passed (hand.length = 0)
+                socket.emit('playedHand', roomCode, hand, self, gameDeck, playersFinished);
+
+                resolve(0);
             }
 
             var playClickListener = function() {
