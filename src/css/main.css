@@ -254,12 +254,31 @@
         cursor: pointer;
     }
 
-    #loginButton:hover, #joinRoomButton:hover, .room-button:hover, #readyButton:hover, #startGameButton:hover, #nextGameButton:hover, #play:hover, #pass:hover {
-        background-color: #249924;
+    #backToJoinRoomButton {
+        position: absolute;
+        top: 0px; /* adjust as needed */
+        left: 10px; /* adjust as needed */
+        padding: 5px 9px; /* size for a small but acceptable button */
+        transition-duration: 0.4s;
+        font-size: 15px;
+        font-family: Helvetica, Arial, sans-serif;
+        font-weight: 200;
+        border: 1px solid #ccc; /* Subtle gray border */
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    #loginButton:hover, #joinRoomButton:hover, .room-button:hover, #readyButton:hover, #startGameButton:hover, #nextGameButton:hover, #play:hover {
+        background-color: #28a745;
         color: white;
     }
 
-    #quitGameButton:hover {
+    #pass:hover {
+        background-color: #f0ad4e;
+        color: white;
+    }
+
+    #quitGameButton:hover, #backToJoinRoomButton:hover {
         background-color: #f04034;
         color: white;
     }

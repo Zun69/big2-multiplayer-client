@@ -1169,6 +1169,8 @@ async function lobbyMenu(socket, roomCode){
     const sendMessageButton = document.getElementById("sendMessageButton");
     const readyButton = document.getElementById("readyButton");
     const startGameButton = document.getElementById("startGameButton");
+    const backToJoinRoomButton = document.getElementById("backToJoinRoomButton");
+
     startGameButton.disabled = true; //disable startGameButton until 4 players are ready and current client is the host of the room
     let isReady = false; // Track the local client's ready state
 
@@ -1327,6 +1329,9 @@ async function lobbyMenu(socket, roomCode){
 
         // if client(host) clicks on startGameButton
         function handleStartClick() {
+            //emit startGame, put client usernames into server gameState object, and then receive gameState object
+            socket.emit('startGame', roomCode);
+
             //remove all event listeners and sockets
             startGameButton.removeEventListener("click", handleStartClick);
             readyButton.removeEventListener("click", toggleReadyState);
@@ -1343,10 +1348,36 @@ async function lobbyMenu(socket, roomCode){
             lobbyMenu.style.display = "none";
             clearInterval(refreshInterval);
 
-            //emit startGame, put client usernames into server gameState object, and then receive gameState object
-            socket.emit('startGame', roomCode);
-
             resolve(socket);
+        }
+
+        // Handles clean up and resolves the promise when backToJoinRoomButton is clicked
+        backToJoinRoomButton.addEventListener('click', () => {
+            handleBackClick();
+        });
+
+        // Function to handle clean up of event listeners and sockets
+        function handleBackClick() {
+            // Emit leave room event, will return updated clientList event
+            socket.emit('leaveRoom', roomCode);
+
+            startGameButton.removeEventListener("click", handleStartClick);
+            readyButton.removeEventListener("click", toggleReadyState);
+            sendMessageButton.removeEventListener('click', sendMessage);
+            messageInput.removeEventListener('keydown', handleEnterKey);
+            backToJoinRoomButton.removeEventListener('click', handleBackClick);
+
+            socket.off('clientList', updateClientList);
+            socket.off('updateReadyState');
+            socket.off('receiveMessage');
+            socket.off('hostStatus');
+            socket.off('gameStarted');
+
+            // Hide the lobby menu and clear the interval
+            lobbyMenu.style.display = "none";
+            clearInterval(refreshInterval);
+
+            resolve('goBackToJoinRoomMenu');
         }
     });
 }
@@ -1548,34 +1579,50 @@ function updateLeaderboard() {
 }
 
 window.onload = async function() {
-    let endMenuResolve;
-
     // require username and password to establish connection to socket.io server and resolve the connected socket object
     const { socket: loginMenuSocket, username }  = await loginMenu()
 
-    // once client has established connection to the server, require room code to join a game lobby and then resolve the socket thats connected to a room
-    const { socket: joinedRoomSocket, roomCode } = await joinRoomMenu(loginMenuSocket);
+    while (true) {
+        let endMenuResolve;
+        let joinedRoomSocket, roomCode;
 
-    // a lobby room where clients wait and can chat with each other until 4 clients join, where they can then start the game, might allow bots as filler
-    let lobbyMenuResolve = await lobbyMenu(joinedRoomSocket, roomCode);
+        while (true) {
+            // Once client has established connection to the server, require room code to join a game lobby and then resolve the socket that's connected to a room
+            const joinRoomResult = await joinRoomMenu(loginMenuSocket);
+            joinedRoomSocket = joinRoomResult.socket;
+            roomCode = joinRoomResult.roomCode;
 
-    // once code reaches here, it means 4 clients have readied up
-    let results = await startGame(lobbyMenuResolve, roomCode, username);
+            // A lobby room where clients wait and can chat with each other until 4 clients join, where they can then start the game, might allow bots as filler
+            let lobbyMenuResolve = await lobbyMenu(joinedRoomSocket, roomCode);
 
-    console.log(results);
+            if (lobbyMenuResolve !== "goBackToJoinRoomMenu") {
+                break; // Exit the inner loop if not going back to join room menu
+            }
+        }
 
-    /*while(true){
+        // Once code reaches here, it means 4 clients have readied up
+        let results = await startGame(joinedRoomSocket, roomCode, username);
+
+        console.log(results);
+    }
+    
+    /* Return user choice from main menu
+    let startMenuResolve = await startMenu();
+    let endMenuResolve;
+
+    while(true){
+
         //if user quits game
         if(endMenuResolve=="quitGame"){
             //reset everything including player points
             console.log('Game quit');
             GameModule.resetAll();
             //return to main menu
-            joinRoomMenuResolve = await joinRoomMenu();
+            startMenuResolve = await startMenu();
         }
 
         // start the game and return results of game
-        let results = await startGame(lobbyMenuResolve);
+        let results = await startGame(startMenuResolve);
 
         if(results.length == 4){
             console.log('Game complete!');
@@ -1591,7 +1638,6 @@ window.onload = async function() {
                 GameModule.reset();
                 console.log("Game Reset")
             }
-        }
-    }*/
+        }*/
 };
 
