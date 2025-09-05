@@ -76,139 +76,60 @@ export default class Player{
         console.log("currrent hand: " + hand);
     }
 
-    sortingAnimationY(index, playerNum){
-        switch(playerNum){
-            //player 1 Y coordinates (began sorting cards at this Y coordinate)
-            case 0:
-                return 230;
-            case 1:
-                return -240 + index * 40;
-            case 2:
-                return -250;
-            case 3:
-                return 242 - index * 40;
-        }
-    }
+    // ---------------------------
+    // Per-seat layout (keeps your numbers)
+    // ---------------------------
+    SEAT = [
+        // seat 0
+        { baseX: -212, stepX:  40, baseY:  230, stepY:   0, rot: 0, sideways: false, zBase: 0 },
+        // seat 1
+        { baseX: -425, stepX:   0, baseY: -240, stepY:  40, rot: 270, sideways: true,  zBase: 1 },
+        // seat 2
+        { baseX:  261, stepX: -40, baseY: -250, stepY:   0, rot: 0, sideways: false, zBase: 2 },
+        // seat 3
+        { baseX:  440, stepX:   0, baseY:  242, stepY: -40, rot: 270, sideways: true,  zBase: 3 },
+    ];
 
-    sortingAnimationX(index, playerNum) {
-        // Calculate the new X position based on the index
-        switch(playerNum){
-            //player 1 X coordinates (began sorting cards at this X coordinate)
-            case 0:
-                return -212 + index * 40;
-            case 1:
-                return -425;
-            case 2:
-                return 261 - index * 40;
-            case 3:
-                return 440;
-        }
+    sortingAnimationX(i, playerNum) {
+        const cfg = this.SEAT[playerNum] || this.SEAT[0];
+        return cfg.baseX + i * cfg.stepX;
     }
-      
-    sortingAnimationZ(index, playerNum) {
-        // Calculate the new z-index based on the index
-        switch (playerNum) {
-            case 0:
-                return index * 4;
-            case 1:
-                return 1 + index * 4;
-            case 2:
-                return 2 + index * 4;
-            case 3:
-                return 3 + index * 4;
-        }
+    sortingAnimationY(i, playerNum) {
+        const cfg = this.SEAT[playerNum] || this.SEAT[0];
+        return cfg.baseY + i * cfg.stepY;
     }
-
+    sortingAnimationZ(i, playerNum) {
+        const cfg = this.SEAT[playerNum] || this.SEAT[0];
+        return cfg.zBase + i * 4;
+    }
     sortingAnimationRotation(playerNum) {
-        // Calculate the new z-index based on the index
-        switch(playerNum){
-            //player 1 card rotation when sorting
-            case 0:
-                return 0;
-            case 1:
-                return 270;
-            case 2:
-                return 0; 
-            case 3:
-                return 270; 
-        }
+        const cfg = this.SEAT[playerNum] || this.SEAT[0];
+        return cfg.rot;
     }
-
-    //return rotateSideways boolean based on player number
     sortingRotateSidewaysBoolean(playerNum) {
-        switch(playerNum){
-            //player 1 card rotation when sorting
-            case 0:
-                return false;
-            case 1:
-                return true;
-            case 2:
-                return false; 
-            case 3:
-                return true; 
-        }
+        const cfg = this.SEAT[playerNum] || this.SEAT[0];
+        return cfg.sideways;
     }
 
-    //function for sorting animation, extends into opponent class (no need to reimplement in opponent class)
-    sortingAnimation(playerNum) {
-        // Create an array to store all the animation promises
-        const animationPromises = [];
-        
-        // Update the cards' positions and z-index
+    sortingAnimation(playerNum, { rotateAfterTurn = false, duration = 200, stagger = 0 } = {}) {
+        const promises = [];
         this.cards.forEach((card, i) => {
-            const animationPromise = new Promise((resolve) => {
-                card.animateTo({
-                    delay: 0,
-                    duration: 200,
-                    rot: this.sortingAnimationRotation(playerNum),
-                    ease: 'linear',
-                    x: this.sortingAnimationX(i, playerNum),  // Calculate the new X position based on index
-                    y: this.sortingAnimationY(i, playerNum),
-        
-                    onComplete: () => {
-                        card.$el.style.zIndex = this.sortingAnimationZ(i, playerNum);
-                        resolve(); // Resolve the promise when this animation is completed
-                      },
-                });
+            promises.push(new Promise(resolve => {
+            card.animateTo({
+                delay: (stagger ? i * stagger : 0),
+                duration,
+                ease: 'linear',
+                rot: rotateAfterTurn ? 0 : this.sortingAnimationRotation(playerNum),
+                rotateSideways: this.sortingRotateSidewaysBoolean(playerNum), // always apply seat orientation
+                x: this.sortingAnimationX(i, playerNum),
+                y: this.sortingAnimationY(i, playerNum),
+                onComplete: () => { card.$el.style.zIndex = this.sortingAnimationZ(i, playerNum); resolve(); }
             });
-            animationPromises.push(animationPromise);
+            }));
         });
-
-        // Use Promise.all to wait for all animation promises to resolve
-        return Promise.all(animationPromises);
+        return Promise.all(promises);
     }
 
-    //function for sorting animation, extends into opponent class (no need to reimplement in opponent class)
-    sortingAnimationAfterTurn(playerNum) {
-        // Create an array to store all the animation promises
-        const animationPromises = [];
-        
-        // Update the cards' positions and z-index
-        this.cards.forEach((card, i) => {
-            const animationPromise = new Promise((resolve) => {
-                card.animateTo({
-                    delay: 0,
-                    duration: 200,
-                    rotateSideways: this.sortingRotateSidewaysBoolean(playerNum), // Set to true to rotate the card sideways
-                    rot: 0,
-                    ease: 'linear',
-                    x: this.sortingAnimationX(i, playerNum),  // Calculate the new X position based on index
-                    y: this.sortingAnimationY(i, playerNum),
-        
-                    onComplete: () => {
-                        card.$el.style.zIndex = this.sortingAnimationZ(i, playerNum);
-                        console.log("rotate after turn") 
-                        resolve(); // Resolve the promise when this animation is completed
-                      },
-                });
-            });
-            animationPromises.push(animationPromise);
-        });
-
-        // Use Promise.all to wait for all animation promises to resolve
-        return Promise.all(animationPromises);
-    }
-    
     //return combo string based on hand array
     validateCombo(hand){
         if(hand.length == 0 || hand.length == 1 || hand.length == 2 || hand.length == 3){
@@ -357,27 +278,16 @@ export default class Player{
     }
 
     //return true if played card || combo is valid, else return false
-    cardLogic(gameDeck, hand, lastValidHand, playersFinished){ 
+    cardLogic(gameDeck, hand, serverLastValidHand, playersFinished){ 
         let deck = new Deck();
         deck.sort(); //sort in big 2 ascending order
         var cardMap = deck.cardHash();
-        var lastPlayedHand = []; //card array holds the hand that we will use to validate
-        var lastPlayedHandIndex = gameDeck.length - lastValidHand;
 
         console.log("gameDeck length: " + gameDeck.length);
-        console.log("lastVlaidHand: " + lastValidHand);
+        console.log("serverLastValidHand: " + serverLastValidHand);
 
-        console.log("last played hand index card logic" + lastPlayedHandIndex)
-
-        //loop from last hand played until end of gamedeck
-        for(let i = lastPlayedHandIndex; i < gameDeck.length; i++){
-            //if i less than 0 (happens after user wins a round, because gamedeck length is 0 and lastValidHand stores length of winning hand)
-            if(i < 0){
-                continue; //don't insert cards into last played hand and continue out of loop
-            }
-            //insert last played cards into array ['0 3', '1 3'] (as a string to use with comboValidate function)
-            lastPlayedHand.push(gameDeck[i].suit + " " + gameDeck[i].rank); 
-        }
+        // Normalize to the string format your validator expects ("suit rank")
+        const lastPlayedHand = (serverLastValidHand || []).map(c => `${c.suit} ${c.rank}`);
 
         //switch case using hand length
         switch(hand.length) {
@@ -627,8 +537,29 @@ export default class Player{
         }
     }
 
+    waitForTurnOutcome(socket) {
+        return new Promise((resolve, reject) => {
+            const onPlayed  = (payload) => { cleanup(); resolve({ type: 'played',    payload }); };
+            const onPassed  = (payload) => { cleanup(); resolve({ type: 'passed',    payload }); };
+            const onWon     = (payload) => { cleanup(); resolve({ type: 'wonRound',  payload }); };
+            const onReject  = (payload) => { cleanup(); reject(Object.assign(new Error(payload?.reason || 'playRejected'), { payload })); };
+
+            function cleanup() {
+            socket.off('cardsPlayed', onPlayed);
+            socket.off('passedTurn', onPassed);
+            socket.off('wonRound', onWon);
+            socket.off('playRejected', onReject);
+            }
+
+            socket.once('cardsPlayed',   onPlayed);
+            socket.once('passedTurn',    onPassed);
+            socket.once('wonRound',      onWon);
+            socket.once('playRejected',  onReject);
+        });
+    }
+
     //function takes care of selecting cards and inserting cards into hand, sorting the hand, validating move and inserting the hand onto the game deck, and returning promise
-    async playCard(gameDeck, lastValidHand, playersFinished, roomCode, socket){
+    async playCard(gameDeck, serverLastValidHand, playersFinished, roomCode, socket){
         var playButton = document.getElementById("play"); //set player class to active if its their turn
         var passButton = document.getElementById("pass");
         var placeCardAudio = new Audio("audio/flipcard.mp3");
@@ -683,7 +614,7 @@ export default class Player{
             }
 
             self.sortHandArray(hand);
-            cardValidate = self.cardLogic(gameDeck, hand, lastValidHand, playersFinished); //return valid if played card meets requirements
+            cardValidate = self.cardLogic(gameDeck, hand, serverLastValidHand, playersFinished); //return valid if played card meets requirements
             console.log("card validation: " + cardValidate);
 
             //if current hand is validated, enable play button, else disable it because its an invalid move
@@ -728,77 +659,124 @@ export default class Player{
                 resolve(0);
             }
 
-            var playClickListener = function() {
-                let rotationOffset = Math.random() * 7 + -7; // Calculate a new rotation offset for each card
-                console.log("ROTATIONAL OFFSET: " + rotationOffset)
+            var playClickListener = async function() {
+                // convert hand containing cardId's to format that server can read to validate the hand
+                const serverValidateCards = hand.map(id => {
+                    const [suitStr, rankStr] = id.split(" ");
+                    return { suit: Number(suitStr), rank: Number(rankStr) };
+                });
 
-                hand.forEach(cardId => {
-                    //return index of player's card that matches a cardId in hand array
-                    let cardIndex = self.cards.findIndex(card => card.suit + " " + card.rank == cardId);
-                    let card = self.findCardObject(cardId); //return card object using cardId to search
-                    
-                    //animate card object to gameDeck position (//can use turn to slightly stagger the cards like uno on ios)
-                    let p1Promise = new Promise((cardResolve) => {
-                        card.animateTo({
-                            delay: 0, // wait 1 second + i * 2 ms
-                            duration: 150,
-                            ease: 'linear',
-                            rot: 0  + rotationOffset,
-                            x: 20 + (i * 15),
-                            y: -10,
-                            onComplete: function () {
-                                if (cardIndex !== -1) {
-                                    card.$el.style.zIndex = gameDeck.length; //make it equal gameDeck.length
-                                    gameDeck.push(self.cards[cardIndex]); //insert player's card that matches cardId into game deck
-                                    console.log("card inserted: " + self.cards[cardIndex].suit + self.cards[cardIndex].rank);
-                                    cardsToRemove.unshift(self.cards[cardIndex].suit + " " + self.cards[cardIndex].rank); //add card index into cardsToRemove array, so I can remove all cards at same time after animations are finished
-                                    console.log("Cards to remove: " + cardsToRemove);
-                                    placeCardAudio.play();
-                                }
-                                //card.mount(gameDeckDiv);
-                                cardResolve(); //only resolve promise when animation is complete
-                            }
-                        })                                  
-                    });
-                    animationPromises.push(p1Promise); //add animation promise to promise array
-                    i++;
-                })
-                // Wait for all card animations to complete
-                Promise.all(animationPromises).then(() => {
-                    cardsToRemove.forEach(cardToRemove => {
-                        const indexToRemove = self.cards.findIndex(card => {
-                            return card.suit + ' ' + card.rank === cardToRemove;
-                        });
-                
-                        if (indexToRemove !== -1) {
-                            console.log("removed card: " + self.cards[indexToRemove].suit + self.cards[indexToRemove].rank);
-                            self.cards.splice(indexToRemove, 1);
-                        }
-                    });
+                // positions relative to current on-screen order
+                const selectedCardPositions = hand.map(id =>
+                    self.cards.findIndex(c => (c.suit + " " + c.rank) === id)
+                );
+
+                // tell server "I want to play these"
+                socket.emit("playCards", {
+                    type: "play",
+                    roomCode,
+                    cards: serverValidateCards,    // [{suit, rank}, ...]
+                    positions: selectedCardPositions   // [0, 2, 7, 8, 9] for example
+                });
+
+                // then wait for verdict
+                const outcome = await self.waitForTurnOutcome(socket);
+
+                console.log("Outcome Played Cards");
+                console.log(outcome);
+
+                if(outcome.payload.verdict === "validated"){
+                    let rotationOffset = Math.random() * 7 + -7; // Calculate a new rotation offset for each card
+                    console.log("ROTATIONAL OFFSET: " + rotationOffset)
+
+                    hand.forEach(cardId => {
+                        //return index of player's card that matches a cardId in hand array
+                        let cardIndex = self.cards.findIndex(card => card.suit + " " + card.rank == cardId);
+                        let card = self.findCardObject(cardId); //return card object using cardId to search
                         
-                    // emit hand played, and update server side cards, and gameDeck maybe?
-                    socket.emit('playedHand', roomCode, hand, self, gameDeck, playersFinished);
-                    hand.length = 0; //clear hand after playing it
-                    resolve(); //return amount of cards played, to move forward for loop
-                });
+                        //animate card object to gameDeck position (//can use turn to slightly stagger the cards like uno on ios)
+                        let p1Promise = new Promise((cardResolve) => {
+                            card.animateTo({
+                                delay: 0, // wait 1 second + i * 2 ms
+                                duration: 150,
+                                ease: 'linear',
+                                rot: 0  + rotationOffset,
+                                x: 20 + (i * 15),
+                                y: -10,
+                                onComplete: function () {
+                                    if (cardIndex !== -1) {
+                                        card.$el.style.zIndex = gameDeck.length; //make it equal gameDeck.length
+                                        gameDeck.push(self.cards[cardIndex]); //insert player's card that matches cardId into game deck
+                                        console.log("card inserted: " + self.cards[cardIndex].suit + self.cards[cardIndex].rank);
+                                        cardsToRemove.unshift(self.cards[cardIndex].suit + " " + self.cards[cardIndex].rank); //add card index into cardsToRemove array, so I can remove all cards at same time after animations are finished
+                                        console.log("Cards to remove: " + cardsToRemove);
+                                        placeCardAudio.play();
+                                    }
+                                    //card.mount(gameDeckDiv);
+                                    cardResolve(); //only resolve promise when animation is complete
+                                }
+                            })                                  
+                        });
+                        animationPromises.push(p1Promise); //add animation promise to promise array
+                        i++;
+                    })
+                    // Wait for all card animations to complete
+                    Promise.all(animationPromises).then(() => {
+                        cardsToRemove.forEach(cardToRemove => {
+                            const indexToRemove = self.cards.findIndex(card => {
+                                return card.suit + ' ' + card.rank === cardToRemove;
+                            });
+                    
+                            if (indexToRemove !== -1) {
+                                console.log("removed card: " + self.cards[indexToRemove].suit + self.cards[indexToRemove].rank);
+                                self.cards.splice(indexToRemove, 1);
+                            }
+                        });
 
-                //remove click listener on card, so they dont stack up
-                self.cards.forEach(function(card) {
-                    card.$el.removeEventListener('click', card.clickListener);
-                });
+                        hand.length = 0; //clear hand after playing it
+                        resolve(outcome); 
+                    });
 
-                //remove playButton event listener to prevent propogation
-                playButton.removeEventListener('click', playClickListener);
-                
-                //remove pass button listener, when player passes so event listeners dont propogate
-                passButton.removeEventListener('click', passClickListener);
+                    //remove click listener on card, so they dont stack up
+                    self.cards.forEach(function(card) {
+                        card.$el.removeEventListener('click', card.clickListener);
+                    });
+
+                    //remove playButton event listener to prevent propogation
+                    playButton.removeEventListener('click', playClickListener);
+                    
+                    //remove pass button listener, when player passes so event listeners dont propogate
+                    passButton.removeEventListener('click', passClickListener);
+                }
+                else {
+                    /*cheating attempt detected, emit (cheaterDetected) and then disconnect client from room
+                    const reason = outcome?.payload?.reason || "Unknown reason";
+                    console.warn("[PLAY REJECTED]", reason, serverValidateCards);
+
+                    // show a visible error to the user
+                    if (typeof self.showErrorBanner === "function") {
+                        self.showErrorBanner(`Play rejected: ${reason}`);
+                    } else {
+                        // simple fallback UI
+                        alert(`Play rejected: ${reason}`);
+                    }
+
+                    // Always notify server for telemetry (room + who + attempted cards)
+                    socket.emit("cheaterDetected", {
+                        roomCode,
+                        reason,
+                        attemptedCards: serverValidateCards, // what the client tried to submit
+                        clientId: self.clientId,             // if you have it on the client
+                    });*/
+                    console.log("Cheater detected")
+                }
             }
 
             //call playClickListener function when playButton is clicked, the function will remove event listener after its called
             playButton.addEventListener("click", playClickListener, { once: true });
                 
             //when player passes
-            var passClickListener = function() {
+            var passClickListener = async function() {
                 //remove click listeners on all cards 
                 self.cards.forEach(function(card) {
                     card.$el.removeEventListener('click', card.clickListener);
@@ -827,11 +805,17 @@ export default class Player{
                 //remove all selected cards, play pass audio and resolve 0
                 hand.length = 0
 
-                // emit that player passed (hand.length = 0)
-                socket.emit('playedHand', roomCode, hand, self, gameDeck, playersFinished);
+                // Let server know that player passed
+                socket.emit('passTurn', roomCode);
+
+                // then wait for payload that contains server gamestate
+                const outcome = await self.waitForTurnOutcome(socket);
+
+                console.log("Outcome Played Cards");
+                console.log(outcome);
 
                 passAudio.play(); 
-                resolve(0); 
+                resolve(outcome); 
             }
 
             //call passClickListener function when passButton is clicked, the function will remove event listener after its called

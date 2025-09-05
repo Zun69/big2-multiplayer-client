@@ -1014,7 +1014,9 @@ var Deck = (function () {
   function Deck(jokers, arr) {
     // init cards array
     var cards = new Array(jokers ? 55 : 52);
-    serverDeck = arr;
+
+    // ✅ Make sure this exists in the same scope as buildExactFromArray/hydrateExactFromArray
+    let serverDeck = Array.isArray(arr) ? arr : null;
 
     var $el = createElement('div');
     var self = observable({ mount: mount, unmount: unmount, cards: cards, $el: $el });
@@ -1064,6 +1066,58 @@ var Deck = (function () {
     
       // Clear the DOM elements
       $el.innerHTML = ''; // This will remove all child elements from $el
+    };
+
+    // Build the DOM + card objects to match the incoming array EXACTLY (including duplicates)
+    // If 'arrOverride' is not provided, it uses the captured 'serverDeck' from the constructor.
+    self.buildExactFromArray = function(arrOverride) {
+      const src = arrOverride || serverDeck;
+      if (!Array.isArray(src)) {
+        console.warn('buildExactFromArray: missing/invalid array');
+        return self;
+      }
+      if (src.length !== (jokers ? 55 : 52)) {
+        console.warn('buildExactFromArray: length mismatch:', src.length);
+        // still try to build whatever we got
+      }
+
+      // clear previous cards + DOM
+      self.removeAllCards();
+
+      // regenerate cards in the exact order and identity of 'src'
+      for (let i = 0; i < src.length; i++) {
+        const { rank, suit } = src[i];
+
+        // create a fresh card element and override its identity to the server value
+        const card = Deck.Card(i);        // creates a card with modules attached
+        card.rank = rank;                 // override default rank
+        card.suit = suit;                 // override default suit
+        card.i = i;                       // keep index consistent for modules that read .i
+        card.pos = i;
+
+        // update CSS classes for the new rank/suit and keep it face-down
+        card.setRankSuit(rank, suit);
+        card.setSide('back');
+
+        // mount into this deck's DOM and store
+        card.mount(self.$el);
+        self.cards.push(card);
+      }
+
+      // keep the captured serverDeck in sync (useful if copy helpers need it later)
+      serverDeck = src;
+      return self;
+    };
+
+    // Replace your current hydrateExactFromArray with this:
+    self.hydrateExactFromArray = function(arrOverride) {
+      const src = Array.isArray(arrOverride) ? arrOverride : serverDeck; // or self.serverOrder
+      if (!Array.isArray(src)) {
+        console.warn('hydrateExactFromArray: missing/invalid array');
+        return self;
+      }
+      self.queue((next) => { self.buildExactFromArray(src); next(); });
+      return self; // <-- add this
     };
 
     return self;
