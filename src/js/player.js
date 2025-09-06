@@ -37,47 +37,39 @@ export default class Player{
         }
     }
 
-    //sort player's cards
-    sortHand(){
-        let deck = new Deck();
+    // Sort this player's cards in-place by Deck.cardHash() order
+    sortHand() {
+        const deck = new Deck();
         deck.sort();
-        let cardMap = deck.cardHash();
+        const cardMap = deck.cardHash();
 
-        //bubble sort using cardMap to compare card values
-        for(var i = 0; i < this.numberOfCards; i++){
-            for(var j = 0; j < (this.numberOfCards - i - 1); j++){
-                //use current card as a key to cardMap using position value to compare and sort the cards, cant use object as a key
-                if(cardMap.get(this.cards[j].suit + " " + this.cards[j].rank) > cardMap.get(this.cards[j + 1].suit + " " + this.cards[j + 1].rank)){
-                    let temp = this.cards[j];
-                    this.cards[j] = this.cards[j+1];
-                    this.cards[j+1] = temp;
-                }
-            }
-        }
+        const keyOf = (c) => `${c.suit} ${c.rank}`;
+
+        // Stable in modern engines → preserves relative order of equals (like bubble sort)
+        this.cards.sort((a, b) => {
+            const va = cardMap.get(keyOf(a));
+            const vb = cardMap.get(keyOf(b));
+            return va - vb; // ascending
+        });
     }
 
-    //sort hand that user has selected
-    sortHandArray(hand){
-        let deck = new Deck();
-        deck.sort()
-        let cardMap = deck.cardHash();
-        
-        //bubble sort using cardMap to compare card values
-        for(var i = 0; i < hand.length; i++){
-            for(var j = 0; j < (hand.length - i - 1); j++){
-                //use current card as a key to cardMap using position value to compare and sort the cards (e.g. key pair = 0 3 (diamonds, 3))
-                if(cardMap.get(hand[j]) > cardMap.get(hand[j + 1])){ 
-                    let temp = hand[j];
-                    hand[j] = hand[j+1];
-                    hand[j+1] = temp;
-                }
-            }
-        }
+    // Sort an array of selected hand keys in-place (keys are already "suit rank" strings)
+    sortHandArray(hand) {
+        const deck = new Deck();
+        deck.sort();
+        const cardMap = deck.cardHash();
+
+        hand.sort((ka, kb) => {
+            const va = cardMap.get(ka);
+            const vb = cardMap.get(kb);
+            return va - vb; // ascending
+        });
+
         console.log("currrent hand: " + hand);
     }
 
     // ---------------------------
-    // Per-seat layout (keeps your numbers)
+    // Per-seat layout 
     // ---------------------------
     SEAT = [
         // seat 0
@@ -644,20 +636,6 @@ export default class Player{
             let animationPromises = []; //holds all animation promises
             let cardsToRemove = []; //holds indexes of cards to be removed
             let i = 0; //for staggered placing down animations (remove if i dont like it)
-
-            //if player has finished game, automatically pass
-            if(this.finishedGame == true) {
-                //remove all selected cards, play pass audio and resolve 0
-                console.log("finished game true, passing");
-
-                //remove all selected cards, play pass audio and resolve 0
-                hand.length = 0
-
-                // emit that player passed (hand.length = 0)
-                socket.emit('playedHand', roomCode, hand, self, gameDeck, playersFinished);
-
-                resolve(0);
-            }
 
             var playClickListener = async function() {
                 // convert hand containing cardId's to format that server can read to validate the hand

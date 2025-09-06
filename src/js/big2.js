@@ -121,20 +121,11 @@ const GameModule = (function() {
 })();
 
 // Sorts everybody's cards and plays the animation, resolves when animations finish
-async function sortHands(players, socket, roomCode){ 
-    const animationPromises = [];
-
-    players.forEach(function(player){
-        player.sortHand();
-    });
+async function sortHands(socket, roomCode){ 
+    GameModule.players[0].sortHand();
     
-    for (let i = 0; i < 4; i++) {
-        // Push the animation promise into the array
-        animationPromises.push(players[i].sortingAnimation(i));
-    }
-
-    // Wait for all animation promises to resolve
-    await Promise.all(animationPromises);    
+    // Animate the current player's cards into position
+    await GameModule.players[0].sortingAnimation(0);
 
     return new Promise(resolve => {
         socket.once('allSortingComplete', () => {
@@ -198,152 +189,91 @@ function shuffleDeckAsync(deck, times, delayBetweenShuffles, serverDeck) {
   });
 }
 
+
 // Animate and assign cards to GameModule.players
-async function dealCards(players, serverDeck, socket, roomCode, hostId) {
-    return new Promise(function (resolve) {
-        //assign each player's div's so cards can be mounted to them
-        var p1Div = document.getElementById('0');
-        var p2Div = document.getElementById('1');
-        var p3Div = document.getElementById('2');
-        var p4Div = document.getElementById('3');
+async function dealCards(serverDeck, socket, roomCode, hostId) {
+  return new Promise(function (resolve) {
+    // target divs for each seat (0: you, 1: left, 2: top, 3: right)
+    const p1Div = document.getElementById('0');
+    const p2Div = document.getElementById('1');
+    const p3Div = document.getElementById('2');
+    const p4Div = document.getElementById('3');
+    const targetDivs = [p1Div, p2Div, p3Div, p4Div];
 
-        //hold each player's animation promises
-        let p1Promise;
-        let p2Promise;
-        let p3Promise;
-        let p4Promise;
+    // Build deck (server-supplied), mount to DOM, and shuffle/arrange
+    let deck = Deck(false, serverDeck);
+    const shufflePromise = shuffleDeckAsync(deck, 3, 20, serverDeck);
+    deck.mount(document.getElementById('gameDeck'));
+
+    // First recipient is the host seat (clientId matches hostId)
+    let playerIndex = GameModule.players.findIndex(
+      p => Number(p.clientId) === Number(hostId)
+    );
+
+    // Deterministic spacing (identical on all clients)
+    const playersCount = GameModule.players.length || 4;
+    const STRIDE = 10 * playersCount;      // 40px per card per seat (matches old look)
+    const SEAT_BASE = [0, 10, 20, 30];     // fixed bias per local seat (no host-dependent bias)
+
+    // Pose builders per seat
+    const poseBySeat = [
+      (off) => ({ rot: 0,  x: -212 + off, y:  230, front: true  }),  // seat 0 (you)
+      (off) => ({ rot: 90, x: -425,       y: -250 + off, front: false }), // seat 1 (left)
+      (off) => ({ rot: 0,  x:  281 - off, y: -250,      front: false }), // seat 2 (top)
+      (off) => ({ rot: 90, x:  440,       y:  272 - off, front: false }), // seat 3 (right)
+    ];
+
+    shufflePromise.then(function (value) {
+      if (value !== "shuffleComplete") return;
+
+      const animationPromises = [];
+      const perSeatCount = [0, 0, 0, 0]; // how many dealt to each seat
+
+      deck.cards.reverse().forEach((card, dealIndex) => {
+        const seat  = playerIndex;               // lock seat for this card
+        const k     = perSeatCount[seat];        // 0..12 within THIS seat
+        const delay = 50 + dealIndex * 28;       // same rhythm as before
+        const off   = SEAT_BASE[seat] + k * STRIDE;
+
+        const mountDiv = targetDivs[seat];
+        const { rot, x, y, front } = poseBySeat[seat](off);
+
+        const p = new Promise((cardResolve) => {
+          setTimeout(() => {
+            card.setSide(front ? 'front' : 'back');
+            card.animateTo({
+              delay: 0,
+              duration: 50,
+              ease: 'linear',
+              rot, x, y,
+              onComplete: function () {
+                card.mount(mountDiv);
+                cardResolve();
+              }
+            });
+          }, delay);
+        });
+
+        animationPromises.push(p);
+        GameModule.players[seat].addCard(card);
+
+        // Seat 'seat' just received a card; bump that seat’s personal count.
+        // We use this number (0,1,2,...) to space/fan THAT seat’s cards.
+        perSeatCount[seat] += 1;
         
-        // Create deck, pass in serverDeck, then copy in serverDeck to the new deck, then display the deck in an HTML container
-        let deck = Deck(false, serverDeck);
+        // Advance the dealer to the next seat in round-robin order.
+        // The % wraps us back to 0 after the last seat (e.g., 3→0 when playersCount=4).
+        playerIndex = (playerIndex + 1) % playersCount; 
+      });
 
-        // shuffle deck 3 times 20ms between shuffle, also rearrange deck to match server provided deck with placeholders
-        let shufflePromise = shuffleDeckAsync(deck, 3, 20, serverDeck);
-        
-        let $container = document.getElementById('gameDeck');
-        deck.mount($container);
-
-        // set first player div dealt to as the host client id 
-        let playerIndex = GameModule.players.findIndex(p => Number(p.clientId) === Number(hostId));
-
-        console.log(playerIndex);
-
-        shufflePromise.then(function(value) {
-            if(value == "shuffleComplete"){
-                const animationPromises = []; // Array to store animation promises
-
-                deck.cards.reverse().forEach(function (card, i) {
-                    //keeps playerIndex within a 0-3 range
-                    if (playerIndex == 4) {
-                        playerIndex = 0;
-                    }
-
-                    //play different dealing animations depending on player index
-                    switch (playerIndex) {
-                        case 0:
-                            p1Promise = new Promise((cardResolve) => {
-                                setTimeout(function() {
-                                    card.animateTo({
-                                        delay: 0, // wait 1 second + i * 2 ms
-                                        duration: 100,
-                                        ease: 'linear',
-                                        rot: 0,
-                                        x: -212 + (i * 10),
-                                        y: 230,
-                                        onComplete: function () {
-                                            card.mount(p1Div);
-                                            card.setSide('front');
-                                            cardResolve();
-                                        }
-                                    })                                  
-                                },50 + i * 28);
-                            });
-                            animationPromises.push(p1Promise); //add animation promise to promise array
-                            GameModule.players[playerIndex].addCard(card); //add card to player's hand
-                            playerIndex++;
-                            break;
-                        case 1:
-                            card.setSide('back')
-                            p2Promise = new Promise((cardResolve) => {
-                                setTimeout(function() {
-                                    card.animateTo({
-                                        delay: 0 , // wait 1 second + i * 2 ms
-                                        duration: 100,
-                                        ease: 'linear',
-                                        rot: 90,
-                                        x: -425,
-                                        y: -250 + (i * 10),
-                                        onComplete: function () {
-                                            card.mount(p2Div);
-                                            cardResolve();
-                                        }
-                                    })                                   
-                                },50 + i * 28)
-                                animationPromises.push(p2Promise);
-                                players[playerIndex].addCard(card);
-                                playerIndex++;
-                            });
-                            break;
-                        case 2:
-                            card.setSide('back')
-                            p3Promise = new Promise((cardResolve) => {
-                                setTimeout(function() {
-                                    card.animateTo({
-                                        delay: 0 , // wait 1 second + i * 2 ms
-                                        duration: 100,
-                                        ease: 'linear',
-                                        rot: 0,
-                                        x: 281 - (i * 10),
-                                        y: -250,
-                                        onComplete: function () { 
-                                            card.mount(p3Div);                                      
-                                            cardResolve();
-                                        }
-                                    })
-                                },50 + i * 28)
-                                animationPromises.push(p3Promise);
-                                players[playerIndex].addCard(card);
-                                playerIndex++;
-                            });
-                            break;
-                        case 3:
-                            card.setSide('back')
-                            p4Promise = new Promise((cardResolve) => {
-                                setTimeout(function() {
-                                    card.animateTo({
-                                        delay: 0 , // wait 1 second + i * 2 ms
-                                        duration: 100,
-                                        ease: 'linear',
-                                        rot: 90,
-                                        x: 440,
-                                        y: 272 - (i * 10),
-                                        onComplete: function () {
-                                            card.mount(p4Div);
-                                            cardResolve();
-                                        }
-                                    })                                    
-                                },50 + i * 28)
-                                animationPromises.push(p4Promise);
-                                players[playerIndex].addCard(card);
-                                playerIndex++;
-                            });
-                            break;
-                        }
-                    })
-                // Wait for all card animations to complete
-                Promise.all(animationPromises).then(() => {
-                    //Unmount the deck from the DOM
-                    deck.unmount();
-
-                    // Let server know client has finished dealing and update player's server side cards
-                    socket.emit('dealComplete', roomCode, GameModule.players[0]);
-
-                    //Remove reference to the deck instance
-                    deck = null; 
-                    resolve(socket);
-                });
-            }
-        });       
+      Promise.all(animationPromises).then(() => {
+        deck.unmount();
+        socket.emit('dealComplete', roomCode, GameModule.players[0]);
+        deck = null;
+        resolve(socket);
+      });
     });
+  });
 }
 
 // Get clientId of player with 3 of diamonds from server and return index of player with matching clientId
@@ -396,6 +326,15 @@ async function localPlayerHand(socket, roomCode) {
 
         // update local lastValidHand from the payload (authoritative from server)
         GameModule.lastValidHand = outcome.payload.lastValidHand;
+        
+        // foreach GameModule.players.passed = outcome.payload.players.passed 
+        if (Array.isArray(outcome.payload.players)) {
+            outcome.payload.players.forEach(sp => {
+                const lp = GameModule.players.find(p => p.clientId === sp.id);
+                if (!lp) return;
+                lp.passed = !!sp.passed;
+            });
+        }
 
         await new Promise((resolve) => {
             const handler = () => { socket.off('allHandAckComplete', handler); resolve(); };
@@ -481,22 +420,31 @@ function receivePlayerHand(socket, roomCode) {
     };
 
     const onCardsPlayed = async (payload) => {
-      const { clientId, cards, positions, nextTurn, lastValidHand } = payload;
+        const { clientId, cards, positions, nextTurn, lastValidHand } = payload;
 
-      // mirror hand length and animate the opponent play
-      GameModule.playedHand = cards.length;
+        // mirror hand length and animate the opponent play
+        GameModule.playedHand = cards.length;
 
-      // whoever is showing as "turn" right now is the actor for sorting
-      const actorIdx = GameModule.turn;
+        // whoever is showing as "turn" right now is the actor for sorting
+        const actorIdx = GameModule.turn;
 
-      const player = GameModule.players.find(p => p.clientId === clientId);
-      if (player) {
-        await player.playServerHand(GameModule.gameDeck, GameModule.turn, cards, positions);
-      }
+        const player = GameModule.players.find(p => p.clientId === clientId);
+        if (player) {
+            await player.playServerHand(GameModule.gameDeck, GameModule.turn, cards, positions);
+        }
 
-      // sync local state from server
-      GameModule.lastValidHand = lastValidHand;
-      GameModule.turn = GameModule.players.findIndex(p => p.clientId === nextTurn);
+        // sync local state from server
+        GameModule.lastValidHand = lastValidHand;
+        GameModule.turn = GameModule.players.findIndex(p => p.clientId === nextTurn);
+
+        // foreach GameModule.players.passed = outcome.payload.players.passed 
+        if (Array.isArray(payload.players)) {
+            payload.players.forEach(sp => {
+                const lp = GameModule.players.find(p => p.clientId === sp.id);
+                if (!lp) return;
+                lp.passed = !!sp.passed;
+            });
+        }
 
       // attach listener first, then ack (prevents missing the barrier if we're #4)
       const handler = async () => {
@@ -560,25 +508,6 @@ function receivePlayerHand(socket, roomCode) {
         socket.on('wonRound', onWonRound);
     });
 }
-
-
-// Update GameModule.playedHand and lastPlayedHand to server values
-function setValidHand(socket) {
-    return new Promise((resolve) => {
-        const listener = (serverPlayedHand, serverLastValidHand) => {
-            GameModule.playedHand = serverPlayedHand;
-            GameModule.lastValidHand = serverLastValidHand;
-
-            // Remove the listener after updating the status
-            socket.off('setLastValidHandComplete', listener);
-            // Resolve the promise after updating the status
-            resolve();
-        };
-
-        socket.on('setLastValidHandComplete', listener);
-    });
-}
-
 
 async function finishGameAnimation(roomCode, socket, gameDeck, players, losingPlayer){
     return new Promise(async function (resolve, reject) {
@@ -690,66 +619,6 @@ async function finishDeckAnimation(socket, roomCode) {
     });
 }
 
-function incrementedTurn(socket) {
-    return new Promise((resolve) => {
-        const listener = (serverCurrentTurnClientId) => {
-            // Find index of player who's turn it is using the clientId from the server
-            const clientPlayerIndex = GameModule.players.findIndex(p => p.clientId === serverCurrentTurnClientId);
-
-            if (clientPlayerIndex !== -1) {
-                // Update local gameState turn to match server's turn
-                GameModule.turn = clientPlayerIndex;
-
-                //go back to player 1's turn after player 4's turn
-                if (GameModule.turn > 3) GameModule.turn = 0;
-
-                // Remove the listener after updating the status
-                socket.off('turnIncremented', listener);
-
-                // Resolve the promise after updating the status
-                resolve();
-            } else {
-                console.log('Client player not found');
-            }
-        };
-
-        socket.on('turnIncremented', listener);
-    });
-}
-
-function passedTurn(socket) {
-    return new Promise((resolve) => {
-        const listener = (serverPlayer, serverCurrentTurnClientId) => {
-            console.log("server player")
-            console.log(serverPlayer);
-            // Find index of player who's turn it is server side, using the clientId from the server
-            const clientPlayerIndex = GameModule.players.findIndex(p => p.clientId === serverCurrentTurnClientId);
-            
-            if (clientPlayerIndex !== -1) {
-                // update local equivalent to match server 
-                GameModule.players[clientPlayerIndex].passed = serverPlayer.passed;
-
-                // Update local gameState turn to match server's turn
-                GameModule.turn = clientPlayerIndex;
-
-                //go back to player 1's turn after player 4's turn
-                if (GameModule.turn > 3) GameModule.turn = 0;
-                console.log("Player passed");
-
-                // Remove the listener after updating the status
-                socket.off('passedTurn', listener);
-
-                // Resolve the promise after updating the status
-                resolve();
-            } else {
-                console.log('Client player not found');
-            }
-        };
-
-        socket.on('passedTurn', listener);
-    });
-}
-
 // Listen for finishGameAnimationComplete event when all 4 clients finishedDeck animation has finished
 async function finishedGame(socket) {
     return new Promise((resolve) => {
@@ -844,7 +713,7 @@ const gameLoop = async (roomCode, socket) => {
     GameModule.finishedDeck.cards = [];
 
     //sort all player's cards, it will resolve once all 4 clients sorting animations are complete
-    let sortResolve = await sortHands(GameModule.players, socket, roomCode); 
+    let sortResolve = await sortHands(socket, roomCode); 
 
     if(sortResolve === 'sortComplete'){
         socket.emit('getFirstTurn', roomCode);
@@ -1437,7 +1306,7 @@ async function startGame(socket, roomCode){
                     let reversedServerDeck = cards.reverse();
 
                     // run your existing dealing animation using the server-specified order
-                    await dealCards(GameModule.players, reversedServerDeck, socket, roomCode, hostId);
+                    await dealCards(reversedServerDeck, socket, roomCode, hostId);
 
                     resolve();
                 } catch (err) {
@@ -1462,8 +1331,6 @@ async function startGame(socket, roomCode){
         startGame._busy = false;
     }
 }
-
-
 
 async function endMenu() {
     const endMenu = document.getElementById("endMenu");
@@ -1602,39 +1469,5 @@ window.onload = async function() {
         }
         
     }
-    
-    /* Return user choice from main menu
-    let startMenuResolve = await startMenu();
-    let endMenuResolve;
-
-    while(true){
-
-        //if user quits game
-        if(endMenuResolve=="quitGame"){
-            //reset everything including player points
-            console.log('Game quit');
-            GameModule.resetAll();
-            //return to main menu
-            startMenuResolve = await startMenu();
-        }
-
-        // start the game and return results of game
-        let results = await startGame(startMenuResolve);
-
-        if(results.length == 4){
-            console.log('Game complete!');
-            console.log(results);
-            //calculate points based on results
-            calculatePoints(results);
-            // Call updateLeaderboard function whenever needed, such as after calculating points
-            updateLeaderboard();
-
-            endMenuResolve = await endMenu();
-
-            if(endMenuResolve == "nextGame"){
-                GameModule.reset();
-                console.log("Game Reset")
-            }
-        }*/
 };
 
