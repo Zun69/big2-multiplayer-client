@@ -339,8 +339,8 @@
     #gameContainer {
         width: 1000px;
         height: 650px;
-        background-image: url('background/Wooden-Background.jpg');
-        background-size: cover; /* Scale the image to cover the entire container */
+        background-image: url('background/green-background-alt.jpg');
+        background-size: 100% 100%; /* Stretches image exactly to container dimensions.*/
         background-repeat: no-repeat; /* Prevent the image from repeating */
         text-align: center;
         font-size: 0.8rem;
@@ -491,18 +491,6 @@
         max-width: 100%; /* Adjusted to fit within the viewport */
         margin: 0 auto; /* Center the paragraph within the container */
         margin-top: 20px; /* Reduced margin for smaller screens */
-    }
-    
-    #gameContainer {
-        width: 100%; /* Adjusted to fit within the viewport */
-        height: 450px; /* Reduced height for smaller screens */
-        background-image: url('background/Wooden-Background.jpg');
-        background-size: cover; /* Scale the image to cover the entire container */
-        background-repeat: no-repeat; /* Prevent the image from repeating */
-        text-align: center;
-        font-size: 0.8rem;
-        position: relative;
-        margin: 0 auto; /* Center game container horizontally */
     }
     
     #gameDeck > div,
