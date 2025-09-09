@@ -340,7 +340,7 @@
         width: 1000px;
         height: 650px;
         background-image: url('background/green-background-alt.jpg');
-        background-size: 100% 100%; /* Stretches image exactly to container dimensions.*/
+        background-size: cover; background-position: center;
         background-repeat: no-repeat; /* Prevent the image from repeating */
         text-align: center;
         font-size: 0.8rem;

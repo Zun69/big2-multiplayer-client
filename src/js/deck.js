@@ -5,7 +5,6 @@ var Deck = (function () {
 
   var ticking;
   var animations = [];
-  var serverDeck;
 
   function animationFrames(delay, duration) {
     var now = Date.now();
@@ -555,23 +554,22 @@ var Deck = (function () {
     return array;
   }
 
-  function rearrangeDeck(array) {
-    // Create a map to quickly find indices of cards in serverDeck
-    const indexMap = new Map();
+  function rearrangeDeck(array, order) {
+    if (!Array.isArray(order)) return array;
 
-    serverDeck.forEach((card, index) => {
-        indexMap.set(card.rank.toString() + card.suit.toString(), index);
+    const indexMap = new Map();
+    order.forEach((card, index) => {
+      indexMap.set(card.rank + ":" + card.suit, index);
     });
 
-    // Sort array based on the order in serverDeck
     array.sort((a, b) => {
-        const indexA = indexMap.get(a.rank.toString() + a.suit.toString());
-        const indexB = indexMap.get(b.rank.toString() + b.suit.toString());
-        return indexA - indexB;
+      const ia = indexMap.get(a.rank + ":" + a.suit);
+      const ib = indexMap.get(b.rank + ":" + b.suit);
+      return ia - ib;
     });
 
     return array;
-}
+  }
 
   function fontSize() {
     return window.getComputedStyle(document.body).getPropertyValue('font-size').slice(0, -2);
@@ -851,26 +849,20 @@ var Deck = (function () {
 
   var copyDeck = {
     deck: function deck(_deck8) {
+      // deck module
       _deck8.copyDeck = _deck8.queued(copyDeck);
-
       function copyDeck(next) {
-        var cards = _deck8.cards;
-
+        const cards = _deck8.cards;
         ____fontSize = fontSize();
 
-        //rearrange deck based on serverDeck order
-        rearrangeDeck(cards);
+        rearrangeDeck(cards, _deck8.serverOrder);
 
-        cards.forEach(function (card, i) {
+        cards.forEach((card, i) => {
           card.pos = i;
-
-          card.copyDeck(function (i) {
-            if (i === cards.length - 1) {
-              next();
-            }
+          card.copyDeck((i) => {
+            if (i === cards.length - 1) next();
           });
         });
-        return;
       }
     },
 
@@ -1015,9 +1007,6 @@ var Deck = (function () {
     // init cards array
     var cards = new Array(jokers ? 55 : 52);
 
-    // ✅ Make sure this exists in the same scope as buildExactFromArray/hydrateExactFromArray
-    let serverDeck = Array.isArray(arr) ? arr : null;
-
     var $el = createElement('div');
     var self = observable({ mount: mount, unmount: unmount, cards: cards, $el: $el });
     var $root;
@@ -1068,56 +1057,47 @@ var Deck = (function () {
       $el.innerHTML = ''; // This will remove all child elements from $el
     };
 
-    // Build the DOM + card objects to match the incoming array EXACTLY (including duplicates)
-    // If 'arrOverride' is not provided, it uses the captured 'serverDeck' from the constructor.
+    // store on the instance instead of shadowing a global
+    self.serverOrder = Array.isArray(arr) ? arr : null;
+
+    // Build the DOM + card objects to match the incoming array WITHOUT rebuilding elements
     self.buildExactFromArray = function(arrOverride) {
-      const src = arrOverride || serverDeck;
+      const src = arrOverride || self.serverOrder;
       if (!Array.isArray(src)) {
         console.warn('buildExactFromArray: missing/invalid array');
         return self;
       }
-      if (src.length !== (jokers ? 55 : 52)) {
-        console.warn('buildExactFromArray: length mismatch:', src.length);
-        // still try to build whatever we got
-      }
 
-      // clear previous cards + DOM
-      self.removeAllCards();
-
-      // regenerate cards in the exact order and identity of 'src'
-      for (let i = 0; i < src.length; i++) {
+      const n = Math.min(self.cards.length, src.length);
+      for (let i = 0; i < n; i++) {
         const { rank, suit } = src[i];
+        const card = self.cards[i];
 
-        // create a fresh card element and override its identity to the server value
-        const card = Deck.Card(i);        // creates a card with modules attached
-        card.rank = rank;                 // override default rank
-        card.suit = suit;                 // override default suit
-        card.i = i;                       // keep index consistent for modules that read .i
-        card.pos = i;
+        // Update identity but DO NOT reset x/y/rot or side
+        card.rank = rank;
+        card.suit = suit;
+        card.i    = i;
+        card.pos  = i;
 
-        // update CSS classes for the new rank/suit and keep it face-down
+        // Refresh face CSS
         card.setRankSuit(rank, suit);
-        card.setSide('back');
-
-        // mount into this deck's DOM and store
-        card.mount(self.$el);
-        self.cards.push(card);
+        // (optional) keep whatever side the card is already on
       }
 
-      // keep the captured serverDeck in sync (useful if copy helpers need it later)
-      serverDeck = src;
+      self.serverOrder = src; // keep in sync
       return self;
     };
 
-    // Replace your current hydrateExactFromArray with this:
+
+    // simple wrapper (queue-friendly)
     self.hydrateExactFromArray = function(arrOverride) {
-      const src = Array.isArray(arrOverride) ? arrOverride : serverDeck; // or self.serverOrder
+      const src = Array.isArray(arrOverride) ? arrOverride : self.serverDeck; 
       if (!Array.isArray(src)) {
         console.warn('hydrateExactFromArray: missing/invalid array');
         return self;
       }
       self.queue((next) => { self.buildExactFromArray(src); next(); });
-      return self; // <-- add this
+      return self; 
     };
 
     return self;

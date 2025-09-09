@@ -217,10 +217,10 @@ async function dealCards(serverDeck, socket, roomCode, hostId) {
 
     // Pose builders per seat
     const poseBySeat = [
-      (off) => ({ rot: 0,  x: -212 + off, y:  230, front: true  }),  // seat 0 (you)
-      (off) => ({ rot: 90, x: -425,       y: -250 + off, front: false }), // seat 1 (left)
-      (off) => ({ rot: 0,  x:  281 - off, y: -250,      front: false }), // seat 2 (top)
-      (off) => ({ rot: 90, x:  440,       y:  272 - off, front: false }), // seat 3 (right)
+      (off) => ({ rot: 0,  x: -212 + off, y:  230, }),  // seat 0 (you)
+      (off) => ({ rot: 90, x: -425,       y: -250 + off,  }), // seat 1 (left)
+      (off) => ({ rot: 0,  x:  281 - off, y: -250,       }), // seat 2 (top)
+      (off) => ({ rot: 90, x:  440,       y:  272 - off, }), // seat 3 (right)
     ];
 
     shufflePromise.then(function (value) {
@@ -230,24 +230,33 @@ async function dealCards(serverDeck, socket, roomCode, hostId) {
       const perSeatCount = [0, 0, 0, 0]; // how many dealt to each seat
 
       deck.cards.reverse().forEach((card, dealIndex) => {
+        card.setSide('back'); // make sure everything starts back-side before any animation
         const seat  = playerIndex;               // lock seat for this card
         const k     = perSeatCount[seat];        // 0..12 within THIS seat
         const delay = 50 + dealIndex * 28;       // same rhythm as before
         const off   = SEAT_BASE[seat] + k * STRIDE;
 
         const mountDiv = targetDivs[seat];
-        const { rot, x, y, front } = poseBySeat[seat](off);
+        const { rot, x, y } = poseBySeat[seat](off);
+
+        const localSeat = 0; // you
 
         const p = new Promise((cardResolve) => {
           setTimeout(() => {
-            card.setSide(front ? 'front' : 'back');
             card.animateTo({
               delay: 0,
               duration: 50,
               ease: 'linear',
               rot, x, y,
               onComplete: function () {
+                // mount first, then set side to avoid any flicker
                 card.mount(mountDiv);
+
+                if (seat === localSeat) {
+                    card.setSide('front');    // only your cards flip on arrival
+                } else {
+                    card.setSide('back');     // others stay hidden
+                }
                 cardResolve();
               }
             });

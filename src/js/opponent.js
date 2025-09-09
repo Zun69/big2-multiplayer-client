@@ -23,6 +23,7 @@ export default class Opponent extends Player {
       super(cards);
       this.isOpponent = true;
     }
+    
 
     // Use positions[] to overwrite placeholders in self.cards,
     // flip them to front, animate to pile, then remove those indices.
@@ -35,36 +36,30 @@ export default class Opponent extends Player {
 
       const anims = [];
       const toRemoveIdx = [];
-      const rot = Math.random() * 4 - 2;
-
-      // simple helper for center-pile coordinates per opponent seat
-      const dropXY = (t, i) => {
-        // tweak if you want different offsets per seat
-        const baseX = (t === 0 ? 26 : 12);
-        return { x: baseX + (i * 15), y: 0 };
-      };
 
       for (let i = 0; i < serverHand.length; i++) {
         const idx = positions[i];           // placeholder index in this player's hand
         const real = serverHand[i];         // { rank, suit }
         const card = self.cards[idx];       // select placeholder cards based on positions (4 of spades) 
         if (!card) continue;                // keep it lean; skip if somehow missing
-
+        
         // 1) overwrite placeholder to match server card
         card.rank = real.rank;
         card.suit = real.suit;
         card.setRankSuit(card.rank, card.suit);
         card.setSide('front');
 
-        // 2) animate into center pile
-        const { x, y } = dropXY(turn, i);
+        // 1) promote to common layer so we share the same coords
+        //self.promoteCardToLayer(card);
+
         const p = new Promise(res => {
           card.animateTo({
-            delay: 0,
+            delay: i * 50,
             duration: 150,
             ease: 'linear',
-            rot,
-            x, y,
+            rot: 0,
+            x: Math.round(self.pileXBySeat[turn]((i * 15) - (gameDeck.length * 0.25))),
+            y: Math.round(self.pileYBySeat[turn](gameDeck.length * 0.25)),
             onComplete: () => {
               card.$el.style.zIndex = gameDeck.length;
               gameDeck.push(card);

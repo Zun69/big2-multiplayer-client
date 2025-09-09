@@ -550,6 +550,25 @@ export default class Player{
         });
     }
 
+    PILE_BASE_X = 20;   // your pile center X
+    PILE_BASE_Y = -10;   // ^
+
+    // seat 0 (you) & seat 3 (right) fan right; seat 1 (left) & seat 2 (top) fan left
+    pileXBySeat = [
+        (off) => this.PILE_BASE_X + off, // seat 0
+        (off) => (this.PILE_BASE_X - 20.5) + off, // seat 1
+        (off) => (this.PILE_BASE_X - 8) + off, // seat 2
+        (off) => (this.PILE_BASE_X - 19) + off, // seat 3
+    ];
+
+    // seat 0 (you) & seat 3 (right) fan right; seat 1 (left) & seat 2 (top) fan left
+    pileYBySeat = [
+        (off) => this.PILE_BASE_Y - off, // seat 0
+        (off) => (this.PILE_BASE_Y - 1) - off, // seat 1
+        (off) => (this.PILE_BASE_Y + 3) - off, // seat 2
+        (off) => (this.PILE_BASE_Y) - off, // seat 3
+    ];
+
     //function takes care of selecting cards and inserting cards into hand, sorting the hand, validating move and inserting the hand onto the game deck, and returning promise
     async playCard(gameDeck, serverLastValidHand, playersFinished, roomCode, socket){
         var playButton = document.getElementById("play"); //set player class to active if its their turn
@@ -671,16 +690,19 @@ export default class Player{
                         //return index of player's card that matches a cardId in hand array
                         let cardIndex = self.cards.findIndex(card => card.suit + " " + card.rank == cardId);
                         let card = self.findCardObject(cardId); //return card object using cardId to search
-                        
+
+                        // 1) promote to common layer so we share the same coords
+                        //self.promoteCardToLayer(card);
+
                         //animate card object to gameDeck position (//can use turn to slightly stagger the cards like uno on ios)
                         let p1Promise = new Promise((cardResolve) => {
                             card.animateTo({
-                                delay: 0, // wait 1 second + i * 2 ms
+                                delay: i * 30, // wait 1 second + i * 2 ms
                                 duration: 150,
                                 ease: 'linear',
-                                rot: 0  + rotationOffset,
-                                x: 20 + (i * 15),
-                                y: -10,
+                                rot: 0,
+                                x: Math.round(self.pileXBySeat[0]((i * 15) - (gameDeck.length * 0.25))),
+                                y: Math.round(self.pileYBySeat[0](gameDeck.length * 0.25)),
                                 onComplete: function () {
                                     if (cardIndex !== -1) {
                                         card.$el.style.zIndex = gameDeck.length; //make it equal gameDeck.length
