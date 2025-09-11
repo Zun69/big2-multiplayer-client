@@ -1,6 +1,6 @@
 export default class Player{ 
-    constructor(name, cards = []){ // Player object, which will contain name, cards, wonRound & finishedGame & pass status, point tally 
-        this.name = name;
+    constructor(username, cards = []){ // Player object, which will contain name, cards, wonRound & finishedGame & pass status, point tally 
+        this.username = username;
         this.cards = cards;
         this.wonRound = false;
         this.finishedGame = false;
@@ -703,6 +703,7 @@ export default class Player{
                                 rot: 0,
                                 x: Math.round(self.pileXBySeat[0]((i * 15) - (gameDeck.length * 0.25))),
                                 y: Math.round(self.pileYBySeat[0](gameDeck.length * 0.25)),
+                                
                                 onComplete: function () {
                                     if (cardIndex !== -1) {
                                         card.$el.style.zIndex = gameDeck.length; //make it equal gameDeck.length

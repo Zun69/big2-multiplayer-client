@@ -523,7 +523,7 @@ async function finishGameAnimation(roomCode, socket, gameDeck, players, losingPl
         let finishedDeckDiv = document.getElementById("finishedDeck");
 
         // Find player who came last
-        const lastPlacePlayer = GameModule.players.find(p => p.clientId === losingPlayer);
+        const lastPlacePlayer = GameModule.players.find(p => p.username === losingPlayer);
 
         for (let i = 0; i < gameDeck.length; i++) {
             //loop through all game deck cards
@@ -886,12 +886,14 @@ const gameLoop = async (roomCode, socket) => {
 
                     // Get final data (playersFinished, losingPlayer)
                     const { playersFinished, losingPlayer } = await gameOverPromise;
+                    console.log(losingPlayer);
 
                     // Now it's safe to animate: all clients have acked the last hand,
                     // and gameDeck includes those last cards.
                     await finishGameAnimation(roomCode, socket, GameModule.gameDeck, GameModule.players, losingPlayer);
                     await finishedGame(socket);
                     GameModule.finishedDeck.unmount();
+                    console.log(playersFinished);
                     return playersFinished;
                 }
             }
@@ -1087,6 +1089,56 @@ async function joinRoomMenu(socket) {
     });
 }
 
+async function endMenu(socket, roomCode){
+    const readyButton = document.getElementById("readyButton");
+    let isReady = false; // Track the local client's ready state
+
+    //If the client is readied up the text content of the button should change to ('unready up 1/4' and then if the client clicks the button again the button should read 'ready up 0/4')
+    function toggleReadyState() {
+        isReady = !isReady;
+        socket.emit('toggleReadyState',roomCode, isReady);
+    }
+
+    readyButton.addEventListener("click", toggleReadyState);
+
+    return new Promise((resolve) => {
+        socket.on('updateReadyState', (clientList) => {
+            updateClientList(clientList);
+
+            // Update readyPlayersCount
+            const readyPlayersCount = clientList.filter(client => client.isReady).length; // Updated to get the actual ready count
+
+            // Update the button text
+            readyButton.textContent = isReady ? `Unready up ${readyPlayersCount}/4` : `Ready up ${readyPlayersCount}/4`; // Update button text
+            
+            if (readyPlayersCount === 4) {
+                //if player is host enable start button
+                // Request to check if the client is the host of a room
+                socket.emit('checkHost', roomCode);
+            }
+        });
+
+        // Client performs clean up and resolves socket when host starts the game
+        socket.on('gameStarted', () => {
+            //remove all event listeners and sockets, readybutton should be nextGameButton
+            readyButton.removeEventListener("click", toggleReadyState);
+            backToJoinRoomButton.removeEventListener('click', handleBackClick); // <-- add this
+
+            socket.off('clientList', updateClientList);
+            socket.off('updateReadyState');
+            socket.off('receiveMessage');
+            socket.off('hostStatus');
+            socket.off('gameStarted');
+        
+            // Hide the lobby menu and clear the interval
+            lobbyMenu.style.display = "none";
+            clearInterval(refreshInterval);
+
+            resolve(socket);
+        });
+    });
+}
+
 // Handles the lobbyMenu, which allows players in the same room to chat and ready up for the game, once all players are ready it will resolve socket
 async function lobbyMenu(socket, roomCode){
     const lobbyMenu = document.getElementById("lobbyMenu");
@@ -1095,10 +1147,8 @@ async function lobbyMenu(socket, roomCode){
     const messageInput = document.getElementById("messageInput");
     const sendMessageButton = document.getElementById("sendMessageButton");
     const readyButton = document.getElementById("readyButton");
-    const startGameButton = document.getElementById("startGameButton");
     const backToJoinRoomButton = document.getElementById("backToJoinRoomButton");
 
-    startGameButton.disabled = true; //disable startGameButton until 4 players are ready and current client is the host of the room
     let isReady = false; // Track the local client's ready state
 
     // Display lobbyMenu
@@ -1188,7 +1238,6 @@ async function lobbyMenu(socket, roomCode){
     socket.off('clientList', updateClientList);
     socket.on('clientList', updateClientList);
 
-    //TO DO I want the text content of the ready button to update when player clicks on the ready up button ('ready up 1/4', the server should keep track of clients ready state)
     //If the client is readied up the text content of the button should change to ('unready up 1/4' and then if the client clicks the button again the button should read 'ready up 0/4')
     function toggleReadyState() {
         isReady = !isReady;
@@ -1221,11 +1270,6 @@ async function lobbyMenu(socket, roomCode){
             } else {
                 if (isHost) {
                     console.log('You are the host of the room.');
-                    startGameButton.disabled = false;
-
-                    startGameButton.addEventListener("click", () => {
-                        handleStartClick();
-                    });
                     
                 } else {
                     console.log('You are not the host of the room.');
@@ -1236,10 +1280,10 @@ async function lobbyMenu(socket, roomCode){
         // Client performs clean up and resolves socket when host starts the game
         socket.on('gameStarted', () => {
             //remove all event listeners and sockets
-            startGameButton.removeEventListener("click", handleStartClick);
             readyButton.removeEventListener("click", toggleReadyState);
             sendMessageButton.removeEventListener('click', sendMessage);
             messageInput.removeEventListener('keydown', handleEnterKey);
+            backToJoinRoomButton.removeEventListener('click', handleBackClick); // <-- add this
 
             socket.off('clientList', updateClientList);
             socket.off('updateReadyState');
@@ -1253,30 +1297,6 @@ async function lobbyMenu(socket, roomCode){
 
             resolve(socket);
         });
-
-        // if client(host) clicks on startGameButton
-        function handleStartClick() {
-            //emit startGame, put client usernames into server gameState object, and then receive gameState object
-            socket.emit('startGame', roomCode);
-
-            //remove all event listeners and sockets
-            startGameButton.removeEventListener("click", handleStartClick);
-            readyButton.removeEventListener("click", toggleReadyState);
-            sendMessageButton.removeEventListener('click', sendMessage);
-            messageInput.removeEventListener('keydown', handleEnterKey);
-
-            socket.off('clientList', updateClientList);
-            socket.off('updateReadyState');
-            socket.off('receiveMessage');
-            socket.off('hostStatus');
-            socket.off('gameStarted');
-        
-            // Hide the lobby menu and clear the interval
-            lobbyMenu.style.display = "none";
-            clearInterval(refreshInterval);
-
-            resolve(socket);
-        }
 
         // Handles clean up and resolves the promise when backToJoinRoomButton is clicked
         backToJoinRoomButton.addEventListener('click', () => {
@@ -1288,7 +1308,6 @@ async function lobbyMenu(socket, roomCode){
             // Emit leave room event, will return updated clientList event
             socket.emit('leaveRoom', roomCode);
 
-            startGameButton.removeEventListener("click", handleStartClick);
             readyButton.removeEventListener("click", toggleReadyState);
             sendMessageButton.removeEventListener('click', sendMessage);
             messageInput.removeEventListener('keydown', handleEnterKey);
@@ -1356,7 +1375,7 @@ async function startGame(socket, roomCode){
                 // Rotate server order so local player is index 0 in GameModule
                 players.forEach((p, index) => {
                     const gameModuleIndex = (index - localPlayerIndex + 4) % 4; // Calculate GameModule index
-                    GameModule.players[gameModuleIndex].name     = p.username;
+                    GameModule.players[gameModuleIndex].username     = p.username;
                     GameModule.players[gameModuleIndex].clientId = p.clientId;
                     GameModule.players[gameModuleIndex].socketId = p.socketId;
                 });
@@ -1365,7 +1384,7 @@ async function startGame(socket, roomCode){
                 // Update UI labels
                 for (let i = 0; i < playerInfo.length; i++) {
                 playerInfo[i].style.display = 'block';
-                playerInfo[i].innerHTML = GameModule.players[i].name + " " + GameModule.players[i].clientId; //maybe add points here as well?
+                playerInfo[i].innerHTML = GameModule.players[i].username + " " + GameModule.players[i].clientId; //maybe add points here as well?
                 }
                 resolve();
             });
@@ -1423,7 +1442,7 @@ async function startGame(socket, roomCode){
             });
         });
 
-        // NEW: Now that dealing is 100% finished locally, start your main loop.
+        // Main game loop, returns array of usernames in finishing order
         const results = await gameLoop(roomCode, socket);
         return results;
 
@@ -1440,110 +1459,33 @@ async function startGame(socket, roomCode){
     }
 }
 
-async function endMenu() {
+function renderResultsPanel(results) {
+    // expected: results = ["WinnerName", "SecondName", "ThirdName", "LoserName"]
     const endMenu = document.getElementById("endMenu");
-    const nextGameButton = document.getElementById("nextGameButton");
-    const quitGameButton = document.getElementById("quitGameButton");
 
-    //hide buttons and gameInfo divs
-    const playButton = document.getElementById("play");
-    const passButton = document.getElementById("pass");
-    const gameInfo = document.getElementById("gameInfo");
+    // hide play/pass/gameInfo/playerInfo
+    document.getElementById("play").style.display = "none";
+    document.getElementById("pass").style.display = "none";
+    document.getElementById("gameInfo").style.display = "none";
 
-    playButton.style.display = "none";
-    passButton.style.display = "none";
-    gameInfo.style.display = "none";
+    const playerInfoDivs = document.getElementsByClassName("playerInfo");
+    for (let div of playerInfoDivs) {
+        div.style.display = "none";
+    }
+
+    const tbody = endMenu.querySelector("#resultsTbody");
+    tbody.innerHTML = "";
+    results.forEach((name, i) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${i + 1}</td><td>${name}</td>`;
+        if (i === 0) tr.style.fontWeight = "700";   // winner
+        if (i === 3) tr.style.opacity = "0.85";     // 4th
+        tbody.appendChild(tr);
+    });
 
     endMenu.style.display = "block";
-
-    return new Promise((resolve) => {
-         // Define the click event listener function for nextGameButton
-         function handleNextGameClick() {
-            // Remove the click event listener for nextGameButton
-            nextGameButton.removeEventListener("click", handleNextGameClick);
-            // Hide the menu
-            endMenu.style.display = "none";
-            // Resolve the promise with the value "nextGame"
-            resolve("nextGame");
-        }
-
-        // Define the click event listener function for quitGameButton
-        function handleQuitGameClick() {
-            // Remove the click event listener for quitGameButton
-            quitGameButton.removeEventListener("click", handleQuitGameClick);
-            // Hide the menu
-            endMenu.style.display = "none";
-            // Resolve the promise with the value "quitGame"
-            resolve("quitGame");
-        }
-
-        // Add click event listeners to the buttons
-        nextGameButton.addEventListener("click", handleNextGameClick);
-        quitGameButton.addEventListener("click", handleQuitGameClick);
-    });
 }
 
-//take in results array and assign points to each player
-function calculatePoints(results) {
-    //1st - 3 points, 2nd - 2 points, 3rd - 1 points, 4th - 0 points
-
-    //increment points and win property for player who came first
-    GameModule.players[results[0]].points += 3;
-    GameModule.players[results[0]].wins += 1;
-
-    GameModule.players[results[1]].points += 2;
-    GameModule.players[results[1]].seconds += 1;
-
-    GameModule.players[results[2]].points += 1;
-    GameModule.players[results[2]].thirds += 1;
-
-    GameModule.players[results[3]].points += 0;
-    GameModule.players[results[3]].losses += 1;
-}
-
-//update leaderboard standings based on points (maybe add a picture, wins, seconds, thirds, losses columns)
-function updateLeaderboard() {
-    const leaderboardBody = document.getElementById("leaderboard-body");
-
-    // Clear existing leaderboard rows
-    leaderboardBody.innerHTML = "";
-
-    // Sort players array by points (descending order)
-    const sortedPlayers = GameModule.players.slice().sort((a, b) => b.points - a.points);
-
-    // Create a leaderboard row for each player
-    sortedPlayers.forEach((player) => {
-        //create new row for each player (each row will contain name, points, wins, seconds, etc)
-        const row = document.createElement("tr");
-
-        const playerNameCell = document.createElement("td");
-        playerNameCell.textContent = player.name;
-        row.appendChild(playerNameCell);
-
-        const playerPointsCell = document.createElement("td");
-        playerPointsCell.textContent = player.points;
-        row.appendChild(playerPointsCell);
-
-        const playerWinsCell = document.createElement("td");
-        playerWinsCell.textContent = player.wins;
-        row.appendChild(playerWinsCell);
-
-        const playerSecondsCell = document.createElement("td");
-        playerSecondsCell.textContent = player.seconds;
-        row.appendChild(playerSecondsCell);
-
-        const playerThirdsCell = document.createElement("td");
-        playerThirdsCell.textContent = player.thirds;
-        row.appendChild(playerThirdsCell);
-
-        const playerLossesCell = document.createElement("td");
-        playerLossesCell.textContent = player.losses;
-        row.appendChild(playerLossesCell);
-
-        //append row to leaderboard body
-        leaderboardBody.appendChild(row);
-    });
-}
 
 window.onload = async function() {
     // require username and password to establish connection to socket.io server and resolve the connected socket object
@@ -1568,10 +1510,14 @@ window.onload = async function() {
         }
 
         // Once code reaches here, it means 4 clients have readied up
-        let results = await startGame(joinedRoomSocket, roomCode, username);
+        const results = await startGame(joinedRoomSocket, roomCode, username);
 
-        if(results.length == 4){
-            socket.emit("processResults", roomCode);
+        if(results){
+            // 1) Render the results nicely in the end menu
+            // display results, add the continue button here, if player continues, reload the lobbyMenu, and allow players to emit StartGame again
+            renderResultsPanel(results);
+            
+            //socket.emit("continueGame", roomCode); 
 
             console.log(results);
         }

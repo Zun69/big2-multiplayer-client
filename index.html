@@ -38,8 +38,8 @@
                 <div class = "playerInfo" id="p1Info"></div>
                 <div class = "playerInfo" id="p2Info"></div>
                 <div class = "playerInfo" id="p3Info"></div>
-                <button class="button" id="play">Play Hand</button>
                 <button class="button" id="pass">Pass</button>
+                <button class="button" id="play">Play</button>
                 <div id="loginMenu">
                     <h2>Big 2 Multiplayer</h2>
                     <input type="text" id="username" placeholder="Enter Username">
@@ -62,30 +62,26 @@
                     </div>
                     <div id="errorMessage3"></div>
                     <button id="readyButton">Ready Up</button>
-                    <button id="startGameButton">Start Game</button>
                     <button id="backToJoinRoomButton">Go Back</button>
                 </div>
                 <div id="endMenu">
-                    <div id="leaderboard">
-                        <h2>Leaderboard</h2>
-                        <table>
+                    <div id ="leaderboard">
+                        <h2>Game Results</h2>
+                        <table id="resultsTable" class="results">
                             <thead>
                                 <tr>
+                                    <th>#</th>
                                     <th>Player</th>
-                                    <th>Points</th>
-                                    <th>Wins</th>
-                                    <th>Seconds</th>
-                                    <th>Thirds</th>
-                                    <th>Losses</th>
                                 </tr>
                             </thead>
-                            <tbody id="leaderboard-body">
-                                <!-- Leaderboard rows will be added dynamically here -->
-                            </tbody>
+                            <tbody id="resultsTbody"></tbody>
                         </table>
                     </div>
-                    <button id="nextGameButton">Next Game</button>
-                    <button id="quitGameButton">Quit Game</button>
+                    <div class="actions">
+                            <button id="quitGameButton">Quit</button>
+                            <button id="nextGameButton">Next game</button>
+                    </div>
+                
                 </div>
             </div>
 

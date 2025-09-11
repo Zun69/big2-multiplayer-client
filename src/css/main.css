@@ -197,6 +197,61 @@
         align-items: center;
     }
 
+    /* center the table itself */
+    #endMenu .results{
+        /* width:90%;            <- remove or keep as a max width */
+        width: auto;             /* let it size to content */
+        max-width: 90%;          /* don't overflow small screens */
+        margin: 8px auto 12px;   /* <-- centers horizontally */
+        border-collapse: collapse;
+    }
+
+    /* keep text inside cells left-aligned */
+    #endMenu .results th,
+    #endMenu .results td{
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: center;
+    }
+
+    #endMenu .results th:first-child,
+    #endMenu .results td:first-child{
+        width: 25%;          /* narrow column */
+        text-align: center;
+    }
+
+    /* header style */
+    #endMenu .results thead th{ 
+        background: #f5f5f5; 
+    }
+
+    /*leaderboard styling*/
+    #leaderboard {
+        padding: 0 20px; /* Add padding to create a gap on both sides */
+        margin-top: 20px;
+    }
+    
+    #leaderboard table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    
+    #leaderboard th,
+    #leaderboard td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+    }
+    
+    #leaderboard th {
+        background-color: #f2f2f2;
+    }
+    
+    #leaderboard th:first-child,
+    #leaderboard td:first-child {
+        width: 70%; /* Adjust as needed */
+    }
+
     /* Style for the input box */
     #username, #password {
         padding: 8px;
@@ -247,7 +302,7 @@
         cursor: pointer;
     }
 
-    #readyButton, #startGameButton {
+    #readyButton{
         display: block;
         margin: 15px auto; /* Center horizontally with margin */
         width: 300px;
@@ -275,7 +330,7 @@
         cursor: pointer;
     }
 
-    #loginButton:hover, #joinRoomButton:hover, .room-button:hover, #readyButton:hover, #startGameButton:hover, #nextGameButton:hover, #play:hover {
+    #loginButton:hover, #joinRoomButton:hover, .room-button:hover, #readyButton:hover, #nextGameButton:hover, #play:hover {
         background-color: #28a745;
         color: white;
     }
@@ -290,57 +345,23 @@
         color: white;
     }
 
-    #nextGameButton {
-        display: block;
-        margin: 0 auto; /* Center horizontally with 10px top and bottom margin */
+    /* make the action buttons inline */
+    #endMenu .actions {
+        display: flex;
+        justify-content: center;
+        gap: 12px; /* space between buttons */
         margin-top: 100px;
-        width: 300px;
-        height: 30px;
-        transition-duration: 0.4s;
-        font-size: 15px;
-        font-family: Helvetica, Arial, sans-serif;
-        font-weight: 200;
-        border-radius: 4px;
     }
 
-    #quitGameButton {
-        display: block;
-        margin: 0 auto; /* Center horizontally with 10px top and bottom margin */
-        margin-top: 15px;
-        width: 300px;
-        height: 30px;
-        transition-duration: 0.4s;
-        font-size: 15px;
-        font-family: Helvetica, Arial, sans-serif;
-        font-weight: 200;
+    /* shared styles for both buttons */
+    #endMenu .actions button {
+        width: 120px;   /* shorter width */
+        height: 28px;   /* shorter height */
+        font-size: 14px;
+        font-family: 'Poppins', sans-serif;
+        border: 1px solid #ccc;
         border-radius: 4px;
-    }
-
-    /*leaderboard styling*/
-    #leaderboard {
-        padding: 0 20px; /* Add padding to create a gap on both sides */
-        margin-top: 20px;
-    }
-    
-    #leaderboard table {
-        width: 100%;
-        border-collapse: collapse;
-    }
-    
-    #leaderboard th,
-    #leaderboard td {
-        border: 1px solid #ddd;
-        padding: 8px;
-        text-align: left;
-    }
-    
-    #leaderboard th {
-        background-color: #f2f2f2;
-    }
-    
-    #leaderboard th:first-child,
-    #leaderboard td:first-child {
-        width: 70%; /* Adjust as needed */
+        cursor: pointer;
     }
     
     #gameContainer {
@@ -379,11 +400,11 @@
         left: 92.5%;
         transform: translate(-50%, -50%); /* Center the element precisely */
         font-family: 'Poppins', sans-serif;
-        font-size: 12px;
+        font-size: 11px;
         background-color: rgba(255, 255, 255, 0.7); /* Transparent white background */
-        padding: 6px;
+        padding: 5px;
         backdrop-filter: blur(1px); /* Adjust the blur value as needed */
-        border-radius: 8px; /* Adjust the border-radius value as needed */
+        border-radius: 2px; /* Adjust the border-radius value as needed */
     }
 
     .playerInfo {
@@ -434,17 +455,17 @@
     }
     
     /* play hand, and pass buttons*/
-    #pass {
+    #play {
         position: absolute;
         bottom: 10px; /* Adjust this value to set the distance from the bottom */
-        left: 52.5%;
+        left: 50.5%;
         display: none;
     }
     
-    #play{
+    #pass {
         position: absolute;
         bottom: 10px; /* Adjust this value to set the distance from the bottom */
-        left: 42.5%;
+        left: 43.5%;
         display: none;
     }
     
