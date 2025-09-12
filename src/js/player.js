@@ -459,57 +459,48 @@ export default class Player{
                 if(gameDeck.length > 0){
                     if(lastPlayedHand.length == 5){
                         var lastPlayedCombo = this.validateCombo(lastPlayedHand);
+
+                        // add:
+                        const normalize = (s) => (s || '').replace('WonRound','');
+                        // if you also want to collapse “3d” lead variants when comparing types:
+                        const normalize5 = (s) => normalize(s).replace('3d','');
                         console.log("last played combo: " + lastPlayedCombo);
-                        //console.log(" 3 4 5 6 2 combo: " + lastPlayedHand[3].slice(-1) + " " + lastPlayedHand[4].slice(-1))
+
+                        // then use these for all your 5-card type comparisons:
+                        const L = normalize5(lastPlayedCombo);
+                        const C = normalize5(combo);
         
                         //TO DO clean this whole section up (make all if statements a function)
                         //if last played combo is straight (all variants) and hand combo is higher straight(done) or flush(done), or full house(done), or fok(done), or straight flush(done)
-                        if(lastPlayedCombo == "straight3d" && combo == "straight" && cardMap.get(hand[4]) > cardMap.get(lastPlayedHand[4]) 
-                        || lastPlayedCombo == "straightWonRound" && combo == "straight" && cardMap.get(hand[4]) > cardMap.get(lastPlayedHand[4])
-                        || lastPlayedCombo == "straight" && combo == "straight" && cardMap.get(hand[4]) > cardMap.get(lastPlayedHand[4]) 
-                        || lastPlayedCombo == "straight3d" && combo == "flush" || lastPlayedCombo == "straightWonRound" && combo == "flush" 
-                        || lastPlayedCombo == "straight" && combo == "flush" || lastPlayedCombo == "straight3d" && combo == "fullHouse" 
-                        || lastPlayedCombo == "straightWonRound" && combo == "fullHouse" || lastPlayedCombo == "straight" && combo == "fullHouse" 
-                        || lastPlayedCombo == "straight3d" && combo == "fok" || lastPlayedCombo == "straightWonRound" && combo == "fok" 
-                        || lastPlayedCombo == "straight" && combo == "fok" || lastPlayedCombo == "straight3d" && combo == "straightFlush" 
-                        || lastPlayedCombo == "straightWonRound" && combo == "straightFlush" || lastPlayedCombo == "straight" && combo == "straightFlush"){
+                        if(L === "straight" && C === "straight" && cardMap.get(hand[4]) > cardMap.get(lastPlayedHand[4]) 
+                        || L == "straight" && C == "flush"
+                        || L == "straight" && C == "fullHouse" 
+                        || L == "straight" && C == "fok" 
+                        || L == "straight" && C == "straightFlush"){
                             return true;
                         }
                         //if last played combo is flush and hand contains higher flush (flush with same suit and higher top card(done), flush with different suit and higher top card(done)), 
                         //or full house(done), or fok(done), or straight flush(done)
-                        if(lastPlayedCombo == "flush3d" && combo == "flush" && hand[0].slice(0,1) == lastPlayedHand[0].slice(0,1) && cardMap.get(hand[4]) > cardMap.get(lastPlayedHand[4])
-                        || lastPlayedCombo == "flush3d" && combo == "flush" && hand[0].slice(0,1) > lastPlayedHand[0].slice(0,1)
-                        || lastPlayedCombo == "flush3d" && combo == "fullHouse" || lastPlayedCombo == "flushWonRound" && combo == "fullHouse"
-                        || lastPlayedCombo == "flushWonRound" && combo == "flush" && hand[0].slice(0,1) == lastPlayedHand[0].slice(0,1) && cardMap.get(hand[4]) > cardMap.get(lastPlayedHand[4])
-                        || lastPlayedCombo == "flushWonRound" && combo == "flush" && hand[0].slice(0,1) > lastPlayedHand[0].slice(0,1)
-                        || lastPlayedCombo == "flushWonRound" && combo == "fok" || lastPlayedCombo == "flush" && combo == "fok" || lastPlayedCombo == "flush3d" && combo == "straightFlush" 
-                        || lastPlayedCombo == "flushWonRound" && combo == "straightFlush" || lastPlayedCombo == "flush" && combo == "straightFlush"
-                        || lastPlayedCombo == "flush" && combo == "flush" && hand[0].slice(0,1) > lastPlayedHand[0].slice(0,1)
-                        || lastPlayedCombo == "flush" && combo == "flush" && hand[0].slice(0,1) == lastPlayedHand[0].slice(0,1) && cardMap.get(hand[4]) > cardMap.get(lastHandPlayed[4])
-                        || lastPlayedCombo == "flush" && combo == "fullHouse" || lastPlayedCombo == "flush3d" && combo == "fok"){
+                        if(L == "flush" && C == "flush" && cardMap.get(hand[4]) > cardMap.get(lastPlayedHand[4])
+                        || L == "flush" && C == "fullHouse"
+                        || L == "flush" && C == "fok" 
+                        || L == "flush" && C == "straightFlush"){
                             return true;
                         }
                         //if last played hand is fullhouse and playedhand is higher fullhouse(done), or fok(done), or straight flush(done)
                         //comparing 3rd card in hand and last played hand because the one of triple cards will always be in the third position in array
-                        if(lastPlayedCombo == "fullHouse3d" && combo == "fullHouse" && cardMap.get(hand[2]) > cardMap.get(lastPlayedHand[2]) 
-                        || lastPlayedCombo == "fullHouseWonRound" && combo == "fullHouse" && cardMap.get(hand[2]) > cardMap.get(lastPlayedHand[2]) 
-                        || lastPlayedCombo == "fullHouse" && combo == "fullHouse" && cardMap.get(hand[2]) > cardMap.get(lastPlayedHand[2]) 
-                        || lastPlayedCombo == "fullHouse3d" && combo == "fok" || lastPlayedCombo == "fullHouseWonRound" && combo == "fok" || lastPlayedCombo == "fullHouse" && combo == "fok"
-                        || lastPlayedCombo == "fullHouse3d" && combo == "straightFlush" || lastPlayedCombo == "fullHouseWonRound" && combo == "straightFlush" || lastPlayedCombo == "fullHouse" && combo == "straightFlush"){
+                        if(L == "fullHouse" && C == "fullHouse" && cardMap.get(hand[2]) > cardMap.get(lastPlayedHand[2])
+                        || L == "fullHouse" && C == "fok"
+                        || L == "fullHouse" && C == "straightFlush"){
                                 return true;
                             }
                         //if last played hand is fok and hand contains higher fok (compare 3rd card in hand with 3rd last played hand)(done), or straight flush(done)
-                        if(lastPlayedCombo == "fok3d" && combo == "fok" && cardMap.get(hand[2]) > cardMap.get(lastPlayedHand[2])
-                        || lastPlayedCombo == "fok3d" && combo == "fokWonRound" && cardMap.get(hand[2]) > cardMap.get(lastPlayedHand[2])
-                        || lastPlayedCombo == "fok" && combo == "fok" && cardMap.get(hand[2]) > cardMap.get(lastPlayedHand[2])
-                        || lastPlayedCombo == "fok3d" && combo == "straightFlush" || lastPlayedCombo == "fokWonRound" && combo == "straightFlush" 
-                        || lastPlayedCombo == "fok" && combo == "straightFlush"){
+                        if(L == "fok" && C == "fok" && cardMap.get(hand[2]) > cardMap.get(lastPlayedHand[2])
+                        || L == "fok" && C == "straightFlush"){
                                 return true;
                             }
                         //if last played hand is straight flush and played hand is higher straight flush(done)
-                        if(lastPlayedCombo == "straightFlush3d" && combo == "straightFlush" && cardMap.get(hand[4]) > cardMap.get(lastPlayedHand[4])
-                        || lastPlayedCombo == "straightFlushWonRound" && combo == "straightFlush" && cardMap.get(hand[4]) > cardMap.get(lastPlayedHand[4])
-                        || lastPlayedCombo == "straightFlush" && combo == "straightFlush" && cardMap.get(hand[4]) > cardMap.get(lastPlayedHand[4])){
+                        if(L == "straightFlush" && C == "straightFlush" && cardMap.get(hand[4]) > cardMap.get(lastPlayedHand[4])){
                             return true;
                         }
                     }

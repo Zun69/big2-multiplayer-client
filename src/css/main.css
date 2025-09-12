@@ -330,7 +330,7 @@
         cursor: pointer;
     }
 
-    #loginButton:hover, #joinRoomButton:hover, .room-button:hover, #readyButton:hover, #nextGameButton:hover, #play:hover {
+    #loginButton:hover, #joinRoomButton:hover, .room-button:hover, #readyButton:hover, #continueButton:hover, #play:hover {
         background-color: #28a745;
         color: white;
     }
@@ -340,7 +340,7 @@
         color: white;
     }
 
-    #quitGameButton:hover, #backToJoinRoomButton:hover {
+    #backToJoinRoomButton2:hover, #backToJoinRoomButton:hover {
         background-color: #f04034;
         color: white;
     }

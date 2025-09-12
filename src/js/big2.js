@@ -1089,55 +1089,91 @@ async function joinRoomMenu(socket) {
     });
 }
 
-async function endMenu(socket, roomCode){
-    const readyButton = document.getElementById("readyButton");
-    let isReady = false; // Track the local client's ready state
+async function endMenu(socket, roomCode, results) {
+    const endMenu   = document.getElementById("endMenu");
+    const continueBtn = document.getElementById("continueButton");         
+    const backBtn     = document.getElementById("backToJoinRoomButton2"); 
 
-    //If the client is readied up the text content of the button should change to ('unready up 1/4' and then if the client clicks the button again the button should read 'ready up 0/4')
-    function toggleReadyState() {
-        isReady = !isReady;
-        socket.emit('toggleReadyState',roomCode, isReady);
+    let isReady = false;
+    let resolver;
+
+    // hide play/pass/gameInfo/playerInfo
+    document.getElementById("play").style.display = "none";
+    document.getElementById("pass").style.display = "none";
+    document.getElementById("gameInfo").style.display = "none";
+
+    const playerInfoDivs = document.getElementsByClassName("playerInfo");
+    for (let div of playerInfoDivs) {
+        div.style.display = "none";
     }
 
-    readyButton.addEventListener("click", toggleReadyState);
-
-    return new Promise((resolve) => {
-        socket.on('updateReadyState', (clientList) => {
-            updateClientList(clientList);
-
-            // Update readyPlayersCount
-            const readyPlayersCount = clientList.filter(client => client.isReady).length; // Updated to get the actual ready count
-
-            // Update the button text
-            readyButton.textContent = isReady ? `Unready up ${readyPlayersCount}/4` : `Ready up ${readyPlayersCount}/4`; // Update button text
-            
-            if (readyPlayersCount === 4) {
-                //if player is host enable start button
-                // Request to check if the client is the host of a room
-                socket.emit('checkHost', roomCode);
-            }
-        });
-
-        // Client performs clean up and resolves socket when host starts the game
-        socket.on('gameStarted', () => {
-            //remove all event listeners and sockets, readybutton should be nextGameButton
-            readyButton.removeEventListener("click", toggleReadyState);
-            backToJoinRoomButton.removeEventListener('click', handleBackClick); // <-- add this
-
-            socket.off('clientList', updateClientList);
-            socket.off('updateReadyState');
-            socket.off('receiveMessage');
-            socket.off('hostStatus');
-            socket.off('gameStarted');
-        
-            // Hide the lobby menu and clear the interval
-            lobbyMenu.style.display = "none";
-            clearInterval(refreshInterval);
-
-            resolve(socket);
-        });
+    const tbody = endMenu.querySelector("#resultsTbody");
+    tbody.innerHTML = "";
+    results.forEach((name, i) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${i + 1}</td><td>${name}</td>`;
+        if (i === 0) tr.style.fontWeight = "700";   // winner
+        if (i === 3) tr.style.opacity = "0.85";     // 4th
+        tbody.appendChild(tr);
     });
+
+    endMenu.style.display = "block";
+
+    // label helper
+    const setContinueLabel = (count) => {
+        continueBtn.textContent = isReady
+        ? `Uncontinue ${count}/4`
+        : `Continue ${count}/4`;
+    };
+
+    // toggle my ready state; server will rebroadcast counts
+    const toggleReadyState = () => {
+        isReady = !isReady;
+        socket.emit('toggleReadyState', roomCode, isReady);
+    };
+
+    // leave to join room
+    const handleBackClick = () => {
+        socket.emit('leaveRoom', roomCode);
+        cleanup();
+        endMenu.style.display = "none";
+        resolver && resolver('goBackToJoinRoomMenu');
+    };
+
+    // update counts/label from server
+    const onUpdateReadyState = (clientList) => {
+        const readyPlayersCount = clientList.filter(c => c.isReady).length;
+        setContinueLabel(readyPlayersCount);
+    };
+
+    // game started → clean up and resolve
+    const onGameStarted = () => {
+        cleanup();
+        endMenu.style.display = "none";
+        resolver && resolver("continue");
+    };
+
+    // cleanup all listeners bound in endMenu
+    function cleanup() {
+        continueBtn.removeEventListener("click", toggleReadyState);
+        backBtn.removeEventListener("click", handleBackClick);
+        socket.off('updateReadyState', onUpdateReadyState);
+        socket.off('gameStarted', onGameStarted);
+    }
+
+    // wire up
+    continueBtn.addEventListener("click", toggleReadyState);
+    backBtn.addEventListener("click", handleBackClick);
+    socket.on('updateReadyState', onUpdateReadyState);
+    socket.once('gameStarted', onGameStarted);
+
+    // initial label until first update arrives
+    setContinueLabel(0);
+
+    // resolve on start/leave
+    return new Promise((resolve) => { resolver = resolve; });
 }
+
 
 // Handles the lobbyMenu, which allows players in the same room to chat and ready up for the game, once all players are ready it will resolve socket
 async function lobbyMenu(socket, roomCode){
@@ -1459,32 +1495,7 @@ async function startGame(socket, roomCode){
     }
 }
 
-function renderResultsPanel(results) {
-    // expected: results = ["WinnerName", "SecondName", "ThirdName", "LoserName"]
-    const endMenu = document.getElementById("endMenu");
 
-    // hide play/pass/gameInfo/playerInfo
-    document.getElementById("play").style.display = "none";
-    document.getElementById("pass").style.display = "none";
-    document.getElementById("gameInfo").style.display = "none";
-
-    const playerInfoDivs = document.getElementsByClassName("playerInfo");
-    for (let div of playerInfoDivs) {
-        div.style.display = "none";
-    }
-
-    const tbody = endMenu.querySelector("#resultsTbody");
-    tbody.innerHTML = "";
-    results.forEach((name, i) => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `<td>${i + 1}</td><td>${name}</td>`;
-        if (i === 0) tr.style.fontWeight = "700";   // winner
-        if (i === 3) tr.style.opacity = "0.85";     // 4th
-        tbody.appendChild(tr);
-    });
-
-    endMenu.style.display = "block";
-}
 
 
 window.onload = async function() {
@@ -1509,19 +1520,26 @@ window.onload = async function() {
             }
         }
 
-        // Once code reaches here, it means 4 clients have readied up
-        const results = await startGame(joinedRoomSocket, roomCode, username);
+        while (true) {
+            // Once code reaches here, it means 4 clients have readied up
+            const results = await startGame(joinedRoomSocket, roomCode, username);
 
-        if(results){
             // 1) Render the results nicely in the end menu
             // display results, add the continue button here, if player continues, reload the lobbyMenu, and allow players to emit StartGame again
-            renderResultsPanel(results);
+            endMenuResolve = await endMenu(joinedRoomSocket, roomCode, results);
             
-            //socket.emit("continueGame", roomCode); 
+            if (endMenuResolve === "continue") {
+                // 👇 This repeats the exact line again:
+                // const results = await startGame(joinedRoomSocket, roomCode, username);
+                // (i.e., loop back to BEFORE that const line)
+                continue;
+            }
 
-            console.log(results);
+            if (endMenuResolve === "goBackToJoinRoomMenu") {
+                // break to room-selection loop
+                break;
+            }
         }
-        
     }
 };
 
