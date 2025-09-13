@@ -564,8 +564,8 @@ export default class Player{
     async playCard(gameDeck, serverLastValidHand, playersFinished, roomCode, socket){
         var playButton = document.getElementById("play"); //set player class to active if its their turn
         var passButton = document.getElementById("pass");
-        var placeCardAudio = new Audio("audio/flipcard.mp3");
-        var passAudio = new Audio("audio/pass.mp3");
+        var placeCardAudio = new Audio("src/audio/flipcard.mp3");
+        var passAudio = new Audio("src/audio/pass.mp3");
         var self = this; //assign player to self
         var hand = []; //hand array holds selected cards
         var cardValidate;

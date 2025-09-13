@@ -155,14 +155,47 @@ async function sortPlayerHandAfterTurn(socket, roomCode, actorIdx) {
     });
 }
 
+// Shuffle sounds
+const shuffleSounds = [
+  new Howl({ src: ["src/audio/shuffle_01.wav"], volume: 0.9 }),
+  new Howl({ src: ["src/audio/shuffle_02.wav"], volume: 0.9 }),
+  new Howl({ src: ["src/audio/shuffle_03.wav"], volume: 0.9 }),
+  new Howl({ src: ["src/audio/shuffle_04.wav"], volume: 0.9 })
+];
 
-// Purpose is to wait for shuffle animation finish before resolving promise back to dealCards function
+// Shuffle sounds
+const shuffleSounds2 = [
+  new Howl({ src: ["src/audio/shuffle2_01.wav"], volume: 0.9 }),
+  new Howl({ src: ["src/audio/shuffle2_02.wav"], volume: 0.9 }),
+  new Howl({ src: ["src/audio/shuffle2_03.wav"], volume: 0.9 }),
+  new Howl({ src: ["src/audio/shuffle2_04.wav"], volume: 0.9 })
+];
+
+const shuffleSounds3 = [
+  new Howl({ src: ["src/audio/shuffle3_01.wav"], volume: 0.9 }),
+  new Howl({ src: ["src/audio/shuffle3_02.wav"], volume: 0.9 }),
+  new Howl({ src: ["src/audio/shuffle3_03.wav"], volume: 0.9 }),
+  new Howl({ src: ["src/audio/shuffle3_04.wav"], volume: 0.9 })
+];
+
+const shuffleSets = [shuffleSounds, shuffleSounds2, shuffleSounds3];
+
+
 // Wait for deck.shuffle() animations to truly finish using the deck's own queue
 function shuffleDeckAsync(deck, times, delayBetweenShuffles, serverDeck) {
   return new Promise((resolve) => {
+    // select shuffleSound set to use
+    const activeShuffleSet = shuffleSets[Math.floor(Math.random() * shuffleSets.length)];
+
     for (let i = 0; i < times; i++) {
       // Each call to shuffle() is queued and only starts after the previous finishes
       deck.shuffle(); // this completes (calls next) when all card animations are done
+
+      // play the ith shuffle sound
+      deck.queue((next) => {
+        activeShuffleSet[i % activeShuffleSet.length].play();
+        next();
+      });
 
       // Optional gap between shuffle runs (except after the last one)
       if (delayBetweenShuffles > 0 && i < times - 1) {
@@ -183,12 +216,26 @@ function shuffleDeckAsync(deck, times, delayBetweenShuffles, serverDeck) {
 
     // After the last queued action, resolve
     deck.queue((next) => {
-      next();
       resolve('shuffleComplete');
+      next();
     });
   });
 }
 
+// play card sounds
+const dealCardSounds = [
+  new Howl({ src: ["src/audio/dealcard_01.wav"], volume: 0.9 }),
+  new Howl({ src: ["src/audio/dealcard_02.wav"], volume: 0.9 }),
+  new Howl({ src: ["src/audio/dealcard_03.wav"], volume: 0.9 })
+];
+
+let soundIndex = 0;
+
+function dealNextCardSounds() {
+  dealCardSounds[soundIndex].play();  // play current sound
+  console.log("Sound index" + soundIndex);
+  soundIndex = (soundIndex + 1) % dealCardSounds.length; // move to next (wrap around)
+}
 
 // Animate and assign cards to GameModule.players
 async function dealCards(serverDeck, socket, roomCode, hostId) {
@@ -202,7 +249,7 @@ async function dealCards(serverDeck, socket, roomCode, hostId) {
 
     // Build deck (server-supplied), mount to DOM, and shuffle/arrange
     let deck = Deck(false, serverDeck);
-    const shufflePromise = shuffleDeckAsync(deck, 3, 20, serverDeck);
+    const shufflePromise = shuffleDeckAsync(deck, 4, 35, serverDeck);
     deck.mount(document.getElementById('gameDeck'));
 
     // First recipient is the host seat (clientId matches hostId)
@@ -228,12 +275,13 @@ async function dealCards(serverDeck, socket, roomCode, hostId) {
 
       const animationPromises = [];
       const perSeatCount = [0, 0, 0, 0]; // how many dealt to each seat
+      
 
       deck.cards.reverse().forEach((card, dealIndex) => {
         card.setSide('back'); // make sure everything starts back-side before any animation
         const seat  = playerIndex;               // lock seat for this card
         const k     = perSeatCount[seat];        // 0..12 within THIS seat
-        const delay = 50 + dealIndex * 28;       // same rhythm as before
+        const delay = 150 + dealIndex * 100;       // delay after a card is animated
         const off   = SEAT_BASE[seat] + k * STRIDE;
 
         const mountDiv = targetDivs[seat];
@@ -251,6 +299,7 @@ async function dealCards(serverDeck, socket, roomCode, hostId) {
               onComplete: function () {
                 // mount first, then set side to avoid any flicker
                 card.mount(mountDiv);
+                dealNextCardSounds();
 
                 if (seat === localSeat) {
                     card.setSide('front');    // only your cards flip on arrival
@@ -860,7 +909,7 @@ const gameLoop = async (roomCode, socket) => {
             // If local client's turn then play local turn and update turn, lastvalidhand, and playedHand from server payload
             if(GameModule.players[GameModule.turn].clientId === GameModule.players[0].clientId) {
                 await localPlayerHand(socket, roomCode);
-                //TO DO set won round back to false after player has won round and has played their free turn
+                //set won round back to false after player has won round and has played their free turn
             } else {
                 // mirror move from other clients using their sent payload
                 await receivePlayerHand(socket, roomCode);
@@ -870,13 +919,10 @@ const gameLoop = async (roomCode, socket) => {
             //if player played a valid hand
             if(GameModule.playedHand >= 1 && GameModule.playedHand <= 5){
                 //GameModule.playedHistory.push(GameModule.lastHand); //push last valid hand into playedHistory array
-
-                console.log("WHOOPIE")
                 console.log("played hand debug: " + GameModule.playedHand);
 
                 // do a new function here input current turn, instead so theres only one animation per turn instead of all cards being sorted after each turn
                 //if player or ai play a valid hand, sort their cards
-                // WORKS UP TO HERE
 
                  // ---- check if game ended this tick ----
                 if (gameOver) {
@@ -886,15 +932,19 @@ const gameLoop = async (roomCode, socket) => {
 
                     // Get final data (playersFinished, losingPlayer)
                     const { playersFinished, losingPlayer } = await gameOverPromise;
+                    let finshedResults = playersFinished;
                     console.log(losingPlayer);
 
                     // Now it's safe to animate: all clients have acked the last hand,
-                    // and gameDeck includes those last cards.
+                    // and gameDeck includes those last cards, unmount finishedDeck after animations, and reset gameState
                     await finishGameAnimation(roomCode, socket, GameModule.gameDeck, GameModule.players, losingPlayer);
                     await finishedGame(socket);
                     GameModule.finishedDeck.unmount();
-                    console.log(playersFinished);
-                    return playersFinished;
+
+                    console.log(finshedResults);
+
+                    GameModule.reset()
+                    return finshedResults;
                 }
             }
             else if(GameModule.playedHand == 0){ //else if player passed

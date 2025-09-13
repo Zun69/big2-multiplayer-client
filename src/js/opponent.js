@@ -28,7 +28,7 @@ export default class Opponent extends Player {
     // Use positions[] to overwrite placeholders in self.cards,
     // flip them to front, animate to pile, then remove those indices.
     async playServerHand(gameDeck, turn, serverHand, positions, roomCode, socket) {
-      const placeCardAudio = new Audio("audio/flipcard.mp3");
+      const placeCardAudio = new Audio("src/audio/flipcard.mp3");
       const self = this;
 
       // (optional) tiny stagger
