@@ -47,7 +47,6 @@ const GameModule = (function() {
     let playedHand = 0; //stores returned hand length from playCard function
     let losingPlayer;
 
-    let myClientId = null;   // local socket id for this client
     let turnClientId = null; // whose turn it is (server-authoritative)
 
     // reset everything except points, wins, seconds, etc (next game)
@@ -69,7 +68,6 @@ const GameModule = (function() {
         lastValidHand = undefined; 
         losingPlayer = undefined;
         playedHand = 0;
-        myClientId = null;     
         turnClientId = null;   
     }
 
@@ -96,8 +94,7 @@ const GameModule = (function() {
         turn = undefined;
         lastValidHand = undefined;
         losingPlayer = undefined;
-        playedHand = 0;
-        myClientId = null;    
+        playedHand = 0;   
         turnClientId = null;   
     }
 
@@ -112,8 +109,7 @@ const GameModule = (function() {
         turn, // Expose turn
         lastValidHand, // Expose lastValidHand
         playedHand, // Expose playedHand
-        losingPlayer, // Expose losingPlayer
-        myClientId,    
+        losingPlayer, // Expose losingPlayer   
         turnClientId,  
         reset,
         resetAll,
@@ -178,7 +174,14 @@ const shuffleSounds3 = [
   new Howl({ src: ["src/audio/shuffle3_04.wav"], volume: 0.9 })
 ];
 
-const shuffleSets = [shuffleSounds, shuffleSounds2, shuffleSounds3];
+const shuffleSounds4 = [
+  new Howl({ src: ["src/audio/shuffle4_01.wav"], volume: 0.9 }),
+  new Howl({ src: ["src/audio/shuffle4_02.wav"], volume: 0.9 }),
+  new Howl({ src: ["src/audio/shuffle4_03.wav"], volume: 0.9 }),
+  new Howl({ src: ["src/audio/shuffle4_04.wav"], volume: 0.9 })
+];
+
+const shuffleSets = [shuffleSounds, shuffleSounds2, shuffleSounds3, shuffleSounds4];
 
 
 // Wait for deck.shuffle() animations to truly finish using the deck's own queue
@@ -225,11 +228,19 @@ function shuffleDeckAsync(deck, times, delayBetweenShuffles, serverDeck) {
 // play card sounds
 const dealCardSounds = [
   new Howl({ src: ["src/audio/dealcard_01.wav"], volume: 0.9 }),
-  new Howl({ src: ["src/audio/dealcard_02.wav"], volume: 0.9 }),
-  new Howl({ src: ["src/audio/dealcard_03.wav"], volume: 0.9 })
+  new Howl({ src: ["src/audio/dealcard_03.wav"], volume: 0.9 }),
+  new Howl({ src: ["src/audio/dealcard_02.wav"], volume: 0.9 })
 ];
 
+const finishCardSounds = [
+    new Howl({ src: ["src/audio/finishcard_01.wav"], volume: 0.9 }),
+    new Howl({ src: ["src/audio/finishcard_02.wav"], volume: 0.9 }),
+    new Howl({ src: ["src/audio/finishcard_03.wav"], volume: 0.9 }),
+    new Howl({ src: ["src/audio/finishcard_04.wav"], volume: 0.9 })
+]
+
 let soundIndex = 0;
+let finishSoundIndex = 0;
 
 function dealNextCardSounds() {
   dealCardSounds[soundIndex].play();  // play current sound
@@ -237,8 +248,14 @@ function dealNextCardSounds() {
   soundIndex = (soundIndex + 1) % dealCardSounds.length; // move to next (wrap around)
 }
 
+function dealNextFinishCardSounds() {
+  finishCardSounds[finishSoundIndex].play();  // play current sound
+  console.log("Sound index" + finishSoundIndex);
+  finishSoundIndex = (finishSoundIndex + 1) % finishCardSounds.length; // move to next (wrap around)
+}
+
 // Animate and assign cards to GameModule.players
-async function dealCards(serverDeck, socket, roomCode, hostId) {
+async function dealCards(serverDeck, socket, roomCode, firstDealClientId) {
   return new Promise(function (resolve) {
     // target divs for each seat (0: you, 1: left, 2: top, 3: right)
     const p1Div = document.getElementById('0');
@@ -252,10 +269,12 @@ async function dealCards(serverDeck, socket, roomCode, hostId) {
     const shufflePromise = shuffleDeckAsync(deck, 4, 35, serverDeck);
     deck.mount(document.getElementById('gameDeck'));
 
-    // First recipient is the host seat (clientId matches hostId)
+    // First recipient is the host seat (clientId matches firstDealClientId)
     let playerIndex = GameModule.players.findIndex(
-      p => Number(p.clientId) === Number(hostId)
+        p => Number(p.clientId) === Number(firstDealClientId)
     );
+
+    console.log("local player dealt to first: " + playerIndex);
 
     // Deterministic spacing (identical on all clients)
     const playersCount = GameModule.players.length || 4;
@@ -281,7 +300,7 @@ async function dealCards(serverDeck, socket, roomCode, hostId) {
         card.setSide('back'); // make sure everything starts back-side before any animation
         const seat  = playerIndex;               // lock seat for this card
         const k     = perSeatCount[seat];        // 0..12 within THIS seat
-        const delay = 150 + dealIndex * 100;       // delay after a card is animated
+        const delay = 150 + dealIndex * 70;       // delay after a card is animated
         const off   = SEAT_BASE[seat] + k * STRIDE;
 
         const mountDiv = targetDivs[seat];
@@ -463,6 +482,8 @@ async function localPlayerHand(socket, roomCode) {
     }
 }
 
+const passSound = new Howl({ src: ["src/audio/passcard.wav"], volume: 0.6 });
+
 function receivePlayerHand(socket, roomCode) {
   return new Promise((resolve) => {
     const cleanup = () => {
@@ -524,6 +545,9 @@ function receivePlayerHand(socket, roomCode) {
       GameModule.turn = GameModule.players.findIndex(p => p.clientId === payload.nextTurn);
       GameModule.lastValidHand = payload.lastValidHand;
 
+      // play pass sound on other client pass
+      passSound.play();
+
       const handler = () => {
         socket.off('allHandAckComplete', handler);
         onAllHandDone();
@@ -549,6 +573,9 @@ function receivePlayerHand(socket, roomCode) {
         const leaderServerSeat = payload.players.find(p => p.wonRound)?.id;
         const leaderLocalIdx = GameModule.players.findIndex(p => p.clientId === leaderServerSeat);
         GameModule.turn = leaderLocalIdx;
+
+        // play pass sound on other client pass
+        passSound.play();
 
         // ack barrier first
         const handler = async () => {
@@ -594,10 +621,12 @@ async function finishGameAnimation(roomCode, socket, gameDeck, players, losingPl
                             card.$el.style.zIndex = GameModule.finishedDeck.cards.length; //change z index of card to the length of finished deck
                             GameModule.finishedDeck.mount(finishedDeckDiv); //mount finishedDeck to div
                             card.mount(GameModule.finishedDeck.$el);  //mount card to the finishedDeck div
+                            //dealNextCardSounds();
+                            dealNextFinishCardSounds();
                             cardResolve(); //resolve, so next card can animate
                         }
                     });
-                }, 80);
+                }, 10);
             });
         }
 
@@ -621,10 +650,12 @@ async function finishGameAnimation(roomCode, socket, gameDeck, players, losingPl
                             losingCard.$el.style.zIndex = GameModule.finishedDeck.cards.length; //change z index of card to the length of finished deck
                             GameModule.finishedDeck.mount(finishedDeckDiv); //mount finishedDeck to div
                             losingCard.mount(GameModule.finishedDeck.$el);  //mount card to the finishedDeck div
+                            //dealNextCardSounds();
+                            dealNextFinishCardSounds();
                             losingCardResolve(); //resolve, so next card can animate
                         }
                     });
-                }, 80);
+                }, 10);
             });
         }
 
@@ -661,10 +692,11 @@ async function finishDeckAnimation(socket, roomCode) {
                     card.$el.style.zIndex = GameModule.finishedDeck.cards.length; // change z index of card to the length of finished deck
                     GameModule.finishedDeck.mount(finishedDeckDiv); // mount finishedDeck to div
                     card.mount(GameModule.finishedDeck.$el);  // mount card to the finishedDeck div
+                    dealNextCardSounds();
                     cardResolve(); // resolve, so next card can animate
                 }
             });
-            }, 10);
+            }, 100);
         });
     }
 
@@ -854,8 +886,10 @@ function waitForGameHasFinished(socket) {
 
 
 //Actual game loop, 1 loop represents a turn
-const gameLoop = async (roomCode, socket) => {
+const gameLoop = async (roomCode, socket, firstTurnClientId) => {
     console.log("reached here")
+    GameModule.turn = GameModule.players.findIndex(p => Number(p.clientId) === Number(firstTurnClientId));
+    
     // Empty the finished deck of all its cards, so it can store post round cards
     GameModule.finishedDeck.cards.forEach(function (card) {
         card.unmount();
@@ -866,9 +900,6 @@ const gameLoop = async (roomCode, socket) => {
     let sortResolve = await sortHands(socket, roomCode); 
 
     if(sortResolve === 'sortComplete'){
-        socket.emit('getFirstTurn', roomCode);
-
-        GameModule.turn = await getFirstTurn(socket);
         console.log("TURN IS: " + GameModule.turn);
 
         //let rotation = initialAnimateArrow(turn); //return initial Rotation so I can use it to animate arrow
@@ -1253,11 +1284,7 @@ async function lobbyMenu(socket, roomCode){
 
         // Extract usernames from clientList & create an array to hold usernames with (host) tag if applicable
         const usernames = clientList.map(client => {
-            if (client.isHost) {
-                return `${client.username} (host)`;
-            } else {
-                return client.username;
-            }
+            return client.username;
         });
         
         // Display usernames in a single line
@@ -1341,26 +1368,6 @@ async function lobbyMenu(socket, roomCode){
 
             // Update the button text
             readyButton.textContent = isReady ? `Unready up ${readyPlayersCount}/4` : `Ready up ${readyPlayersCount}/4`; // Update button text
-            
-            if (readyPlayersCount === 4) {
-                //if player is host enable start button
-                // Request to check if the client is the host of a room
-                socket.emit('checkHost', roomCode);
-            }
-        });
-
-        // When 4 players are ready and current client is the host, enable startGameButton
-        socket.on('hostStatus', ({ isHost, error }) => {
-            if (error) {
-                console.error(error);
-            } else {
-                if (isHost) {
-                    console.log('You are the host of the room.');
-                    
-                } else {
-                    console.log('You are not the host of the room.');
-                }
-            }
         });
 
         // Client performs clean up and resolves socket when host starts the game
@@ -1374,7 +1381,6 @@ async function lobbyMenu(socket, roomCode){
             socket.off('clientList', updateClientList);
             socket.off('updateReadyState');
             socket.off('receiveMessage');
-            socket.off('hostStatus');
             socket.off('gameStarted');
         
             // Hide the lobby menu and clear the interval
@@ -1402,7 +1408,6 @@ async function lobbyMenu(socket, roomCode){
             socket.off('clientList', updateClientList);
             socket.off('updateReadyState');
             socket.off('receiveMessage');
-            socket.off('hostStatus');
             socket.off('gameStarted');
 
             // Hide the lobby menu and clear the interval
@@ -1414,13 +1419,14 @@ async function lobbyMenu(socket, roomCode){
     });
 }
 
+// once all four clients toggle toggleReadyState, call startGameForRoom function on server and update local gamestate to match server generated one 
 async function startGame(socket, roomCode){
     //unhide buttons and gameInfo divs
     const playButton = document.getElementById("play");
     const passButton = document.getElementById("pass");
     const gameInfo = document.getElementById("gameInfo");
     const playerInfo = document.getElementsByClassName("playerInfo");
-    
+    let firstDealClientId;
     
     playButton.style.display = "block";
     passButton.style.display = "block";
@@ -1441,11 +1447,10 @@ async function startGame(socket, roomCode){
     startGame._busy = true;
 
     try {
-        // NEW: set my socket id directly (server doesn't emit clientSocketId)
+        // set my socket id directly (server doesn't emit clientSocketId)
         GameModule.players[0].socketId = socket.id;
-        GameModule.myClientId = socket.id;
 
-        // NEW: if you want to show names here, you can do it from prior lobby state
+        // Nshow names here from prior lobby state
         for (let i = 0; i < playerInfo.length; i++) {
             playerInfo[i].style.display = 'block';
         }
@@ -1476,24 +1481,19 @@ async function startGame(socket, roomCode){
             });
         });
 
-        const hostClientIdPromise = new Promise((resolve, reject) => {
-            // optional: fail fast if the event never arrives
-            const timeout = setTimeout(() => {
-                reject(new Error('Timed out waiting for hostClientId'));
-            }, 15000);
-
-            socket.once('hostClientId', (id) => {
-                clearTimeout(timeout);
-                resolve(id);
-            });
-        });
-
-        const hostId = await hostClientIdPromise; // hostClientId
-
         // Ensure seat-mapping is complete BEFORE we deal (dealCards uses clientId==0 to pick start seat)
         await playersSnapshotPromise;
 
-        // NEW: Wait for the server-provided 52-card "visual" deck for THIS client.
+        // Ask server who has first turn (3♦) and await the reply
+        const firstTurnClientId = await new Promise((resolve, reject) => {
+            const t = setTimeout(() => reject(new Error('firstTurnClientId timeout')), 8000);
+            socket.once('firstTurnClientId', (clientId) => {
+                clearTimeout(t);
+                resolve(clientId);
+            });
+        });
+
+        // Wait for the server-provided 52-card "visual" deck for THIS client.
         // We fully finish the dealing animation BEFORE starting gameLoop (prevents races).
         await new Promise((resolve, reject) => {
             // Optional safety timeout so we don't hang forever if nothing arrives
@@ -1502,7 +1502,7 @@ async function startGame(socket, roomCode){
                 reject(new Error('visualDealDeck timeout'));
             }, 15000); // 15s guard; adjust if you like
 
-            socket.once('visualDealDeck', async ({ cards, clientId }) => {
+            socket.once('visualDealDeck', async ({ cards, dealStartSeat }) => {
                 clearTimeout(t);
                 try {
                     // light validation avoids weird payloads breaking your animation
@@ -1511,15 +1511,12 @@ async function startGame(socket, roomCode){
                         return reject(new Error('Bad visualDealDeck payload'));
                     }
 
-                    // keep your local clientId; this is used by later emits like dealComplete
-                    if (GameModule.players[0] && GameModule.players[0].clientId == null) {
-                        GameModule.players[0].clientId = clientId;
-                    }
+                    firstDealClientId = dealStartSeat;
 
                     let reversedServerDeck = cards.reverse();
 
                     // run your existing dealing animation using the server-specified order
-                    await dealCards(reversedServerDeck, socket, roomCode, hostId);
+                    await dealCards(reversedServerDeck, socket, roomCode, firstDealClientId);
 
                     resolve();
                 } catch (err) {
@@ -1529,7 +1526,7 @@ async function startGame(socket, roomCode){
         });
 
         // Main game loop, returns array of usernames in finishing order
-        const results = await gameLoop(roomCode, socket);
+        const results = await gameLoop(roomCode, socket, firstTurnClientId);
         return results;
 
     } finally {

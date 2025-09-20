@@ -1,3 +1,26 @@
+// ---------------------------
+// Global sound setup
+// ---------------------------
+const playCardSounds = [
+  new Howl({ src: ["src/audio/playcard_03.wav"], volume: 0.9 }),
+  new Howl({ src: ["src/audio/playcard_02.wav"], volume: 0.9 }),
+  new Howl({ src: ["src/audio/playcard_03.wav"], volume: 0.9 }),
+  new Howl({ src: ["src/audio/playcard_04.wav"], volume: 0.9 })
+];
+
+const passSound = new Howl({ src: ["src/audio/passcard.wav"], volume: 0.9 });
+
+let lastSoundIndex = -1;
+
+function playRandomCardSound() {
+  let idx;
+  do {
+    idx = (Math.random() * playCardSounds.length) | 0;
+  } while (playCardSounds.length > 1 && idx === lastSoundIndex);
+  lastSoundIndex = idx;
+  playCardSounds[idx].play();
+}
+
 export default class Player{ 
     constructor(username, cards = []){ // Player object, which will contain name, cards, wonRound & finishedGame & pass status, point tally 
         this.username = username;
@@ -564,7 +587,6 @@ export default class Player{
     async playCard(gameDeck, serverLastValidHand, playersFinished, roomCode, socket){
         var playButton = document.getElementById("play"); //set player class to active if its their turn
         var passButton = document.getElementById("pass");
-        var placeCardAudio = new Audio("src/audio/flipcard.mp3");
         var passAudio = new Audio("src/audio/pass.mp3");
         var self = this; //assign player to self
         var hand = []; //hand array holds selected cards
@@ -698,11 +720,11 @@ export default class Player{
                                 onComplete: function () {
                                     if (cardIndex !== -1) {
                                         card.$el.style.zIndex = gameDeck.length; //make it equal gameDeck.length
+                                        playRandomCardSound();
                                         gameDeck.push(self.cards[cardIndex]); //insert player's card that matches cardId into game deck
                                         console.log("card inserted: " + self.cards[cardIndex].suit + self.cards[cardIndex].rank);
                                         cardsToRemove.unshift(self.cards[cardIndex].suit + " " + self.cards[cardIndex].rank); //add card index into cardsToRemove array, so I can remove all cards at same time after animations are finished
                                         console.log("Cards to remove: " + cardsToRemove);
-                                        placeCardAudio.play();
                                     }
                                     //card.mount(gameDeckDiv);
                                     cardResolve(); //only resolve promise when animation is complete
@@ -806,7 +828,7 @@ export default class Player{
                 console.log("Outcome Played Cards");
                 console.log(outcome);
 
-                passAudio.play(); 
+                passSound.play(); 
                 resolve(outcome); 
             }
 

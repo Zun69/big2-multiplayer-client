@@ -1,22 +1,26 @@
 import Player from "./player.js"
 
-//lookup table to identify a straight
-//keys are card ranks 
-const cardRankLookupTable = {
-  "3": 1,
-  "4": 2,
-  "5": 3,
-  "6": 4,
-  "7": 5,
-  "8": 6,
-  "9": 7,
-  "10": 8, 
-  "11": 9, //jack
-  "12": 10, //queen
-  "13": 11, //king
-  "1": 12, //ace
-  "2": 13 //two
-};
+// ---------------------------
+// Global sound setup
+// ---------------------------
+const playCardSounds = [
+  new Howl({ src: ["src/audio/playcard_01.wav"], volume: 0.9 }),
+  new Howl({ src: ["src/audio/playcard_02.wav"], volume: 0.9 }),
+  new Howl({ src: ["src/audio/playcard_03.wav"], volume: 0.9 }),
+];
+
+const passSound = new Howl({ src: ["src/audio/pass.mp3"], volume: 0.9 });
+
+let lastSoundIndex = -1;
+
+function playRandomCardSound() {
+  let idx;
+  do {
+    idx = (Math.random() * playCardSounds.length) | 0;
+  } while (playCardSounds.length > 1 && idx === lastSoundIndex);
+  lastSoundIndex = idx;
+  playCardSounds[idx].play();
+}
 
 export default class Opponent extends Player {
     constructor(cards = []) {
@@ -28,7 +32,6 @@ export default class Opponent extends Player {
     // Use positions[] to overwrite placeholders in self.cards,
     // flip them to front, animate to pile, then remove those indices.
     async playServerHand(gameDeck, turn, serverHand, positions, roomCode, socket) {
-      const placeCardAudio = new Audio("src/audio/flipcard.mp3");
       const self = this;
 
       // (optional) tiny stagger
@@ -62,8 +65,8 @@ export default class Opponent extends Player {
             y: Math.round(self.pileYBySeat[turn](gameDeck.length * 0.25)),
             onComplete: () => {
               card.$el.style.zIndex = gameDeck.length;
+              playRandomCardSound();
               gameDeck.push(card);
-              placeCardAudio.play();
               toRemoveIdx.push(idx);
               res();
             }
