@@ -128,22 +128,58 @@ export default class Player{
 
     sortingAnimation(playerNum, { rotateAfterTurn = false, duration = 200, stagger = 0 } = {}) {
         const promises = [];
+
         this.cards.forEach((card, i) => {
             promises.push(new Promise(resolve => {
-            card.animateTo({
-                delay: (stagger ? i * stagger : 0),
-                duration,
-                ease: 'linear',
-                rot: rotateAfterTurn ? 0 : this.sortingAnimationRotation(playerNum),
-                rotateSideways: this.sortingRotateSidewaysBoolean(playerNum), // always apply seat orientation
-                x: this.sortingAnimationX(i, playerNum),
-                y: this.sortingAnimationY(i, playerNum),
-                onComplete: () => { card.$el.style.zIndex = this.sortingAnimationZ(i, playerNum); resolve(); }
-            });
+                try {
+                    const targetX = this.sortingAnimationX(i, playerNum);
+                    const targetY = this.sortingAnimationY(i, playerNum);
+                    const targetRot = rotateAfterTurn ? 0 : this.sortingAnimationRotation(playerNum);
+                    const sideways = this.sortingRotateSidewaysBoolean(playerNum);
+
+                    // If the card is already in place (no movement & no rotation change), resolve immediately
+                    const samePos =
+                        Math.round(card.x) === Math.round(targetX) &&
+                        Math.round(card.y) === Math.round(targetY) &&
+                        card.rot === targetRot;
+
+                    if (samePos) {
+                        card.$el.style.zIndex = this.sortingAnimationZ(i, playerNum);
+                        resolve();
+                        return;
+                    }
+
+                    let finished = false;
+                    const finish = () => {
+                        if (finished) return;
+                        finished = true;
+                        card.$el.style.zIndex = this.sortingAnimationZ(i, playerNum);
+                        resolve();
+                    };
+
+                    card.animateTo({
+                        delay: (stagger ? i * stagger : 0),
+                        duration,
+                        ease: 'linear',
+                        rot: targetRot,
+                        rotateSideways: sideways,
+                        x: targetX,
+                        y: targetY,
+                        onComplete: finish
+                    });
+
+                    // Safety fallback in case onComplete never fires
+                    setTimeout(finish, duration + 100);
+                } catch (e) {
+                    console.warn('[sortingAnimation] error animating card', e);
+                    resolve();
+                }
             }));
         });
+
         return Promise.all(promises);
     }
+
 
     //return combo string based on hand array
     validateCombo(hand){
@@ -293,7 +329,7 @@ export default class Player{
     }
 
     //return true if played card || combo is valid, else return false
-    cardLogic(gameDeck, hand, serverLastValidHand, playersFinished){ 
+    cardLogic(gameDeck, hand, serverLastValidHand, playersFinished, isFirstMove){ 
         let deck = new Deck();
         deck.sort(); //sort in big 2 ascending order
         var cardMap = deck.cardHash();
@@ -310,15 +346,13 @@ export default class Player{
             case 1:
                 //if gamedeck is empty TO DO program it to detect after round has been won, pass in passTracker
                 if(gameDeck.length == 0){ 
-                    if(hand[0] == "0 3"){
+                    if(hand[0] == "0 3" && isFirstMove){
+                        console.log('first round 3 of diamonds validation true')
+                        console.log(isFirstMove);
                         return true;
                     }
                     //if player has won the previous hand, allow them to place any single card down 
                     else if(this.wonRound){ 
-                        return true;
-                    }
-                    //else if opponent/s have won already and game deck is empty
-                    else if(playersFinished.length > 0){
                         return true;
                     }
                     else {
@@ -345,14 +379,11 @@ export default class Player{
                 var splitCard2 = hand[1].split(' '); 
                 if(gameDeck.length == 0){
                     //if gamedeck is empty and hand contains a 3 of diamonds and another 3 card, return valid as its a valid double
-                    if(hand[0] == "0 3" && hand[1].includes("3")){
+                    if(hand[0] == "0 3" && splitCard2[1] == 3 && isFirstMove){
                         return true;
                     }
                     //else if player has won previous round and hand contains a valid double, return true 
                     else if(this.wonRound && splitCard1[1] == splitCard2[1]) { 
-                        return true;
-                    }
-                    else if(playersFinished.length > 0 && splitCard1[1] == splitCard2[1]){
                         return true;
                     }
                     else 
@@ -385,14 +416,11 @@ export default class Player{
 
                 if(gameDeck.length == 0){
                     //if gamedeck is empty and hand contains a 3 of diamonds and two other 3 cards, return valid as its a valid triple to start game with
-                    if(hand[0] == "0 3" && hand[1].includes("3") && hand[2].includes("3")){
+                    if(hand[0] == "0 3" && splitCard2[1] == 3 && splitCard3[1] == 3 && isFirstMove){
                         return true;
                     } 
                     //else if player has won previous round and hand contains a valid triple, return true
                     else if(this.wonRound && splitCard1[1] == splitCard2[1] && splitCard2[1] == splitCard3[1] && splitCard1[1] == splitCard3[1]) { 
-                        return true;
-                    }
-                    else if(playersFinished.length > 0 && splitCard1[1] == splitCard2[1] && splitCard2[1] == splitCard3[1] && splitCard1[1] == splitCard3[1]){
                         return true;
                     }
                     else {
@@ -496,18 +524,26 @@ export default class Player{
                         //TO DO clean this whole section up (make all if statements a function)
                         //if last played combo is straight (all variants) and hand combo is higher straight(done) or flush(done), or full house(done), or fok(done), or straight flush(done)
                         if(L === "straight" && C === "straight" && cardMap.get(hand[4]) > cardMap.get(lastPlayedHand[4]) 
-                        || L == "straight" && C == "flush"
-                        || L == "straight" && C == "fullHouse" 
-                        || L == "straight" && C == "fok" 
-                        || L == "straight" && C == "straightFlush"){
+                            || L === "straight" && (C == "straightFlush" || C === "flush" || C === "fullHouse" || C === "fok")
+                        ){
                             return true;
                         }
-                        //if last played combo is flush and hand contains higher flush (flush with same suit and higher top card(done), flush with different suit and higher top card(done)), 
-                        //or full house(done), or fok(done), or straight flush(done)
-                        if(L == "flush" && C == "flush" && cardMap.get(hand[4]) > cardMap.get(lastPlayedHand[4])
-                        || L == "flush" && C == "fullHouse"
-                        || L == "flush" && C == "fok" 
-                        || L == "flush" && C == "straightFlush"){
+                        // if both combos are flushes, compare by suit and if its the same suit use ranks
+                        if (L === "flush" && C === "flush") {
+                            const [s1] = hand[4].split(" ");
+                            const [s2] = lastPlayedHand[4].split(" ");
+
+                            // compare suit
+                            if (+s1 > +s2) return true;
+                            if (+s1 < +s2) return false;
+
+                            // same suit → compare highest rank using cardMap
+                            if (cardMap.get(hand[4]) > cardMap.get(lastPlayedHand[4])) return true;
+
+                            return false;
+                        }
+                        // if fh, fok, straightFlush selected on a flush return true
+                        if (L === "flush" && (C === "fullHouse" || C === "fok" || C === "straightFlush")) {
                             return true;
                         }
                         //if last played hand is fullhouse and playedhand is higher fullhouse(done), or fok(done), or straight flush(done)
@@ -584,21 +620,30 @@ export default class Player{
     ];
 
     //function takes care of selecting cards and inserting cards into hand, sorting the hand, validating move and inserting the hand onto the game deck, and returning promise
-    async playCard(gameDeck, serverLastValidHand, playersFinished, roomCode, socket){
+    async playCard(gameDeck, serverLastValidHand, playersFinished, roomCode, socket, isFirstMove){
         var playButton = document.getElementById("play"); //set player class to active if its their turn
         var passButton = document.getElementById("pass");
-        var passAudio = new Audio("src/audio/pass.mp3");
+        var clearButton = document.getElementById("clear");
         var self = this; //assign player to self
         var hand = []; //hand array holds selected cards
         var cardValidate;
         playButton.disabled = true; //disable play button because no card is selected which is an invalid move
-        
+        clearButton.disabled = true;
+
         //disable pass button because you can't pass on first move or on a wonRound
         if(gameDeck.length == 0) {
             passButton.disabled = true; 
         } else {
             passButton.disabled = false;
         }
+
+        // clean up any old handlers before arming again ---
+        if (this._playHandler) playButton.removeEventListener("click", this._playHandler);
+        if (this._passHandler) passButton.removeEventListener("click", this._passHandler);
+        if (this._clearHandler) passButton.removeEventListener("click", this._clearHandler);
+        this._playHandler = null;
+        this._passHandler = null;
+        this._clearHandler = null;
 
         //function when player clicks on card
         var cardClickListener = function(card) {
@@ -638,7 +683,7 @@ export default class Player{
             }
 
             self.sortHandArray(hand);
-            cardValidate = self.cardLogic(gameDeck, hand, serverLastValidHand, playersFinished); //return valid if played card meets requirements
+            cardValidate = self.cardLogic(gameDeck, hand, serverLastValidHand, playersFinished, isFirstMove); //return valid if played card meets requirements
             console.log("card validation: " + cardValidate);
 
             //if current hand is validated, enable play button, else disable it because its an invalid move
@@ -646,6 +691,12 @@ export default class Player{
                 playButton.disabled = false;
             } else {
                 playButton.disabled = true;
+            }
+
+            if(hand.length > 0) {
+                clearButton.disabled = false;
+            } else {
+                clearButton.disabled = true;
             }
         };
 
@@ -670,6 +721,12 @@ export default class Player{
             let i = 0; //for staggered placing down animations (remove if i dont like it)
 
             var playClickListener = async function() {
+                // clean up immediately
+                playButton.removeEventListener("click", self._playHandler);
+                passButton.removeEventListener("click", self._passHandler);
+                clearButton.removeEventListener("click", self._clearHandler);
+                self._playHandler = self._passHandler = self._clearHandler = null;
+
                 // convert hand containing cardId's to format that server can read to validate the hand
                 const serverValidateCards = hand.map(id => {
                     const [suitStr, rankStr] = id.split(" ");
@@ -719,9 +776,9 @@ export default class Player{
                                 
                                 onComplete: function () {
                                     if (cardIndex !== -1) {
+                                        gameDeck.push(self.cards[cardIndex]); //insert player's card that matches cardId into game deck
                                         card.$el.style.zIndex = gameDeck.length; //make it equal gameDeck.length
                                         playRandomCardSound();
-                                        gameDeck.push(self.cards[cardIndex]); //insert player's card that matches cardId into game deck
                                         console.log("card inserted: " + self.cards[cardIndex].suit + self.cards[cardIndex].rank);
                                         cardsToRemove.unshift(self.cards[cardIndex].suit + " " + self.cards[cardIndex].rank); //add card index into cardsToRemove array, so I can remove all cards at same time after animations are finished
                                         console.log("Cards to remove: " + cardsToRemove);
@@ -785,12 +842,15 @@ export default class Player{
                     console.log("Cheater detected")
                 }
             }
-
-            //call playClickListener function when playButton is clicked, the function will remove event listener after its called
-            playButton.addEventListener("click", playClickListener, { once: true });
                 
             //when player passes
             var passClickListener = async function() {
+                // clean up immediately
+                playButton.removeEventListener("click", self._playHandler);
+                passButton.removeEventListener("click", self._passHandler);
+                clearButton.removeEventListener("click", self._clearHandler);
+                self._playHandler = self._passHandler = self._clearHandler = null;
+                
                 //remove click listeners on all cards 
                 self.cards.forEach(function(card) {
                     card.$el.removeEventListener('click', card.clickListener);
@@ -832,8 +892,39 @@ export default class Player{
                 resolve(outcome); 
             }
 
+            var clearClickListener = async function() {
+                clearButton.disabled = true; // lock immediately
+                playButton.disabled = true; // disable play button as it stays active if cleared hand was valid
+
+                //animate cards in selected hand back to original position
+                hand.forEach(function (cardId) {
+                    let card = self.findCardObject(cardId); 
+                    card.animateTo({
+                        delay: 0, // wait 1 second + i * 2 ms
+                        duration: 100,
+                        ease: 'linear',
+                        rot: 0,
+                        x: card.x,
+                        y: card.y + 10,
+                    })  
+                });
+
+                //remove all selected cards, play pass audio and resolve 0
+                hand.length = 0
+                
+                // dont remove listener here, remove clear listener if player plays cards or passes
+            }
+
+            // --- store refs so we can clean up next turn ---
+            this._playHandler = playClickListener;
+            this._passHandler = passClickListener;
+            this._clearHandler = clearClickListener;
+
+            //call playClickListener function when playButton is clicked, the function will remove event listener after its called
+            playButton.addEventListener("click", this._playHandler, { once: true });
             //call passClickListener function when passButton is clicked, the function will remove event listener after its called
-            passButton.addEventListener("click", passClickListener, { once: true });
+            passButton.addEventListener("click", this._passHandler, { once: true });
+            clearButton.addEventListener("click", this._clearHandler);
         });
 
         return myPromise;

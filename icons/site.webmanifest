@@ -1,19 +1,27 @@
 {
-    "name": "",
-    "short_name": "",
+    "name": "Big 2 Multiplayer",
+    "short_name": "Big2",
+    "description": "Play Big 2 with friends in full-screen landscape mode.",
+    "start_url": "../index.html",
+    "display": "standalone",
+    "orientation": "landscape",
+    "background_color": "#0b8511",
+    "theme_color": "#0b8511",
     "icons": [
         {
-            "src": "/android-chrome-192x192.png",
-            "sizes": "192x192",
-            "type": "image/png"
+        "src": "apple-touch-icon.png",
+        "sizes": "180x180",
+        "type": "image/png"
         },
         {
-            "src": "/android-chrome-512x512.png",
-            "sizes": "512x512",
-            "type": "image/png"
+        "src": "favicon-192.png",
+        "sizes": "192x192",
+        "type": "image/png"
+        },
+        {
+        "src": "favicon-512.png",
+        "sizes": "512x512",
+        "type": "image/png"
         }
-    ],
-    "theme_color": "#ffffff",
-    "background_color": "#ffffff",
-    "display": "standalone"
+    ]
 }

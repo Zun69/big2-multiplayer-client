@@ -5,9 +5,9 @@
         <meta http-equiv="X-UA-Compatible" content="IE=edge">
         <title></title>
         <meta name="description" content="">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="msapplication-TileColor" content="#da532c">
-        <meta name="theme-color" content="#ffffff">
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+        <meta name="viewport" content="viewport-fit=cover, user-scalable=no, width=device-width, initial-scale=1, maximum-scale=1">
         <!--favicons generated from https://realfavicongenerator.net/-->
         <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
         <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png"> 
@@ -23,6 +23,7 @@
         <script src="src/js/deck.js"></script>
         <script src="https://cdn.socket.io/4.4.1/socket.io.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/howler@2.2.4/dist/howler.min.js"></script>
+        
     </head>
     <body>
         <div id ="container">
@@ -39,6 +40,7 @@
                 <div class = "playerInfo" id="p2Info"></div>
                 <div class = "playerInfo" id="p3Info"></div>
                 <button class="button" id="pass">Pass</button>
+                <button class="button" id="clear">Clear</button>
                 <button class="button" id="play">Play</button>
                 <div id="loginMenu">
                     <h2>Big 2 Multiplayer</h2>
@@ -81,9 +83,23 @@
                             <button id="backToJoinRoomButton2">Go Back</button>
                             <button id="continueButton">Continue</button>
                     </div>
-                
+                </div>
+
+                <!-- Pause / Disconnect overlay -->
+                <div id="pauseOverlay" class="pause-overlay pause-hidden" role="dialog" aria-modal="true" aria-labelledby="pauseTitle">
+                    <div class="pause-card">
+                        <h2 id="pauseTitle" class="pause-title">Game paused</h2>
+                        <p id="pauseMsg" class="pause-sub">Waiting for player to reconnect…</p>
+                        <div id="pauseCountdown" class="pause-count">Auto action in 30s</div>
+
+                        <div class="pause-people">
+                        <strong>Players in room</strong>
+                        <ul id="pauseClientList" class="pause-list"></ul>
+                        </div>
+                    </div>
                 </div>
             </div>
+        </div>
         <script src="" async defer></script>
     </body>
 </html>

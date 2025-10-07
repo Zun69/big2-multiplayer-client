@@ -50,7 +50,7 @@ export default class Opponent extends Player {
         card.rank = real.rank;
         card.suit = real.suit;
         card.setRankSuit(card.rank, card.suit);
-        card.setSide('front');
+        card.setSide('back');
 
         // 1) promote to common layer so we share the same coords
         //self.promoteCardToLayer(card);
@@ -64,9 +64,10 @@ export default class Opponent extends Player {
             x: Math.round(self.pileXBySeat[turn]((i * 15) - (gameDeck.length * 0.25))),
             y: Math.round(self.pileYBySeat[turn](gameDeck.length * 0.25)),
             onComplete: () => {
+              card.setSide('front');
+              gameDeck.push(card);
               card.$el.style.zIndex = gameDeck.length;
               playRandomCardSound();
-              gameDeck.push(card);
               toRemoveIdx.push(idx);
               res();
             }
