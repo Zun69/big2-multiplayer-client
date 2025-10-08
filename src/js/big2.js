@@ -123,12 +123,42 @@ function gmHasCancel() {
   return !!(GameModule._currentLoopToken && GameModule._currentLoopToken.canceled);
 }
 
+let shadowSeeded = false;
+
+// seeds fake sort order for opponent placeholders once at game start
+function seedShadowKeysOnce() {
+    if (shadowSeeded) return;
+    shadowSeeded = true;
+
+    GameModule.players.forEach((player, seatIndex) => {
+        if (seatIndex !== 0) {
+        const N = player.cards.length;
+        player.cards.forEach((card, i) => {
+            card.meta = card.meta || {};
+            // reverse keys so the first sort will produce a different order
+            card.meta.shadowKey = (N - 1 - i);
+        });
+        }
+    });
+}
+
 // Sorts everybody's cards and plays the animation, resolves when animations finish
 async function sortHands(socket, roomCode){ 
-    GameModule.players[0].sortHand();
-    
-    // Animate the current player's cards into position
-    await GameModule.players[0].sortingAnimation(0);
+    // 1) sort everyone locally (keeps DOM/z-order consistent)
+    GameModule.players.forEach((p, i) => {
+        if (i === 0) {
+            p.sortHand(); // local player normal sort
+        } else if (typeof p.initialSort === "function") {
+            p.initialSort(i); // sort opponent's initial hands
+        } else {
+            p.sortHand(); // fallback
+        }
+    });
+
+    // 2) animate all seats in parallel
+    await Promise.all(
+        GameModule.players.map((p, i) => p.sortingAnimation(i))
+    );
 
     return new Promise(resolve => {
         socket.once('allSortingComplete', () => {
@@ -253,7 +283,8 @@ const dealCardSounds = [
   new Howl({ src: ["src/audio/dealcard_06.wav"], volume: 0.9 }),
   new Howl({ src: ["src/audio/dealcard_07.wav"], volume: 0.9 }),
   new Howl({ src: ["src/audio/dealcard_08.wav"], volume: 0.9 }),
-  new Howl({ src: ["src/audio/dealcard_09.wav"], volume: 0.9 })
+  new Howl({ src: ["src/audio/dealcard_09.wav"], volume: 0.9 }),
+  new Howl({ src: ["src/audio/dealcard_10.wav"], volume: 0.9 })
 ];
 
 const finishCardSounds = [
@@ -342,10 +373,12 @@ async function dealCards(serverDeck, socket, roomCode, firstDealClientId) {
               duration: 50,
               ease: 'linear',
               rot, x, y,
+              onStart: function () {
+                dealNextCardSounds();
+              },
               onComplete: function () {
                 // mount first, then set side to avoid any flicker
                 card.mount(mountDiv);
-                dealNextCardSounds();
 
                 if (seat === localSeat) {
                     card.setSide('front');    // only your cards flip on arrival
@@ -952,6 +985,7 @@ const gameLoop = async (roomCode, socket, firstTurnClientId, onResume) => {
         console.log("Resuming game, keeping existing GameModule.turn:", GameModule.turn);
     }
 
+    seedShadowKeysOnce();
     //sort all player's cards, it will resolve once all 4 clients sorting animations are complete
     let sortResolve = await sortHands(socket, roomCode); 
 

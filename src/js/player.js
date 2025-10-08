@@ -3,9 +3,11 @@
 // ---------------------------
 const playCardSounds = [
   new Howl({ src: ["src/audio/playcard_03.wav"], volume: 0.9 }),
-  new Howl({ src: ["src/audio/playcard_02.wav"], volume: 0.9 }),
-  new Howl({ src: ["src/audio/playcard_03.wav"], volume: 0.9 }),
-  new Howl({ src: ["src/audio/playcard_04.wav"], volume: 0.9 })
+  new Howl({ src: ["src/audio/playcard_04.wav"], volume: 0.9 }),
+  new Howl({ src: ["src/audio/playcard_07.wav"], volume: 0.9 }),
+  new Howl({ src: ["src/audio/playcard_08.wav"], volume: 0.9 }),
+  new Howl({ src: ["src/audio/playcard_09.wav"], volume: 0.9 }),
+  new Howl({ src: ["src/audio/playcard_10.wav"], volume: 0.9 })
 ];
 
 const passSound = new Howl({ src: ["src/audio/passcard.wav"], volume: 0.9 });
@@ -13,12 +15,14 @@ const passSound = new Howl({ src: ["src/audio/passcard.wav"], volume: 0.9 });
 let lastSoundIndex = -1;
 
 function playRandomCardSound() {
-  let idx;
-  do {
-    idx = (Math.random() * playCardSounds.length) | 0;
-  } while (playCardSounds.length > 1 && idx === lastSoundIndex);
-  lastSoundIndex = idx;
-  playCardSounds[idx].play();
+    let idx;
+    do {
+        idx = (Math.random() * playCardSounds.length) | 0;
+    } while (playCardSounds.length > 1 && idx === lastSoundIndex);
+    lastSoundIndex = idx;
+    console.log("playCard sound")
+    console.log(idx);
+    playCardSounds[idx].play();
 }
 
 export default class Player{ 
@@ -773,12 +777,14 @@ export default class Player{
                                 rot: 0,
                                 x: Math.round(self.pileXBySeat[0]((i * 15) - (gameDeck.length * 0.25))),
                                 y: Math.round(self.pileYBySeat[0](gameDeck.length * 0.25)),
+                                onStart: function() {
+                                    gameDeck.push(self.cards[cardIndex]); //insert player's card that matches cardId into game deck
+                                    card.$el.style.zIndex = gameDeck.length; //make it equal gameDeck.length
+                                    playRandomCardSound();
+                                },
                                 
                                 onComplete: function () {
                                     if (cardIndex !== -1) {
-                                        gameDeck.push(self.cards[cardIndex]); //insert player's card that matches cardId into game deck
-                                        card.$el.style.zIndex = gameDeck.length; //make it equal gameDeck.length
-                                        playRandomCardSound();
                                         console.log("card inserted: " + self.cards[cardIndex].suit + self.cards[cardIndex].rank);
                                         cardsToRemove.unshift(self.cards[cardIndex].suit + " " + self.cards[cardIndex].rank); //add card index into cardsToRemove array, so I can remove all cards at same time after animations are finished
                                         console.log("Cards to remove: " + cardsToRemove);

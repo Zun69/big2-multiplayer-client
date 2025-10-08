@@ -4,12 +4,13 @@ import Player from "./player.js"
 // Global sound setup
 // ---------------------------
 const playCardSounds = [
-  new Howl({ src: ["src/audio/playcard_01.wav"], volume: 0.9 }),
-  new Howl({ src: ["src/audio/playcard_02.wav"], volume: 0.9 }),
   new Howl({ src: ["src/audio/playcard_03.wav"], volume: 0.9 }),
+  new Howl({ src: ["src/audio/playcard_04.wav"], volume: 0.9 }),
+  new Howl({ src: ["src/audio/playcard_07.wav"], volume: 0.9 }),
+  new Howl({ src: ["src/audio/playcard_08.wav"], volume: 0.9 }),
+  new Howl({ src: ["src/audio/playcard_09.wav"], volume: 0.9 }),
+  new Howl({ src: ["src/audio/playcard_10.wav"], volume: 0.9 })
 ];
-
-const passSound = new Howl({ src: ["src/audio/pass.mp3"], volume: 0.9 });
 
 let lastSoundIndex = -1;
 
@@ -28,6 +29,23 @@ export default class Opponent extends Player {
       this.isOpponent = true;
     }
     
+    // Run only for the very first layout after dealing
+    initialSort(seatIndex) {
+      // make sure each card has a unique shadowKey
+      this.cards.forEach((c, i) => {
+        c.meta = c.meta || {};
+        if (typeof c.meta.shadowKey !== 'number') c.meta.shadowKey = i;
+      });
+
+      // seats that fan left or up should reverse on first sort to create movement
+      const cfg = this.SEAT?.[seatIndex] || this.SEAT?.[0] || { stepX: 0, stepY: 0 };
+      const invert = (cfg.stepX < 0) || (cfg.stepY < 0);
+
+      this.cards.sort((a, b) => {
+        const ak = a.meta.shadowKey, bk = b.meta.shadowKey;
+        return invert ? (bk - ak) : (ak - bk);
+      });
+    }
 
     // Use positions[] to overwrite placeholders in self.cards,
     // flip them to front, animate to pile, then remove those indices.
@@ -51,6 +69,7 @@ export default class Opponent extends Player {
         card.suit = real.suit;
         card.setRankSuit(card.rank, card.suit);
         card.setSide('back');
+        
 
         // 1) promote to common layer so we share the same coords
         //self.promoteCardToLayer(card);
@@ -63,11 +82,13 @@ export default class Opponent extends Player {
             rot: 0,
             x: Math.round(self.pileXBySeat[turn]((i * 15) - (gameDeck.length * 0.25))),
             y: Math.round(self.pileYBySeat[turn](gameDeck.length * 0.25)),
-            onComplete: () => {
-              card.setSide('front');
+            onStart: () => {
               gameDeck.push(card);
               card.$el.style.zIndex = gameDeck.length;
               playRandomCardSound();
+            },
+            onComplete: () => {
+              card.setSide('front');
               toRemoveIdx.push(idx);
               res();
             }
