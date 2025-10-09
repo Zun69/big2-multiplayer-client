@@ -417,13 +417,16 @@ async function dealCards(serverDeck, socket, roomCode, firstDealClientId) {
 function displayTurn(turn) {
     const playerInfo = document.getElementsByClassName("playerInfo");
 
-    // Remove border from all playerInfo elements
     for (let i = 0; i < playerInfo.length; i++) {
-        playerInfo[i].style.border = "none";
+        // Reset all player boxes to their default color
+        playerInfo[i].style.backgroundColor = "white";
+        playerInfo[i].style.color = ""; // reset text color
     }
 
-    // Set border for the player whose turn it is
-    playerInfo[turn].style.border = "2px solid black"; // Adjust the border style as needed
+    // Highlight the current player's box with a contrasting fill
+    const active = playerInfo[turn];
+    active.style.backgroundColor = "#ffcc33"; // gold works beautifully on green felt
+    active.style.color = "#000"; // ensure text stays readable
 }
 
 async function localPlayerHand(socket, roomCode) {

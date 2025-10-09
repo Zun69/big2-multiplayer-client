@@ -25,6 +25,12 @@ function playRandomCardSound() {
     playCardSounds[idx].play();
 }
 
+const INITIAL_HAND_SIZE = 13;
+const INITIAL_HALF = (INITIAL_HAND_SIZE - 1) / 2;
+
+function pivotXForSeat(cfg){ return cfg.baseX + INITIAL_HALF * cfg.stepX; }
+function pivotYForSeat(cfg){ return cfg.baseY + INITIAL_HALF * cfg.stepY; }
+
 export default class Player{ 
     constructor(username, cards = []){ // Player object, which will contain name, cards, wonRound & finishedGame & pass status, point tally 
         this.username = username;
@@ -111,15 +117,29 @@ export default class Player{
 
     sortingAnimationX(i, playerNum) {
         const cfg = this.SEAT[playerNum] || this.SEAT[0];
-        return cfg.baseX + i * cfg.stepX;
+        const N   = Math.max(1, this.cards.length);
+        const mid = (N - 1) / 2;
+
+        // fixed pivot per seat; cards spread around it
+        const pivotX = pivotXForSeat(cfg);
+        return pivotX + (i - mid) * cfg.stepX;
     }
+
     sortingAnimationY(i, playerNum) {
         const cfg = this.SEAT[playerNum] || this.SEAT[0];
-        return cfg.baseY + i * cfg.stepY;
+        const N   = Math.max(1, this.cards.length);
+        const mid = (N - 1) / 2;
+
+        const pivotY = pivotYForSeat(cfg);
+        return pivotY + (i - mid) * cfg.stepY;
     }
+
     sortingAnimationZ(i, playerNum) {
         const cfg = this.SEAT[playerNum] || this.SEAT[0];
-        return cfg.zBase + i * 4;
+        const N = this.cards.length;
+        const invert = (cfg.stepX < 0) || (cfg.stepY < 0);
+        const rank = invert ? (N - 1 - i) : i; // “near” edge on top for left/up fans
+        return cfg.zBase + rank * 4;
     }
     sortingAnimationRotation(playerNum) {
         const cfg = this.SEAT[playerNum] || this.SEAT[0];
