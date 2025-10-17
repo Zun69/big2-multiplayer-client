@@ -31,15 +31,17 @@ export default class Opponent extends Player {
     
     // Run only for the very first layout after dealing
     initialSort(seatIndex) {
-      // make sure each card has a unique shadowKey
       this.cards.forEach((c, i) => {
         c.meta = c.meta || {};
         if (typeof c.meta.shadowKey !== 'number') c.meta.shadowKey = i;
       });
 
-      // seats that fan left or up should reverse on first sort to create movement
-      const cfg = this.SEAT?.[seatIndex] || this.SEAT?.[0] || { stepX: 0, stepY: 0 };
-      const invert = (cfg.stepX < 0) || (cfg.stepY < 0);
+      // Old: only invert if fan is left/up
+      // const cfg = this.SEAT?.[seatIndex] || this.SEAT?.[0] || { stepX: 0, stepY: 0 };
+      // const invert = (cfg.stepX < 0) || (cfg.stepY < 0);
+
+      // always invert for opponents on first layout
+      const invert = true;
 
       this.cards.sort((a, b) => {
         const ak = a.meta.shadowKey, bk = b.meta.shadowKey;

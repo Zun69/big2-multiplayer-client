@@ -135,8 +135,7 @@ function seedShadowKeysOnce() {
         const N = player.cards.length;
         player.cards.forEach((card, i) => {
             card.meta = card.meta || {};
-            // reverse keys so the first sort will produce a different order
-            card.meta.shadowKey = (N - 1 - i);
+            card.meta.shadowKey = i;
         });
         }
     });
