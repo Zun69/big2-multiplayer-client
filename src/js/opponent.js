@@ -36,10 +36,6 @@ export default class Opponent extends Player {
         if (typeof c.meta.shadowKey !== 'number') c.meta.shadowKey = i;
       });
 
-      // Old: only invert if fan is left/up
-      // const cfg = this.SEAT?.[seatIndex] || this.SEAT?.[0] || { stepX: 0, stepY: 0 };
-      // const invert = (cfg.stepX < 0) || (cfg.stepY < 0);
-
       // always invert for opponents on first layout
       const invert = true;
 
@@ -72,9 +68,19 @@ export default class Opponent extends Player {
         card.setRankSuit(card.rank, card.suit);
         card.setSide('back');
         
+        // get middle card index to center pairs, triples, and combos correctly
+        const { gx, gy } = self.getGameCenterXY();
+        const mid = (serverHand.length - 1) / 2;
 
-        // 1) promote to common layer so we share the same coords
-        //self.promoteCardToLayer(card);
+        // simple, global target for everyone
+        const offX = ((i - mid) * 15) - (gameDeck.length * 0.25);
+        const offY = (gameDeck.length * 0.25);
+
+        const { cx, cy } = self.getCardCenterInGC(card.$el);
+
+        // delta needed to land the card’s center on the anchor:
+        const dx = (gx - cx);
+        const dy = (gy - cy);
 
         const p = new Promise(res => {
           card.animateTo({
@@ -82,8 +88,8 @@ export default class Opponent extends Player {
             duration: 150,
             ease: 'linear',
             rot: 0,
-            x: Math.round(self.pileXBySeat[turn]((i * 15) - (gameDeck.length * 0.25))),
-            y: Math.round(self.pileYBySeat[turn](gameDeck.length * 0.25)),
+            x: Math.round(card.x + dx + offX),
+            y: Math.round(card.y + dy - offY),
             onStart: () => {
               gameDeck.push(card);
               card.$el.style.zIndex = gameDeck.length;

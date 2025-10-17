@@ -217,6 +217,14 @@ export default class Player{
         var splitCard5 = hand[4].split(' ');
         var straight = true;
 
+        // Build a quick rank histogram for the 5 cards
+        const ranks = [splitCard1[1], splitCard2[1], splitCard3[1], splitCard4[1], splitCard5[1]];
+        const rankCounts = ranks.reduce((m, r) => { m[r] = (m[r] || 0) + 1; return m; }, {});
+        const isFourKind = Object.values(rankCounts).includes(4);
+
+        // 3♦ detection (adjust if your card id format differs)
+        const has3d = hand.includes("0 3");
+
         //start from 5th card in hand
         for(let i = 3; i >= 0; i--){
             var currentRank = +hand[i].split(' ')[1]; // Convert to number
@@ -304,18 +312,18 @@ export default class Player{
             || splitCard1[1] == splitCard2[1] && splitCard3[1] == splitCard4[1] && splitCard3[1] == splitCard5[1] && splitCard4[1] == splitCard5[1])){
             return "fullHouse";
         } 
-        //(four of a kind + kicker) if 3 of diamonds and first 4 cards are the same, then last card doesnt matter
-        if(hand[0] == "0 3" && splitCard1[1] == splitCard2[1] && splitCard2[1] == splitCard3[1] && splitCard3[1] == splitCard4[1]){ 
+        // four of a kind + 3♦ kicker (first-turn unlock)
+        if (has3d && isFourKind) {
             return "fok3d";
         }
-        //if prev round won and fok
-        if(this.wonRound && splitCard1[1] == splitCard2[1] && splitCard2[1] == splitCard3[1] && splitCard3[1] == splitCard4[1]
-            || this.wonRound && splitCard2[1] == splitCard3[1] && splitCard3[1] == splitCard4[1] && splitCard4[1] == splitCard5[1]){
+
+        // won previous round + four of a kind
+        if (this.wonRound && isFourKind) {
             return "fokWonRound";
         }
-        //if hand contains fok
-        if(splitCard1[1] == splitCard2[1] && splitCard2[1] == splitCard3[1] && splitCard3[1] == splitCard4[1] 
-            || splitCard2[1] == splitCard3[1] && splitCard3[1] == splitCard4[1] && splitCard4[1] == splitCard5[1]){
+
+        // generic four of a kind
+        if (isFourKind) {
             return "fok";
         }
         else{
@@ -624,24 +632,24 @@ export default class Player{
         });
     }
 
-    PILE_BASE_X = 20;   // your pile center X
-    PILE_BASE_Y = -10;   // ^
+    // get center of gameContainer
+    getGameCenterXY() {
+        const gc = document.getElementById('gameContainer');
+        const r = gc.getBoundingClientRect();
+        // card.x / card.y are already in this space, so origin is gc’s top-left:
+        return { gx: r.width / 2, gy: r.height / 2 };
+    }
 
-    // seat 0 (you) & seat 3 (right) fan right; seat 1 (left) & seat 2 (top) fan left
-    pileXBySeat = [
-        (off) => this.PILE_BASE_X + off, // seat 0
-        (off) => (this.PILE_BASE_X - 20.5) + off, // seat 1
-        (off) => (this.PILE_BASE_X - 8) + off, // seat 2
-        (off) => (this.PILE_BASE_X - 19) + off, // seat 3
-    ];
-
-    // seat 0 (you) & seat 3 (right) fan right; seat 1 (left) & seat 2 (top) fan left
-    pileYBySeat = [
-        (off) => this.PILE_BASE_Y - off, // seat 0
-        (off) => (this.PILE_BASE_Y - 1) - off, // seat 1
-        (off) => (this.PILE_BASE_Y + 3) - off, // seat 2
-        (off) => (this.PILE_BASE_Y) - off, // seat 3
-    ];
+    // get center of card/s being played to correctly animate it to center of gameContainer
+    getCardCenterInGC(cardEl) {
+        const gc = document.getElementById('gameContainer');
+        const gcR = gc.getBoundingClientRect();
+        const cr  = cardEl.getBoundingClientRect();
+        return {
+            cx: (cr.left - gcR.left) + cr.width  / 2,
+            cy: (cr.top  - gcR.top ) + cr.height / 2,
+        };
+    }
 
     //function takes care of selecting cards and inserting cards into hand, sorting the hand, validating move and inserting the hand onto the game deck, and returning promise
     async playCard(gameDeck, serverLastValidHand, playersFinished, roomCode, socket, isFirstMove){
@@ -776,17 +784,29 @@ export default class Player{
                 console.log("Outcome Played Cards");
                 console.log(outcome);
 
+                
+
                 if(outcome.payload.verdict === "validated"){
-                    let rotationOffset = Math.random() * 7 + -7; // Calculate a new rotation offset for each card
-                    console.log("ROTATIONAL OFFSET: " + rotationOffset)
+                    // get middle card index to center pairs, triples, and combos correctly
+                    const { gx, gy } = self.getGameCenterXY();
+                    const n = hand.length;
+                    const mid = (n - 1) / 2;
 
                     hand.forEach(cardId => {
                         //return index of player's card that matches a cardId in hand array
                         let cardIndex = self.cards.findIndex(card => card.suit + " " + card.rank == cardId);
                         let card = self.findCardObject(cardId); //return card object using cardId to search
 
-                        // 1) promote to common layer so we share the same coords
-                        //self.promoteCardToLayer(card);
+                        // simple, global target for everyone
+                        // set x coord as center of middle card
+                        const offX = ((i - mid) * 15) - (gameDeck.length * 0.25);
+                        const offY = (gameDeck.length * 0.25);
+
+                        const { cx, cy } = self.getCardCenterInGC(card.$el);
+
+                        // delta needed to land the card’s center on the anchor:
+                        const dx = (gx - cx);
+                        const dy = (gy - cy);
 
                         //animate card object to gameDeck position (//can use turn to slightly stagger the cards like uno on ios)
                         let p1Promise = new Promise((cardResolve) => {
@@ -795,8 +815,8 @@ export default class Player{
                                 duration: 150,
                                 ease: 'linear',
                                 rot: 0,
-                                x: Math.round(self.pileXBySeat[0]((i * 15) - (gameDeck.length * 0.25))),
-                                y: Math.round(self.pileYBySeat[0](gameDeck.length * 0.25)),
+                                x: Math.round(card.x + dx + offX),
+                                y: Math.round(card.y + dy - offY),
                                 onStart: function() {
                                     gameDeck.push(self.cards[cardIndex]); //insert player's card that matches cardId into game deck
                                     card.$el.style.zIndex = gameDeck.length; //make it equal gameDeck.length
