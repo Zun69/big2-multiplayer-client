@@ -1,5 +1,8 @@
 'use strict';
 
+// Tweakable card stack spacing (default 0.25 px per index)
+const STACK_INTERVAL = 0.15; 
+
 var Deck = (function () {
   'use strict';
 
@@ -159,7 +162,7 @@ var Deck = (function () {
     // calculate rank/suit, etc..
     var rank = i % 13 + 1;
     var suit = i / 13 | 0;
-    var z = (52 - i) / 4;
+    var z = (52 - i) * STACK_INTERVAL;
 
     // create elements
     var $el = createElement('div');
@@ -503,7 +506,7 @@ var Deck = (function () {
       var $el = _card2.$el;
 
       _card2.sort = function (i, len, cb, reverse) {
-        var z = i / 4;
+        var z = i * STACK_INTERVAL;
         var delay = i * 10;
 
         _card2.animateTo({
@@ -606,7 +609,7 @@ var Deck = (function () {
 
       _card3.shuffle = function (cb) {
         var i = _card3.pos;
-        var z = i / 4;
+        var z = i * STACK_INTERVAL;
         var delay = i * 2;
 
         _card3.animateTo({
@@ -711,7 +714,7 @@ var Deck = (function () {
 
       _card5.intro = function (i, cb) {
         var delay = 500 + i * 10;
-        var z = i / 4;
+        var z = i * STACK_INTERVAL;
 
         $el.style[transform] = translate(-z + 'px', '-250px');
         $el.style.opacity = 0;
@@ -767,7 +770,7 @@ var Deck = (function () {
       var $el = _card6.$el;
 
       _card6.fan = function (i, len, cb) {
-        var z = i / 4;
+        var z = i * STACK_INTERVAL;
         var delay = i * 10;
         var rot = i / (len - 1) * 260 - 130;
 
@@ -871,7 +874,7 @@ var Deck = (function () {
 
       _card8.copyDeck = function (cb) {
         var i = _card8.pos;
-        var z = i / 4;
+        var z = i * STACK_INTERVAL;
         var delay = i * 2;
 
         _card8.animateTo({

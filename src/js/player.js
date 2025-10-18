@@ -796,11 +796,15 @@ export default class Player{
                         //return index of player's card that matches a cardId in hand array
                         let cardIndex = self.cards.findIndex(card => card.suit + " " + card.rank == cardId);
                         let card = self.findCardObject(cardId); //return card object using cardId to search
+                        let stackInterval = 0.25;
+
+                        let rotationOffset = Math.random() * 5 + -5; // Calculate a new rotation offset for each card
+                        console.log("ROTATIONAL OFFSET: " + rotationOffset)
 
                         // simple, global target for everyone
                         // set x coord as center of middle card
-                        const offX = ((i - mid) * 15) - (gameDeck.length * 0.25);
-                        const offY = (gameDeck.length * 0.25);
+                        const offX = ((i - mid) * 15) - (gameDeck.length * stackInterval);
+                        const offY = (gameDeck.length * stackInterval);
 
                         const { cx, cy } = self.getCardCenterInGC(card.$el);
 
@@ -814,7 +818,7 @@ export default class Player{
                                 delay: i * 30, // wait 1 second + i * 2 ms
                                 duration: 150,
                                 ease: 'linear',
-                                rot: 0,
+                                rot: rotationOffset,
                                 x: Math.round(card.x + dx + offX),
                                 y: Math.round(card.y + dy - offY),
                                 onStart: function() {

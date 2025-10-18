@@ -293,7 +293,6 @@ const finishCardSounds = [
     new Howl({ src: ["src/audio/finishcard_04.wav"], volume: 0.9 })
 ]
 
-let soundIndex = 0;
 let finishSoundIndex = 0;
 
 function dealNextCardSounds() {
@@ -669,86 +668,50 @@ function receivePlayerHand(socket, roomCode) {
   });
 }
 
+// Helpers (keep near the top of big2.js if you don’t already have equivalents)
+function _getGCMeta() {
+    const gc = document.getElementById('gameContainer');
+    if (!gc) throw new Error('#gameContainer not found');
+    const rect = gc.getBoundingClientRect();
+    return { el: gc, rect };
+}
 
-async function finishGameAnimation(roomCode, socket, gameDeck, players, losingPlayer){
-    return new Promise(async function (resolve, reject) {
-        let finishedDeckDiv = document.getElementById("finishedDeck");
-
-        // Find player who came last
-        const lastPlacePlayer = GameModule.players.find(p => p.username === losingPlayer);
-
-        for (let i = 0; i < gameDeck.length; i++) {
-            //loop through all game deck cards
-            let card = gameDeck[i];
-            card.setSide('back');
-            
-            //wait until each card is finished animating
-            await new Promise((cardResolve) => {
-                setTimeout(function () {
-                    card.animateTo({
-                        delay: 0,
-                        duration: 80,
-                        ease: 'linear',
-                        rot: 0,
-                        x: 225 - GameModule.finishedDeck.length * 0.25, //stagger the cards when they pile up, imitates original deck styling
-                        y: -130 - GameModule.finishedDeck.length * 0.25,
-                        onComplete: function () {
-                            GameModule.finishedDeck.push(card); //push gameDeck card into finshedDeck
-                            card.$el.style.zIndex = GameModule.finishedDeck.length; //change z index of card to the length of finished deck
-                            card.mount(finishedDeckDiv);  //mount card to the finishedDeck div
-                            dealNextFinishCardSounds();
-                            cardResolve(); //resolve, so next card can animate
-                        }
-                    });
-                }, 20);
-            });
-        }
-
-        //loop through losing player's cards
-        for (let i = 0; i < lastPlacePlayer.numberOfCards; i++){
-            let losingCard = lastPlacePlayer.cards[i];
-            losingCard.setSide('back');
-            
-            //wait until each card is finished animating
-            await new Promise((losingCardResolve) => {
-                setTimeout(function () {
-                    losingCard.animateTo({
-                        delay: 0,
-                        duration: 80,
-                        ease: 'linear',
-                        rot: 0,
-                        x: 225 - GameModule.finishedDeck.length * 0.25, //stagger the cards when they pile up, imitates original deck styling
-                        y: -130 - GameModule.finishedDeck.length * 0.25,
-                        onComplete: function () {
-                            GameModule.finishedDeck.push(losingCard); //push gameDeck card into finshedDeck
-                            losingCard.$el.style.zIndex = GameModule.finishedDeck.length; //change z index of card to the length of finished deck
-                            losingCard.mount(finishedDeckDiv);  //mount card to the finishedDeck div
-                            dealNextFinishCardSounds();
-                            losingCardResolve(); //resolve, so next card can animate
-                        }
-                    });
-                }, 20);
-            });
-        }
-
-        await sleep(200); // delay 200ms after last card is placed into finishedDeck
-
-        socket.emit('finishGameAnimation', roomCode);
-        
-        // All card animations are complete, mount finishedDeck to finish deck div and return resolve
-        resolve();
-    });
+function _cardCenterInGC(cardEl, meta) {
+    const cr = cardEl.getBoundingClientRect();
+    return {
+        cx: (cr.left - meta.rect.left) + cr.width  / 2,
+        cy: (cr.top  - meta.rect.top ) + cr.height / 2,
+    };
 }
 
 // after round ends, adds all played cards into finished deck and animates them as well
 async function finishDeckAnimation(socket, roomCode) {
-    let finishedDeckDiv = document.getElementById("finishedDeck");
+    // ---- anchor config: % within gameContainer ----
+    const PCT_LEFT  = 0.75;     
+    const PCT_TOP   = 0.35;     
+    const STACK_DRIFT = 0.15;   // same subtle stagger as your original
+    
+    // compute once per run
+    const meta = _getGCMeta();
+    const anchorX = meta.rect.width  * PCT_LEFT;
+    const anchorY = meta.rect.height * PCT_TOP;
 
     // keep animating until gameDeck is empty
     while (GameModule.gameDeck.length > 0) {
         // loop through all game deck cards (consume one at a time)
         let card = GameModule.gameDeck.shift();
         card.setSide('back');
+
+        // measure this card’s current visual center (relative to GC)
+        const { cx, cy } = _cardCenterInGC(card.$el, meta);
+
+        // delta to land the card’s center exactly on the anchor
+        const dx = anchorX - cx;
+        const dy = anchorY - cy;
+
+        // keep your original stagger look using finishedDeck length
+        const offX = -(GameModule.finishedDeck.length * STACK_DRIFT);
+        const offY =  (GameModule.finishedDeck.length * STACK_DRIFT);
                 
         // wait until each card is finished animating
         await new Promise((cardResolve) => {
@@ -758,12 +721,14 @@ async function finishDeckAnimation(socket, roomCode) {
                 duration: 50,
                 ease: 'linear',
                 rot: 0,
-                x: 225 - GameModule.finishedDeck.length * 0.25, // stagger the cards when they pile up, imitates original deck styling
-                y: -130 - GameModule.finishedDeck.length * 0.25,
-                onComplete: function () {
+                x: Math.round(card.x + dx + offX),
+                y: Math.round(card.y + dy - offY),
+                onStart: () => {
                     GameModule.finishedDeck.push(card); // push gameDeck card into finishedDeck
-                    card.$el.style.zIndex = GameModule.finishedDeck.length; // change z index of card to the length of finished deck
-                    card.mount(finishedDeckDiv); // mount card to the finishedDeck div
+                    // keep z stacking consistent as the pile grows
+                    card.$el.style.zIndex = String(GameModule.finishedDeck.length + 1);
+                },
+                onComplete: function () {
                     dealNextCardSounds();
                     cardResolve(); // resolve, so next card can animate
                 }
@@ -778,6 +743,110 @@ async function finishDeckAnimation(socket, roomCode) {
     // wait for all clients to finish
     await new Promise((resolve) => {
         socket.once('finishDeckAnimationComplete', resolve);
+    });
+}
+
+async function finishGameAnimation(roomCode, socket, gameDeck, players, losingPlayer){
+    return new Promise(async function (resolve, reject) {
+        // ---- anchor config: % within gameContainer ----
+        const PCT_LEFT  = 0.75;     
+        const PCT_TOP   = 0.35;     
+        const STACK_DRIFT = 0.15;   // same subtle stagger as your original
+        
+        // compute once per run
+        const meta = _getGCMeta();
+        const anchorX = meta.rect.width  * PCT_LEFT;
+        const anchorY = meta.rect.height * PCT_TOP;
+
+        // Find player who came last
+        const lastPlacePlayer = GameModule.players.find(p => p.username === losingPlayer);
+
+        for (let i = 0; i < gameDeck.length; i++) {
+            //loop through all game deck cards
+            let card = gameDeck[i];
+            card.setSide('back');
+
+            // measure this card’s current visual center (relative to GC)
+            const { cx, cy } = _cardCenterInGC(card.$el, meta);
+
+            // delta to land the card’s center exactly on the anchor
+            const dx = anchorX - cx;
+            const dy = anchorY - cy;
+
+            // keep your original stagger look using finishedDeck length
+            const offX = -(GameModule.finishedDeck.length * STACK_DRIFT);
+            const offY =  (GameModule.finishedDeck.length * STACK_DRIFT);
+            
+            //wait until each card is finished animating
+            await new Promise((cardResolve) => {
+                setTimeout(function () {
+                    card.animateTo({
+                        delay: 0,
+                        duration: 80,
+                        ease: 'linear',
+                        rot: 0,
+                        x: Math.round(card.x + dx + offX),
+                        y: Math.round(card.y + dy - offY),
+                        onStart: () => {
+                            GameModule.finishedDeck.push(card); // push gameDeck card into finishedDeck
+                            // keep z stacking consistent as the pile grows
+                            card.$el.style.zIndex = String(GameModule.finishedDeck.length + 1);
+                        },
+                        onComplete: function () {
+                            dealNextFinishCardSounds();
+                            cardResolve(); //resolve, so next card can animate
+                        }
+                    });
+                }, 20);
+            });
+        }
+
+        //loop through losing player's cards
+        for (let i = 0; i < lastPlacePlayer.numberOfCards; i++){
+            let losingCard = lastPlacePlayer.cards[i];
+            losingCard.setSide('back');
+
+            // measure this card’s current visual center (relative to GC)
+            const { cx, cy } = _cardCenterInGC(losingCard.$el, meta);
+
+            // delta to land the card’s center exactly on the anchor
+            const dx = anchorX - cx;
+            const dy = anchorY - cy;
+
+            // keep your original stagger look using finishedDeck length
+            const offX = -(GameModule.finishedDeck.length * STACK_DRIFT);
+            const offY =  (GameModule.finishedDeck.length * STACK_DRIFT);
+            
+            //wait until each card is finished animating
+            await new Promise(() => {
+                setTimeout(function () {
+                    losingCard.animateTo({
+                        delay: 0,
+                        duration: 80,
+                        ease: 'linear',
+                        rot: 0,
+                        x: Math.round(losingCard.x + dx + offX),
+                        y: Math.round(losingCard.y + dy - offY),
+                        onStart: () => {
+                            GameModule.finishedDeck.push(losingCard); // push gameDeck card into finishedDeck
+                            // keep z stacking consistent as the pile grows
+                            losingCard.$el.style.zIndex = String(GameModule.finishedDeck.length + 1);
+                        },
+                        onComplete: function () {
+                            dealNextFinishCardSounds();
+                            cardResolve(); //resolve, so next card can animate
+                        }
+                    });
+                }, 20);
+            });
+        }
+
+        await sleep(200); // delay 200ms after last card is placed into finishedDeck
+
+        socket.emit('finishGameAnimation', roomCode);
+        
+        // All card animations are complete, mount finishedDeck to finish deck div and return resolve
+        resolve();
     });
 }
 
@@ -2077,8 +2146,8 @@ function setupPauseModal(socket, roomCode){
                     duration: 0,
                     ease: 'linear',
                     rot: 0,
-                    x: 225 - i * 0.25,
-                    y: -130 - i * 0.25,
+                    x: 225 - i * 0.15,
+                    y: -130 - i * 0.15,
                     z: GameModule.finishedDeck.length,
                 });
 
@@ -2105,7 +2174,7 @@ function setupPauseModal(socket, roomCode){
             const PILE_BASE_Y = -67;
 
             // center each row like playCard’s tiny centering n*0.25
-            const rowCenterNudge = roundHandLength * 0.25;
+            const rowCenterNudge = roundHandLength * 0.15;
 
             gameDeck.forEach((c, i) => {
                 const card = Deck.Card(i);

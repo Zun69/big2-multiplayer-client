@@ -67,14 +67,18 @@ export default class Opponent extends Player {
         card.suit = real.suit;
         card.setRankSuit(card.rank, card.suit);
         card.setSide('back');
+
+        let rotationOffset = Math.random() * 5 + -5; // Calculate a new rotation offset for each card
+        console.log("ROTATIONAL OFFSET: " + rotationOffset)
         
         // get middle card index to center pairs, triples, and combos correctly
         const { gx, gy } = self.getGameCenterXY();
         const mid = (serverHand.length - 1) / 2;
+        let stackInterval = 0.25;
 
         // simple, global target for everyone
-        const offX = ((i - mid) * 15) - (gameDeck.length * 0.25);
-        const offY = (gameDeck.length * 0.25);
+        const offX = ((i - mid) * 15) - (gameDeck.length * stackInterval);
+        const offY = (gameDeck.length * stackInterval);
 
         const { cx, cy } = self.getCardCenterInGC(card.$el);
 
@@ -87,7 +91,7 @@ export default class Opponent extends Player {
             delay: i * 50,
             duration: 150,
             ease: 'linear',
-            rot: 0,
+            rot: rotationOffset,
             x: Math.round(card.x + dx + offX),
             y: Math.round(card.y + dy - offY),
             onStart: () => {
