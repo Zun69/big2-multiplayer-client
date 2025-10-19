@@ -42,6 +42,7 @@ const GameModule = (function() {
     let player3 = new Opponent();
     let player4 = new Opponent();
     let _currentLoopToken = null;
+    let deckInstance = null;
 
     // GameModule properties
     let players = [player1, player2, player3, player4];
@@ -83,6 +84,31 @@ const GameModule = (function() {
         GameModule.playedHand = 0;
         GameModule.turnClientId = null;   
         GameModule.isFirstMove = null;
+
+        // automatically unmount deck when resetting
+        unmountDeck();
+    }
+
+    // -------------------------------------------------
+    // deck lifecycle helpers
+    // -------------------------------------------------
+    function setDeck(d) {
+        deckInstance = d;
+    }
+
+    function getDeck() {
+        return deckInstance;
+    }
+
+    function unmountDeck() {
+        if (deckInstance) {
+            try {
+                deckInstance.unmount();
+            } catch (e) {
+                console.warn("GameModule: deck unmount failed", e);
+            }
+            deckInstance = null;
+        }
     }
 
     //return GameModule properties
@@ -100,6 +126,9 @@ const GameModule = (function() {
         turnClientId,
         isFirstMove,
         _currentLoopToken,
+        get deck() { return getDeck(); },
+        set deck(d) { setDeck(d); },
+        unmountDeck,
         reset,
     };
 })();
@@ -272,7 +301,7 @@ function shuffleDeckAsync(deck, times, delayBetweenShuffles, serverDeck) {
   });
 }
 
-// play card sounds
+// deal card sounds
 const dealCardSounds = [
   new Howl({ src: ["src/audio/dealcard_01.wav"], volume: 0.9 }),
   new Howl({ src: ["src/audio/dealcard_02.wav"], volume: 0.9 }),
@@ -310,6 +339,46 @@ function dealNextFinishCardSounds() {
   finishSoundIndex = (finishSoundIndex + 1) % finishCardSounds.length; // move to next (wrap around)
 }
 
+function gcToLocal(xGC, yGC, parentEl) {
+    const gc = document.getElementById('gameContainer');
+    const gcRect = gc.getBoundingClientRect();
+    const pRect  = parentEl.getBoundingClientRect();
+    // translate GC-relative pixels → parent-relative pixels
+    return {
+        x: Math.round(xGC - (pRect.left - gcRect.left)),
+        y: Math.round(yGC - (pRect.top  - gcRect.top)),
+    };
+}
+
+
+// ---- Dealing layout (percent-of-container, no seat divs) ----
+const DEAL_ANCHORS = [
+    // seat 0 (bottom; fan along X →)
+    { leftPct: 0.50, topPct: 0.85, axis: 'x', dir: +1, rot: 0 },
+    // seat 1 (left; fan down ↓)
+    { leftPct: 0.06, topPct: 0.50, axis: 'y', dir: +1, rot: 90 },
+    // seat 2 (top; fan along X ←)
+    { leftPct: 0.50, topPct: 0.1, axis: 'x', dir: -1, rot: 0 },
+    // seat 3 (right; fan up ↑)
+    { leftPct: 0.952, topPct: 0.50, axis: 'y', dir: -1, rot: 90 },
+];
+
+// Build pose functions (off → x,y) directly in gameContainer space
+function buildGCPosesFromPercents(anchors, stridePx, baseBias = [0,10,20,30]) {
+    const gc = document.getElementById('gameContainer');
+    const r  = gc.getBoundingClientRect();
+
+    return anchors.map((cfg, seat) => {
+        const anchorX = r.width  * cfg.leftPct;
+        const anchorY = r.height * cfg.topPct;
+        return (off) => {
+        const x = (cfg.axis === 'x') ? (anchorX + cfg.dir * off) : anchorX;
+        const y = (cfg.axis === 'y') ? (anchorY + cfg.dir * off) : anchorY;
+        return { rot: cfg.rot, x: Math.round(x), y: Math.round(y) };
+        };
+    });
+}
+
 // Animate and assign cards to GameModule.players
 async function dealCards(serverDeck, socket, roomCode, firstDealClientId) {
   return new Promise(function (resolve) {
@@ -322,6 +391,7 @@ async function dealCards(serverDeck, socket, roomCode, firstDealClientId) {
 
     // Build deck (server-supplied), mount to DOM, and shuffle/arrange
     let deck = Deck(false, serverDeck);
+    GameModule.deck = deck; // store globally
     const shufflePromise = shuffleDeckAsync(deck, 4, 35, serverDeck);
     deck.mount(document.getElementById('gameDeck'));
 
@@ -338,12 +408,7 @@ async function dealCards(serverDeck, socket, roomCode, firstDealClientId) {
     const SEAT_BASE = [0, 10, 20, 30];     // fixed bias per local seat (no host-dependent bias)
 
     // Pose builders per seat
-    const poseBySeat = [
-      (off) => ({ rot: 0,  x: -212 + off, y:  230, }),  // seat 0 (you)
-      (off) => ({ rot: 90, x: -425,       y: -250 + off,  }), // seat 1 (left)
-      (off) => ({ rot: 0,  x:  281 - off, y: -250,       }), // seat 2 (top)
-      (off) => ({ rot: 90, x:  440,       y:  272 - off, }), // seat 3 (right)
-    ];
+    const poseBySeat = buildGCPosesFromPercents(DEAL_ANCHORS);
 
     shufflePromise.then(function (value) {
       if (value !== "shuffleComplete") return;
@@ -351,16 +416,20 @@ async function dealCards(serverDeck, socket, roomCode, firstDealClientId) {
       const animationPromises = [];
       const perSeatCount = [0, 0, 0, 0]; // how many dealt to each seat
       
-
       deck.cards.reverse().forEach((card, dealIndex) => {
         card.setSide('back'); // make sure everything starts back-side before any animation
         const seat  = playerIndex;               // lock seat for this card
         const k     = perSeatCount[seat];        // 0..12 within THIS seat
         const delay = 150 + dealIndex * 60;       // delay after a card is animated
-        const off   = SEAT_BASE[seat] + k * STRIDE;
+        const totalCards = 13; // fixed for Big 2, or compute dynamically
+        const mid = (totalCards - 1) / 2;
+        const off = SEAT_BASE[seat] + (k - mid) * STRIDE;
 
-        const mountDiv = targetDivs[seat];
-        const { rot, x, y } = poseBySeat[seat](off);
+        const { rot, x: xGC, y: yGC } = poseBySeat[seat](off);
+
+        // compute coords for the card’s *current* parent (deck is mounted in #gameDeck)
+        const deckParent = card.$el.parentElement || document.getElementById('gameDeck');
+        const { x: xLocal, y: yLocal } = gcToLocal(xGC, yGC, deckParent);
 
         const localSeat = 0; // you
 
@@ -370,13 +439,15 @@ async function dealCards(serverDeck, socket, roomCode, firstDealClientId) {
               delay: 0,
               duration: 50,
               ease: 'linear',
-              rot, x, y,
+              rot,
+              x: xLocal,
+              y: yLocal,
               onStart: function () {
                 dealNextCardSounds();
               },
               onComplete: function () {
                 // mount first, then set side to avoid any flicker
-                card.mount(mountDiv);
+                //card.mount(mountDiv);
 
                 if (seat === localSeat) {
                     card.setSide('front');    // only your cards flip on arrival
@@ -402,7 +473,7 @@ async function dealCards(serverDeck, socket, roomCode, firstDealClientId) {
       });
 
       Promise.all(animationPromises).then(() => {
-        deck.unmount();
+        //deck.unmount();
         socket.emit('dealComplete', roomCode, GameModule.players[0]);
         deck = null;
         resolve(socket);
@@ -571,7 +642,7 @@ function receivePlayerHand(socket, roomCode) {
             console.log("POSITIONS")
             console.log(positions);
 
-            await actor.playServerHand(GameModule.gameDeck, actorIdx, cards, positions);
+            await actor.playServerHand(GameModule.gameDeck, cards, positions);
         }
 
         // sync authoritative state

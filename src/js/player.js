@@ -101,108 +101,94 @@ export default class Player{
         console.log("currrent hand: " + hand);
     }
 
-    // ---------------------------
-    // Per-seat layout 
-    // ---------------------------
-    SEAT = [
-        // seat 0
-        { baseX: -212, stepX:  40, baseY:  230, stepY:   0, rot: 0, sideways: false, zBase: 0 },
-        // seat 1
-        { baseX: -425, stepX:   0, baseY: -240, stepY:  40, rot: 270, sideways: true,  zBase: 1 },
-        // seat 2
-        { baseX:  261, stepX: -40, baseY: -250, stepY:   0, rot: 0, sideways: false, zBase: 2 },
-        // seat 3
-        { baseX:  440, stepX:   0, baseY:  242, stepY: -40, rot: 270, sideways: true,  zBase: 3 },
+    // ---- GC-relative sorting anchors (percent-of-container) ----
+    // axis: which axis the hand fans along; dir: +/- spread direction; rot: card face orientation
+    SORT_ANCHORS = [
+        { leftPct: 0.50, topPct: 0.85, axis: 'x', dir: +1, rot: 0,   sideways: false }, // seat 0 (you, bottom)
+        { leftPct: 0.06, topPct: 0.50, axis: 'y', dir: +1, rot: 270, sideways: true  }, // seat 1 (left)
+        { leftPct: 0.50, topPct: 0.1, axis: 'x', dir: -1, rot: 0,   sideways: false }, // seat 2 (top)
+        { leftPct: 0.952, topPct: 0.50, axis: 'y', dir: -1, rot: 270, sideways: true  }, // seat 3 (right)
     ];
 
-    sortingAnimationX(i, playerNum) {
-        const cfg = this.SEAT[playerNum] || this.SEAT[0];
-        const N   = Math.max(1, this.cards.length);
-        const mid = (N - 1) / 2;
-
-        // fixed pivot per seat; cards spread around it
-        const pivotX = pivotXForSeat(cfg);
-        return pivotX + (i - mid) * cfg.stepX;
+    // convert a GC-space (x,y) into the local space of `parentEl`
+    gcToLocal(xGC, yGC, parentEl) {
+        const gc = document.getElementById('gameContainer');
+        const gcRect = gc.getBoundingClientRect();
+        const pRect  = parentEl.getBoundingClientRect();
+        return {
+            x: Math.round(xGC - (pRect.left - gcRect.left)),
+            y: Math.round(yGC - (pRect.top  - gcRect.top)),
+        };
     }
 
-    sortingAnimationY(i, playerNum) {
-        const cfg = this.SEAT[playerNum] || this.SEAT[0];
-        const N   = Math.max(1, this.cards.length);
-        const mid = (N - 1) / 2;
-
-        const pivotY = pivotYForSeat(cfg);
-        return pivotY + (i - mid) * cfg.stepY;
-    }
-
-    sortingAnimationZ(i, playerNum) {
-        const cfg = this.SEAT[playerNum] || this.SEAT[0];
-        const N = this.cards.length;
-        const invert = (cfg.stepX < 0) || (cfg.stepY < 0);
-        const rank = invert ? (N - 1 - i) : i; // “near” edge on top for left/up fans
-        return cfg.zBase + rank * 4;
-    }
-    sortingAnimationRotation(playerNum) {
-        const cfg = this.SEAT[playerNum] || this.SEAT[0];
-        return cfg.rot;
-    }
-    sortingRotateSidewaysBoolean(playerNum) {
-        const cfg = this.SEAT[playerNum] || this.SEAT[0];
-        return cfg.sideways;
+    // resolve an anchor (in GC pixels) for a seat
+    getSeatAnchorGC(seatIndex) {
+        const gc = document.getElementById('gameContainer');
+        const r  = gc.getBoundingClientRect();
+        const a  = this.SORT_ANCHORS[seatIndex] || this.SORT_ANCHORS[0];
+        return {
+            ax: a.leftPct * r.width,
+            ay: a.topPct  * r.height,
+            cfg: a
+        };
     }
 
     sortingAnimation(playerNum, { rotateAfterTurn = false, duration = 200, stagger = 0 } = {}) {
         const promises = [];
+        const STEP = 40; // fan spacing (px) – tweak to taste
+
+        const N   = Math.max(1, this.cards.length);
+        const mid = (N - 1) / 2;
+
+        const { ax, ay, cfg } = this.getSeatAnchorGC(playerNum);
+        const rotTarget = rotateAfterTurn ? 0 : cfg.rot;
 
         this.cards.forEach((card, i) => {
             promises.push(new Promise(resolve => {
-                try {
-                    const targetX = this.sortingAnimationX(i, playerNum);
-                    const targetY = this.sortingAnimationY(i, playerNum);
-                    const targetRot = rotateAfterTurn ? 0 : this.sortingAnimationRotation(playerNum);
-                    const sideways = this.sortingRotateSidewaysBoolean(playerNum);
+            try {
+                // compute GC-space target for this index
+                const spread = (i - mid) * STEP * cfg.dir;
+                const xGC = cfg.axis === 'x' ? (ax + spread) : ax;
+                const yGC = cfg.axis === 'y' ? (ay + spread) : ay;
 
-                    // If the card is already in place (no movement & no rotation change), resolve immediately
-                    const samePos =
-                        Math.round(card.x) === Math.round(targetX) &&
-                        Math.round(card.y) === Math.round(targetY) &&
-                        card.rot === targetRot;
+                // convert to the card's current parent's local space before animating
+                const parentEl = card.$el.parentElement || document.getElementById('gameDeck');
+                const { x, y } = this.gcToLocal(xGC, yGC, parentEl);
 
-                    if (samePos) {
-                        card.$el.style.zIndex = this.sortingAnimationZ(i, playerNum);
-                        resolve();
-                        return;
-                    }
+                // zIndex: near edge on top for left/up fans
+                const invert = (cfg.dir < 0);
+                const rank   = invert ? (N - 1 - i) : i;
+                const z      = (cfg.zBase || 0) + rank * 4;
 
-                    let finished = false;
-                    const finish = () => {
-                        if (finished) return;
-                        finished = true;
-                        card.$el.style.zIndex = this.sortingAnimationZ(i, playerNum);
-                        resolve();
-                    };
+                let finished = false;
+                const finish = () => {
+                if (finished) return;
+                finished = true;
+                card.$el.style.zIndex = z;
+                resolve();
+                };
 
-                    card.animateTo({
-                        delay: (stagger ? i * stagger : 0),
-                        duration,
-                        ease: 'linear',
-                        rot: targetRot,
-                        rotateSideways: sideways,
-                        x: targetX,
-                        y: targetY,
-                        onComplete: finish
-                    });
+                card.animateTo({
+                delay: (stagger ? i * stagger : 0),
+                duration,
+                ease: 'linear',
+                rot: rotTarget,
+                rotateSideways: !!cfg.sideways,
+                x, y,
+                onComplete: finish
+                });
 
-                    // Safety fallback in case onComplete never fires
-                    setTimeout(finish, duration + 100);
-                } catch (e) {
-                    console.warn('[sortingAnimation] error animating card', e);
-                    resolve();
-                }
+                setTimeout(finish, duration + 100); // safety
+            } catch (e) {
+                console.warn('[sortingAnimation] error animating card', e);
+                resolve();
+            }
             }));
         });
 
         return Promise.all(promises);
     }
+
 
 
     //return combo string based on hand array

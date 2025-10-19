@@ -47,7 +47,7 @@ export default class Opponent extends Player {
 
     // Use positions[] to overwrite placeholders in self.cards,
     // flip them to front, animate to pile, then remove those indices.
-    async playServerHand(gameDeck, turn, serverHand, positions, roomCode, socket) {
+    async playServerHand(gameDeck, serverHand, positions) {
       const self = this;
 
       // (optional) tiny stagger
