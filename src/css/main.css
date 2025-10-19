@@ -9,10 +9,8 @@
     
     body {
         font-family: Arial, Helvetica, sans-serif;
-        text-align: center;
         /*background-color: rgb(11, 173, 11);*/
         background-image: url('background/Sky-Background.jpg');
-        text-align: center;
         margin: 0;
         padding: 0;
     }
@@ -44,16 +42,27 @@
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        width: 360px; /* Adjust as needed */
-        height: 260px; /* Adjust as needed */
-        background-color: #ffffff; /* White background */
-        border: 1px solid #000; /* Add border with 2px width and black color */
-        border-radius: 10px; /* Rounded corners */
-        display: none;
         font-family: 'Poppins', sans-serif;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
+    }
+
+    #loginMenu form,
+    #loginMenu label,
+    #loginMenu input,
+    #loginMenu .text-sm,
+    #loginMenu .text-gray-500 {
+        text-align: left !important;
+        font-size: 14px;
+    }
+
+    button[disabled] {
+        opacity: 0.5;
+        cursor: not-allowed;
+        pointer-events: none;
+        transform: scale(0.98);
+    }
+
+    button {
+        transition: opacity 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
     }
 
     #joinRoomMenu {
@@ -249,37 +258,20 @@
     /* Style for the input box */
     #username, #password {
         padding: 8px;
-        font-size: 16px;
+        font-size: 14px;
         border: 1px solid #ccc;
         border-radius: 4px;
         margin-bottom: 10px;
-        width: 250px;
-        text-align: center; /* Center text within the input box */
     }
 
     /* style for input box validation message */
-    #errorMessage1, #errorMessage2, #errorMessage3{
+    #errorMessage2, #errorMessage3{
         font-size: 12px;
         margin-top: 10px;
         margin-bottom: -5px;
         display: none;
         text-align: center;
         font-weight: bold;
-    }
-    
-    /* style for loginMenu & joinRoomMenu */
-    #loginButton {
-        display: block;
-        margin: 20px auto; /* Center horizontally with margin */
-        width: 300px;
-        height: 30px;
-        transition-duration: 0.4s;
-        font-size: 15px;
-        font-family: Helvetica, Arial, sans-serif;
-        font-weight: 200;
-        border: 1px solid #ccc; /* Subtle gray border */
-        border-radius: 4px;
-        cursor: pointer;
     }
 
     .room-button {
@@ -322,11 +314,6 @@
         border: 1px solid #ccc; /* Subtle gray border */
         border-radius: 4px;
         cursor: pointer;
-    }
-
-    #loginButton:hover, #joinRoomButton:hover, .room-button:hover, #readyButton:hover, #continueButton:hover, #play:hover {
-        background-color: #28a745;
-        color: white;
     }
 
     #pass:hover {
@@ -453,14 +440,6 @@
         top: 50%;
         left: 85%;
         transform: translate(-50%, -50%);
-    }
-    
-    .button {
-        transition-duration: 0.4s;
-        font-size: 15px;
-        font-family: 'Poppins', sans-serif;
-        padding: 4px 8px; /* Adjust padding to increase button size */
-        border-radius: 4px;
     }
     
     /* play hand, and pass buttons*/

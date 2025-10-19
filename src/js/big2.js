@@ -1156,91 +1156,101 @@ const gameLoop = async (roomCode, socket, firstTurnClientId, onResume) => {
     }
 }
 
-
-function trimInput(s) { return (s || '').trim(); }
-
-let pbRefreshIntervalId = null;
-
 // menu that allows users to enter a valid username and password to establish a connection with the server
 async function loginMenu() {
-  const loginMenu = document.getElementById("loginMenu");
-  const userNameInput = document.getElementById("username");
-  const passwordInput = document.getElementById("password");
-  const loginButton   = document.getElementById("loginButton");
-  const errorMessage1 = document.getElementById("errorMessage1");
+    const loginMenu = document.getElementById("loginMenu");
+    const userNameInput = document.getElementById("username");
+    const passwordInput = document.getElementById("password");
+    const loginButton   = document.getElementById("loginButton");
+    const errorMessage1 = document.getElementById("errorMessage1");
 
-  loginMenu.style.display = "block";
+    loginMenu.style.display = "block";
 
-  return new Promise((resolve) => {
-    async function handleClick() {
-      clickSounds[0].play();
-
-      // optimistic UI: prevent double clicks
-      loginButton.disabled = true;
-
-      // Validate + sanitize
-      let usernameInput = userNameInput.value  // allow username only
-      let password      = passwordInput.value;              // keep as typed
-
-      try {
-        // 1) Log in to PocketBase (email or username supported per your PB config)
-        const pb = new PocketBase('http://127.0.0.1:8090');
-        const authData = await pb.collection('users').authWithPassword(usernameInput, password);
-        const displayName = authData?.record?.name;
-
-        // 2) Connect Socket.IO with PB token
-        const socket = io(import.meta.env?.VITE_WS_URL || 'http://localhost:3000', {
-            auth: { pbToken: pb.authStore.token },
-            transports: ['polling','websocket'], // explicit while debugging
-        });
-
-        // if your server emits 'authenticated' on successful middleware pass:
-        const onAuthed = () => {
-            socket.off('authenticated', onAuthed);
-            loginMenu.style.display = "none";
-            resolve({ socket, username: displayName });
-        };
-
-        // prefer the server's custom event; otherwise fall back to 'connect'
-        socket.on('authenticated', onAuthed);
-        socket.on('connect', () => {
-          // if your server doesn't emit 'authenticated', resolve here instead:
-          if (socket.listeners('authenticated').length === 0) onAuthed();
-        });
-
-        socket.on('connect_error', (error) => {
-          const msg = (error && error.message) || 'Authentication failed';
-          errorMessage1.innerText = (msg === 'Authentication failed')
-            ? 'Invalid username or password.'
-            : msg;
-          errorMessage1.style.display = 'block';
-          loginMenu.style.display = 'block';
-          loginButton.disabled = false; // allow retry
-        });
-      } catch (e) {
-        // PB login failed (bad creds, network, etc.)
-        const msg = e?.data?.message || 'Login failed';
-        const identityMsg = e?.data?.data?.identity?.message;
-        const passwordMsg = e?.data?.data?.password?.message;
-        errorMessage1.innerText = identityMsg || passwordMsg || msg;
-        errorMessage1.style.display = 'block';
-        loginButton.disabled = false;
-      }
+    // disable button when fields empty
+    function updateLoginButtonState() {
+        const hasUsername = userNameInput.value.trim().length > 0;
+        const hasPassword = passwordInput.value.trim().length > 0;
+        loginButton.disabled = !(hasUsername && hasPassword);
     }
+    updateLoginButtonState();
+    userNameInput.addEventListener("input", updateLoginButtonState);
+    passwordInput.addEventListener("input", updateLoginButtonState)
 
-    // one stable listener
-    loginButton.addEventListener("click", () => {
-      const u = userNameInput.value.trim();
-      const p = passwordInput.value.trim();
-      if (!u || !p) {
-        errorMessage1.innerText = !u && !p
-          ? "Both username and password are required."
-          : (!u ? "Username is required." : "Password is required.");
-        errorMessage1.style.display = "block";
-        return;
-      }
-      handleClick();
-    });
+    return new Promise((resolve) => {
+        async function handleClick() {
+        // optimistic UI: prevent double clicks
+        loginButton.disabled = true;
+
+        // Validate + sanitize
+        let usernameInput = userNameInput.value  // allow username only
+        let password = passwordInput.value; // keep as typed
+
+        // Clear the inputs after capturing their values
+        passwordInput.value = "";
+        updateLoginButtonState(); 
+
+        try {
+            // 1) Log in to PocketBase (email or username supported per your PB config)
+            const pb = new PocketBase('http://127.0.0.1:8090');
+            const authData = await pb.collection('users').authWithPassword(usernameInput, password);
+            const displayName = authData?.record?.name;
+
+            // 2) Connect Socket.IO with PB token
+            const socket = io(import.meta.env?.VITE_WS_URL || 'http://localhost:3000', {
+                auth: { pbToken: pb.authStore.token },
+                transports: ['polling','websocket'], // explicit while debugging
+            });
+
+            // if your server emits 'authenticated' on successful middleware pass:
+            const onAuthed = () => {
+                socket.off('authenticated', onAuthed);
+                loginMenu.style.display = "none";
+                resolve({ socket, username: displayName });
+            };
+
+            // prefer the server's custom event; otherwise fall back to 'connect'
+            socket.on('authenticated', onAuthed);
+            socket.on('connect', () => {
+            // if your server doesn't emit 'authenticated', resolve here instead:
+            if (socket.listeners('authenticated').length === 0) onAuthed();
+            });
+
+            socket.on('connect_error', (error) => {
+                const msg = (error && error.message) || 'Authentication failed';
+                errorMessage1.innerText = (msg === 'Authentication failed')
+                    ? 'Invalid username or password.'
+                    : msg;
+                errorMessage1.style.display = 'block';
+            loginMenu.style.display = 'block';
+            updateLoginButtonState();
+            userNameInput.setCustomValidity("Invalid username or password");
+            userNameInput.reportValidity();
+            });
+        } catch (e) {
+            // PB login failed (bad creds, network, etc.)
+            const msg = e?.data?.message || 'Login failed';
+            const identityMsg = e?.data?.data?.identity?.message;
+            const passwordMsg = e?.data?.data?.password?.message;
+            errorMessage1.innerText = identityMsg || passwordMsg || msg;
+            errorMessage1.style.display = 'block';
+            updateLoginButtonState(); 
+        }
+        }
+
+        // one stable listener
+        loginButton.addEventListener("click", () => {
+            clickSounds[0].play();
+            const u = userNameInput.value.trim();
+            const p = passwordInput.value.trim();
+            if (!u || !p) {
+                errorMessage1.innerText = !u && !p
+                ? "Both username and password are required."
+                : (!u ? "Username is required." : "Password is required.");
+                errorMessage1.style.display = "block";
+                return;
+            }
+            handleClick();
+        });
   });
 }
 
