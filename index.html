@@ -28,7 +28,6 @@
         <script>
             tailwind.config = {
                 corePlugins: { preflight: false },   // don't reset your global CSS
-                prefix: 'tw-',                       // avoids class name clashes
                 theme: {
                 extend: {
                     colors: {
@@ -46,41 +45,220 @@
         <div id ="container">
             <div id="gameContainer">
                 <div id="gameDeck"></div>
-                <div id="finishedDeck"></div>
                 <div id="gameInfo"></div>
                 <div class = "playerInfo" id="p0Info"></div>
                 <div class = "playerInfo" id="p1Info"></div>
                 <div class = "playerInfo" id="p2Info"></div>
                 <div class = "playerInfo" id="p3Info"></div>
-                <button class="button" id="pass">Pass</button>
-                <button class="button" id="clear">Clear</button>
-                <button class="button" id="play">Play</button>
+                <button id="clear"
+                    class="button hidden 
+                    inline-flex items-center gap-2 rounded-xl px-4 py-2
+                    font-semibold text-gray-900 bg-gray-200 shadow-md
+                    hover:brightness-110 active:scale-95
+                    disabled:opacity-50 disabled:pointer-events-none">
+                    Clear
+                </button>
+                <button id="pass"
+                    class="button hidden 
+                    inline-flex items-center gap-2 rounded-xl px-4 py-2
+                    font-semibold text-white bg-rose-600 shadow-md
+                    hover:brightness-110 active:scale-95
+                    disabled:opacity-50 disabled:pointer-events-none">
+                    Pass
+                </button>
+                <button id="play"
+                    class="button hidden 
+                    inline-flex items-center gap-2 rounded-xl px-4 py-2
+                    font-semibold text-white bg-emerald-600 shadow-md
+                    hover:brightness-110 active:scale-95
+                    disabled:opacity-50 disabled:pointer-events-none">
+                    Play
+                </button>
                 <div id="loginMenu" class="w-full max-w-sm p-4 bg-white border border-gray-200 rounded-lg shadow-sm sm:p-6 md:p-8 dark:bg-gray-800 dark:border-gray-700">
                     <form class="space-y-6" onsubmit="return false;">
-                        <h5 class="text-xl font-medium text-gray-900 dark:text-white">Sign in to our platform</h5>
+                        <div class="flex justify-center items-center mb-6 text-2xl font-semibold text-gray-900 dark:text-white">
+                            <img class="w-8 h-8 mr-2" src="icons/android-chrome-512x512.png" alt="logo">
+                            Big 2 Multiplayer
+                        </div>
                         <div>
                             <label for="username" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Your email</label>
-                            <input type="email" name="username" id="username" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white" placeholder="name@company.com" required />
+                            <input type="email" name="username" id="username"  class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg
+                            focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                            block w-full p-1.5
+                            dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white
+                            dark:focus:ring-2 dark:focus:ring-blue-500 dark:focus:border-blue-500" required
+                            />
                         </div>
                         <div>
                             <label for="password" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Your password</label>
-                            <input type="password" name="password" id="password" placeholder="••••••••" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-0.5 dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white" required />
-                            <p id="errorMessage1"  class="mt-0 text-sm text-red-600 h-2 transition-all duration-200"></p>
+                            <input type="password" name="password" id="password" placeholder="••••••••" 
+                            class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg
+                            focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                            block w-full p-1.5
+                            dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white
+                            dark:focus:ring-2 dark:focus:ring-blue-500 dark:focus:border-blue-500" required
+                            />
                         </div>
-                        <div class="flex items-start">
-                            <div class="flex items-start">
-                                <div class="flex items-center h-5">
-                                    <input id="remember" type="checkbox" value="" class="w-4 h-4 border border-gray-300 rounded-sm bg-gray-50 focus:ring-3 focus:ring-blue-300 dark:bg-gray-700 dark:border-gray-600 dark:focus:ring-blue-600 dark:ring-offset-gray-800 dark:focus:ring-offset-gray-800" required />
-                                </div>
-                                <label for="remember" class="ms-2 text-sm font-medium text-gray-900 dark:text-gray-300">Remember me</label>
-                            </div>
-                            <a href="#" class="ms-auto text-sm text-blue-700 hover:underline dark:text-blue-500">Lost Password?</a>
-                        </div>
+                        <p id="errorMessage1"
+                            class="text-sm text-red-600 text-center h-4 overflow-hidden -mt-4 mb-1 transition-all duration-200">
+                        </p>
                         <button id="loginButton" type="button" class="w-full text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800" >Login</button>
-                        <div class="text-sm font-medium text-gray-500 dark:text-gray-300">
-                            Not registered? <a href="#" class="text-blue-700 hover:underline dark:text-blue-500">Create account</a>
-                        </div>
+                        <div class="flex justify-between text-sm font-medium text-gray-500 dark:text-gray-300">
+                            <span>
+                                Not registered? 
+                                <button type="button"
+                                    id="createAccountButton"
+                                    class="text-blue-700 hover:underline dark:text-blue-500 bg-transparent border-0 p-0 font-medium cursor-pointer">
+                                    Create account
+                                </button>
+                            </span>
+                            <button type="button"
+                                id="lostPasswordButton"
+                                class="text-blue-700 hover:underline dark:text-blue-500 bg-transparent border-0 p-0 font-medium cursor-pointer">
+                                Lost Password?
+                            </button>
+                            </div>
                     </form>
+                </div>
+                <div id="createAccountMenu" class="hidden w-full max-w-sm p-4 bg-white border border-gray-200 rounded-lg shadow-sm sm:p-6 md:p-8 dark:bg-gray-800 dark:border-gray-700">
+                    <form class="max-w-sm mx-auto">
+                    <div class="mb-5">
+                        <label for="email" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Your email</label>
+                        <input type="email" id="email" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm
+                        rounded-lg focus:ring-blue-500 focus:border-blue-500
+                        block w-full p-1.5
+                        dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white" autocomplete="email" required/>
+                    </div>
+                    <div class="mb-5">
+                        <label for="usernameRegistration" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Your username</label>
+                        <input type="text" 
+                        id="usernameRegistration"
+                        pattern="^[A-Za-z0-9_]{3,12}$"
+                        title="3 to 12 characters: letters, numbers, underscores only"
+                        maxlength="12"
+                        class="bg-gray-50 border border-gray-300 text-gray-900 text-sm
+                        rounded-lg focus:ring-blue-500 focus:border-blue-500
+                        block w-full p-1.5
+                        dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white" autocomplete="username" required/>
+                    </div>
+                    <div class="mb-5">
+                        <label for="caPassword" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Your password</label>
+                        <input
+                            type="password"
+                            id="caPassword"
+                            minlength="8"
+                            maxlength="64"
+                            pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*]).+$"
+                            title="8 to 64 chars incl. upper, lower, number, symbol."
+                            class="bg-gray-50 border border-gray-300 text-gray-900 text-sm
+                            rounded-lg focus:ring-blue-500 focus:border-blue-500
+                            block w-full p-1.5
+                            dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white"
+                            autocomplete="new-password"
+                            required />
+                    </div>
+                    <div class="mb-5">
+                        <label for="caRepeatPassword" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Repeat password</label>
+                        <input type="password" id="caRepeatPassword" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm
+                        rounded-lg focus:ring-blue-500 focus:border-blue-500
+                        block w-full p-1.5
+                        dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white" autocomplete="new-password" required />
+                    </div>
+
+                    <p id="errorMessageCA" class="mt-0 text-sm text-red-600 h-2" aria-live="polite"></p>
+                    
+                    <div class="flex gap-2">
+                        <button type="submit"
+                            class="inline-flex items-center justify-center w-full sm:w-auto px-4 py-2.5
+                                rounded-lg text-sm font-medium
+                                text-white bg-blue-600 hover:bg-blue-700
+                                focus:outline-none focus:ring-4 focus:ring-blue-300
+                                disabled:opacity-60 disabled:cursor-not-allowed
+                                transition">
+                            Register
+                        </button>
+
+                        <button type="button" id="caBackButton"
+                            class="inline-flex items-center justify-center w-full sm:w-auto px-4 py-2.5
+                                rounded-lg text-sm font-medium
+                                text-gray-700 bg-gray-100 hover:bg-gray-200
+                                focus:outline-none focus:ring-4 focus:ring-gray-300
+                                transition">
+                            Back to login
+                        </button>
+                    </div>
+                    </form>
+                </div>
+                <!-- Lost password: request email -->
+                <div id="lostPasswordMenu" class="hidden w-full max-w-sm p-4 bg-white border border-gray-200 rounded-lg shadow-sm sm:p-6 md:p-8 dark:bg-gray-800 dark:border-gray-700">
+                <form class="space-y-4" onsubmit="return false;">
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-white">Reset your password</h3>
+                    <p class="text-sm text-gray-600 dark:text-gray-300">
+                    Enter your account email and we’ll send you a reset link.
+                    </p>
+
+                    <div>
+                    <label for="forgotEmail" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Email</label>
+                    <input type="email" id="forgotEmail" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg
+                        focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block w-full p-1.5
+                        dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white" required />
+                    </div>
+
+                    <p id="errorMessageFP" class="text-sm text-red-600 h-4"></p>
+                    <p id="infoMessageFP"  class="text-sm text-green-600 h-4"></p>
+
+                    <div class="flex gap-2">
+                    <button type="submit" id="sendResetBtn"
+                        class="inline-flex items-center justify-center w-full sm:w-auto px-4 py-2.5 rounded-lg text-sm font-medium
+                            text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300">
+                        Send reset link
+                    </button>
+                    <button type="button" id="fpBackButton"
+                        class="inline-flex items-center justify-center w-full sm:w-auto px-4 py-2.5 rounded-lg text-sm font-medium
+                            text-gray-700 bg-gray-100 hover:bg-gray-200 focus:outline-none focus:ring-4 focus:ring-gray-300">
+                        Back to login
+                    </button>
+                    </div>
+                </form>
+                </div>
+
+                <!-- Lost password: set new password (shown after clicking email link) -->
+                <div id="resetPasswordMenu" class="hidden w-full max-w-sm p-4 bg-white border border-gray-200 rounded-lg shadow-sm sm:p-6 md:p-8 dark:bg-gray-800 dark:border-gray-700">
+                <form class="space-y-4" onsubmit="return false;">
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-white">Choose a new password</h3>
+
+                    <div>
+                    <label for="rpPassword" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">New password</label>
+                    <input type="password" id="rpPassword" minlength="8" maxlength="64"
+                        class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg
+                            focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block w-full p-1.5
+                            dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white" required />
+                    </div>
+
+                    <div>
+                    <label for="rpPassword2" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Repeat password</label>
+                    <input type="password" id="rpPassword2" minlength="8" maxlength="64"
+                        class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg
+                            focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block w-full p-1.5
+                            dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white" required />
+                    </div>
+
+                    <p id="errorMessageRP" class="text-sm text-red-600 h-4"></p>
+                    <p id="infoMessageRP"  class="text-sm text-green-600 h-4"></p>
+
+                    <div class="flex gap-2">
+                    <button type="submit" id="setNewPasswordBtn"
+                        class="inline-flex items-center justify-center w-full sm:w-auto px-4 py-2.5 rounded-lg text-sm font-medium
+                            text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300">
+                        Update password
+                    </button>
+                    <button type="button" id="rpBackButton"
+                        class="inline-flex items-center justify-center w-full sm:w-auto px-4 py-2.5 rounded-lg text-sm font-medium
+                            text-gray-700 bg-gray-100 hover:bg-gray-200 focus:outline-none focus:ring-4 focus:ring-gray-300">
+                        Back to login
+                    </button>
+                    </div>
+                </form>
                 </div>
                 <div id="joinRoomMenu">
                     <h2>Big 2 Multiplayer</h2>

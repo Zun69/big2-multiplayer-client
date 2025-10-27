@@ -1,7 +1,7 @@
 'use strict';
 
 // Tweakable card stack spacing (default 0.25 px per index)
-const STACK_INTERVAL = 0.15; 
+const STACK_INTERVAL = 0.25; 
 
 var Deck = (function () {
   'use strict';

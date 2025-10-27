@@ -34,6 +34,14 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 let isJoiningRoom = false;
 
+const PB_URL = 'http://127.0.0.1:8090';
+const pb = new PocketBase(PB_URL);
+
+function pbAvatarUrl(pbId, file, thumb='64x64') {
+    if (!pbId || !file) return '';
+    return pb.getFileUrl({ collectionId: '_pb_users_auth_', id: pbId }, file, { thumb });
+}
+
 //GameModule object encapsulate players, deck, gameDeck, finishedDeck (it represents the local gameState)
 const GameModule = (function() {
     //let initialPlayer1 = new Player();
@@ -387,7 +395,6 @@ async function dealCards(serverDeck, socket, roomCode, firstDealClientId) {
     const p2Div = document.getElementById('1');
     const p3Div = document.getElementById('2');
     const p4Div = document.getElementById('3');
-    const targetDivs = [p1Div, p2Div, p3Div, p4Div];
 
     // Build deck (server-supplied), mount to DOM, and shuffle/arrange
     let deck = Deck(false, serverDeck);
@@ -739,7 +746,7 @@ function receivePlayerHand(socket, roomCode) {
   });
 }
 
-// Helpers (keep near the top of big2.js if you don’t already have equivalents)
+// Helpers 
 function _getGCMeta() {
     const gc = document.getElementById('gameContainer');
     if (!gc) throw new Error('#gameContainer not found');
@@ -760,7 +767,7 @@ async function finishDeckAnimation(socket, roomCode) {
     // ---- anchor config: % within gameContainer ----
     const PCT_LEFT  = 0.75;     
     const PCT_TOP   = 0.35;     
-    const STACK_DRIFT = 0.15;   // same subtle stagger as your original
+    const STACK_DRIFT = 0.25;   // same subtle stagger as your original
     
     // compute once per run
     const meta = _getGCMeta();
@@ -822,7 +829,7 @@ async function finishGameAnimation(roomCode, socket, gameDeck, players, losingPl
         // ---- anchor config: % within gameContainer ----
         const PCT_LEFT  = 0.75;     
         const PCT_TOP   = 0.35;     
-        const STACK_DRIFT = 0.15;   // same subtle stagger as your original
+        const STACK_DRIFT = 0.25;   // same subtle stagger as your original
         
         // compute once per run
         const meta = _getGCMeta();
@@ -1227,88 +1234,161 @@ const gameLoop = async (roomCode, socket, firstTurnClientId, onResume) => {
     }
 }
 
+function resetButtonListeners(...buttons) {
+    return buttons.map((btn) => {
+        if (!btn) return btn;                   // keep null/undefined as-is
+        const clone = btn.cloneNode(true);      // true = copy attributes, not listeners
+        btn.replaceWith(clone);
+        return clone;                           // IMPORTANT: return the live node
+    });
+}
+
+
 // menu that allows users to enter a valid username and password to establish a connection with the server
 async function loginMenu() {
     const loginMenu = document.getElementById("loginMenu");
     const userNameInput = document.getElementById("username");
     const passwordInput = document.getElementById("password");
-    const loginButton   = document.getElementById("loginButton");
+    let loginButton   = document.getElementById("loginButton");
+    let createAccountButton = document.getElementById("createAccountButton");
+    let lostPasswordButton  = document.getElementById("lostPasswordButton");
     const errorMessage1 = document.getElementById("errorMessage1");
 
-    loginMenu.style.display = "block";
+    // reset & rebind references
+    [loginButton, createAccountButton, lostPasswordButton] = resetButtonListeners(loginButton, createAccountButton, lostPasswordButton);
 
+    loginMenu.style.display = "block";
+    clearLoginErrors(); 
+    
     // disable button when fields empty
     function updateLoginButtonState() {
         const hasUsername = userNameInput.value.trim().length > 0;
         const hasPassword = passwordInput.value.trim().length > 0;
         loginButton.disabled = !(hasUsername && hasPassword);
     }
+
+    function clearLoginErrors() {
+        errorMessage1.textContent = '';
+        errorMessage1.style.display = 'none';
+        userNameInput.setCustomValidity('');
+    }
+    
     updateLoginButtonState();
     userNameInput.addEventListener("input", updateLoginButtonState);
-    passwordInput.addEventListener("input", updateLoginButtonState)
+    passwordInput.addEventListener("input", updateLoginButtonState);
 
     return new Promise((resolve) => {
+        let settled = false;
+        function settle(v) { if (!settled) { settled = true; resolve(v); } }
+
         async function handleClick() {
-        // optimistic UI: prevent double clicks
         loginButton.disabled = true;
 
-        // Validate + sanitize
-        let usernameInput = userNameInput.value  // allow username only
-        let password = passwordInput.value; // keep as typed
+        // capture
+        const usernameInput = userNameInput.value.trim();
+        const password = passwordInput.value;
 
-        // Clear the inputs after capturing their values
+        // clear password field (basic hygiene)
         passwordInput.value = "";
-        updateLoginButtonState(); 
+        updateLoginButtonState();
 
         try {
-            // 1) Log in to PocketBase (email or username supported per your PB config)
-            const pb = new PocketBase('http://127.0.0.1:8090');
+            // 1) PB auth
             const authData = await pb.collection('users').authWithPassword(usernameInput, password);
-            const displayName = authData?.record?.name;
 
-            // 2) Connect Socket.IO with PB token
+            // BLOCK if not verified
+            if (!authData?.record?.verified) {
+                // clean up any session
+                pb.authStore.clear();
+
+                // explain + offer resend
+                errorMessage1.innerHTML = `
+                    Your email isn’t verified yet.
+                    <button type="button" id="resendVerifyBtn" class="underline">Resend verification email</button>
+                `;
+                errorMessage1.style.display = 'block';
+
+                // wire "Resend"
+                const resendBtn = document.getElementById('resendVerifyBtn');
+                if (resendBtn) {
+                    resendBtn.onclick = async () => {
+                    try {
+                        await pb.collection('users').requestVerification(usernameInput);
+                        errorMessage1.textContent = "Verification email sent. Check your inbox.";
+                    } catch (e) {
+                        const msg = e?.data?.message || "Failed to send verification email.";
+                        errorMessage1.textContent = msg;
+                    }
+                    };
+                }
+
+                // re-enable button and bail
+                loginButton.disabled = false;
+                
+                return; // don’t proceed to socket connect
+            }
+
+            // authed, get username to resolve
+            const displayName = authData?.record?.name || usernameInput;
+
+            // if account verified then socket connect with token
             const socket = io(import.meta.env?.VITE_WS_URL || 'http://localhost:3000', {
                 auth: { pbToken: pb.authStore.token },
-                transports: ['polling','websocket'], // explicit while debugging
+                transports: ['polling','websocket'],
             });
 
-            // if your server emits 'authenticated' on successful middleware pass:
+            let authed = false;
+
             const onAuthed = () => {
+                if (authed) return;
+                authed = true;
                 socket.off('authenticated', onAuthed);
+                clearLoginErrors(); 
                 loginMenu.style.display = "none";
-                resolve({ socket, username: displayName });
+                settle({ type: 'login', socket, username: displayName });
             };
-
-            // prefer the server's custom event; otherwise fall back to 'connect'
             socket.on('authenticated', onAuthed);
-            socket.on('connect', () => {
-            // if your server doesn't emit 'authenticated', resolve here instead:
-            if (socket.listeners('authenticated').length === 0) onAuthed();
-            });
+            socket.on('connect', onAuthed);
 
             socket.on('connect_error', (error) => {
                 const msg = (error && error.message) || 'Authentication failed';
-                errorMessage1.innerText = (msg === 'Authentication failed')
+                if (msg === 'Email not verified') {
+                    errorMessage1.innerHTML = `
+                        Your email isn’t verified yet.
+                        <button type="button" id="resendVerifyBtn" class="underline">Resend verification email</button>
+                    `;
+                    document.getElementById('resendVerifyBtn')?.addEventListener('click', async () => {
+                    try {
+                        await pb.collection('users').requestVerification(userNameInput.value.trim());
+                        errorMessage1.textContent = "Verification email sent. Check your inbox.";
+                    } catch (e) {
+                        errorMessage1.textContent = "Failed to send verification email.";
+                    }
+                    });
+                } else {
+                    errorMessage1.innerText = (msg === 'Authentication failed')
                     ? 'Invalid username or password.'
                     : msg;
+                }
+
                 errorMessage1.style.display = 'block';
-            loginMenu.style.display = 'block';
-            updateLoginButtonState();
-            userNameInput.setCustomValidity("Invalid username or password");
-            userNameInput.reportValidity();
+                loginMenu.style.display = 'block';
+                updateLoginButtonState();
+                userNameInput.setCustomValidity(msg);
+                userNameInput.reportValidity();
+                loginButton.disabled = false;
             });
         } catch (e) {
-            // PB login failed (bad creds, network, etc.)
             const msg = e?.data?.message || 'Login failed';
             const identityMsg = e?.data?.data?.identity?.message;
             const passwordMsg = e?.data?.data?.password?.message;
             errorMessage1.innerText = identityMsg || passwordMsg || msg;
             errorMessage1.style.display = 'block';
-            updateLoginButtonState(); 
+            loginButton.disabled = false;
         }
         }
 
-        // one stable listener
+        // buttons
         loginButton.addEventListener("click", () => {
             clickSounds[0].play();
             const u = userNameInput.value.trim();
@@ -1322,7 +1402,268 @@ async function loginMenu() {
             }
             handleClick();
         });
-  });
+
+        createAccountButton.addEventListener(
+            "click",
+            () => {
+                clickSounds[0].play();
+                clearLoginErrors(); 
+                loginMenu.style.display = "none";
+                settle({ type: "createAccount" });
+            },
+            { once: true }
+        );
+
+        // Route: Forgot Password (optional menu below)
+        lostPasswordButton.addEventListener("click", () => {
+            clickSounds[0].play();
+            clearLoginErrors(); 
+            settle({ type: 'forgotPassword' });
+        });
+    });
+}
+
+async function createAccountMenu() {
+    const loginMenu = document.getElementById("loginMenu");
+    const createAccountMenu  = document.getElementById("createAccountMenu");
+    const form = createAccountMenu.querySelector("form");
+    const emailInput = document.getElementById("email");
+    const usernameInput = document.getElementById("usernameRegistration");
+    const passInput = document.getElementById("caPassword");
+    const pass2Input = document.getElementById("caRepeatPassword");
+    const err = document.getElementById("errorMessageCA");
+    const backBtn = document.getElementById("caBackButton");
+    const registerBtn = form.querySelector('button[type="submit"]');
+
+    createAccountMenu.classList.remove("hidden"); // also remove Tailwind's .hidden
+
+    const showError = (msg) => { if (err) err.textContent = msg || ''; };
+
+    // username validation (letters/numbers/underscores only, 3–12 chars)
+    const MAX_USERNAME_LEN = 12;
+    const USERNAME_REGEX = /^[A-Za-z0-9_]+$/;
+
+    function validateUsername() {
+        const value = usernameInput.value.trim();
+
+        if (value.length === 0) {
+            usernameInput.setCustomValidity("Username is required.");
+        } else if (value.length < 3) {
+            usernameInput.setCustomValidity("Username must be at least 3 characters.");
+        } else if (value.length > MAX_USERNAME_LEN) {
+            usernameInput.setCustomValidity(`Username must be ${MAX_USERNAME_LEN} characters or fewer.`);
+        } else if (!USERNAME_REGEX.test(value)) {
+            usernameInput.setCustomValidity("Only letters, numbers, and underscores are allowed.");
+        } else {
+            usernameInput.setCustomValidity("");
+        }
+    }
+    usernameInput.addEventListener('input', () => {
+        validateUsername();
+        updateRegisterButton();
+    });
+
+    // Clear any errors / custom validity as soon as the user edits
+    const clearErrorsOnInput = () => {
+        showError('');
+        emailInput.setCustomValidity('');
+        usernameInput.setCustomValidity('');
+        passInput.setCustomValidity('');
+        pass2Input.setCustomValidity('');
+    };
+
+    [emailInput, usernameInput, passInput, pass2Input].forEach(inp => {
+        inp.addEventListener('input', clearErrorsOnInput);
+    });
+
+    function resetCAForm() {
+        form.reset();
+        emailInput.setCustomValidity('');
+        usernameInput.setCustomValidity('');
+        passInput.setCustomValidity('');
+        pass2Input.setCustomValidity('');
+        showError('');
+    }
+
+    // disable Register button while invalid 
+    const updateRegisterButton = () => {
+        registerBtn.disabled = !form.checkValidity();
+    };
+    form.addEventListener('input', updateRegisterButton);
+    updateRegisterButton();  // initialize state on load
+
+    const strongPassword = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*]).{8,64}$/;
+
+    function validatePasswords() {
+        // strength on first field
+        if (!strongPassword.test(passInput.value)) {
+            passInput.setCustomValidity("8–64 chars incl. upper, lower, number, symbol.");
+        } else {
+            passInput.setCustomValidity("");
+        }
+
+        // match on second field
+        if (pass2Input.value && pass2Input.value !== passInput.value) {
+            pass2Input.setCustomValidity("Passwords do not match");
+        } else {
+            pass2Input.setCustomValidity("");
+        }
+    }
+
+    // run on every edit and re-evaluate button state
+    [passInput, pass2Input].forEach(inp => {
+        inp.addEventListener('input', () => { validatePasswords(); updateRegisterButton(); });
+    });
+
+    // initial evaluation
+    validatePasswords();
+    updateRegisterButton();
+
+    // Wrap in a Promise so onload can truly wait here
+    return new Promise((resolve) => {
+        backBtn?.addEventListener("click", () => {
+            resetCAForm();
+            // back to login
+            createAccountMenu.style.display = "none";
+            createAccountMenu.classList.add("hidden");
+            loginMenu.style.display = "block";
+            resolve("back");
+        }, { once: true });
+
+        form.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            showError('');
+
+            if (!form.checkValidity()) { form.reportValidity(); return; }
+            if (passInput.value !== pass2Input.value) {
+                pass2Input.setCustomValidity("Passwords do not match");
+                pass2Input.reportValidity();
+                pass2Input.addEventListener('input', () => pass2Input.setCustomValidity(''), { once: true });
+                return;
+            }
+            if (passInput.value.length < 8) {
+                passInput.setCustomValidity("Use at least 8 characters");
+                passInput.reportValidity();
+                passInput.addEventListener('input', () => passInput.setCustomValidity(''), { once: true });
+                return;
+            }
+
+            registerBtn.disabled = true;
+            registerBtn.classList.add('opacity-60', 'cursor-not-allowed');
+            try {
+                await pb.collection('users').create({
+                    email: emailInput.value.trim().toLowerCase(),
+                    emailVisibility: true,
+                    password: passInput.value,
+                    passwordConfirm: pass2Input.value,
+                    name: usernameInput.value.trim()
+                });
+                await pb.collection('users').requestVerification(emailInput.value.trim());
+
+                // bounce to login with prefill + message
+                createAccountMenu.style.display = "none";
+                createAccountMenu.classList.add("hidden");
+                loginMenu.style.display = "block";
+                const loginEmail = document.getElementById("username");
+                const loginErr   = document.getElementById("errorMessage1");
+                if (loginEmail) loginEmail.value = emailInput.value.trim();
+                if (loginErr) { loginErr.textContent = "Verification email sent — please verify, then log in."; loginErr.style.display = "block"; }
+
+                resolve("registered");
+            } catch (e) {
+                const msg = e?.data?.message || e?.message || "Registration failed";
+                const emailMsg = e?.data?.data?.email?.message;
+                const userMsg  = e?.data?.data?.name?.message;
+                const passMsg  = e?.data?.data?.password?.message;
+                showError(emailMsg || userMsg || passMsg || msg);
+            } finally {
+                registerBtn.disabled = false;
+                registerBtn.classList.remove('opacity-60', 'cursor-not-allowed');
+            }
+        }, { once: true });
+    });
+}
+
+async function lostPasswordMenu() {
+    const loginMenu = document.getElementById("loginMenu");
+    const fpMenu = document.getElementById("lostPasswordMenu");
+    const emailInput = document.getElementById("forgotEmail");
+    const err = document.getElementById("errorMessageFP");
+    const info = document.getElementById("infoMessageFP");
+    const sendBtn = document.getElementById("sendResetBtn");
+    const backBtn = document.getElementById("fpBackButton");
+
+    const show = () => { fpMenu.classList.remove("hidden"); fpMenu.style.display = "block"; };
+    const hide = () => { fpMenu.style.display = "none"; fpMenu.classList.add("hidden"); };
+
+    show(); loginMenu.style.display = "none";
+    err.textContent = ""; info.textContent = "";
+
+    return new Promise((resolve) => {
+        const onSubmit = async () => {
+        err.textContent = ""; info.textContent = "";
+        const email = emailInput.value.trim().toLowerCase();
+        if (!email) { err.textContent = "Email is required."; return; }
+
+        try {
+            // This sends an email containing your configured reset URL + token
+            await pb.collection('users').requestPasswordReset(email);
+            info.textContent = "Reset link sent. Check your inbox.";
+        } catch (e) {
+            err.textContent = e?.data?.message || "Failed to send reset link.";
+        }
+        };
+
+        sendBtn.addEventListener("click", onSubmit);
+        backBtn.addEventListener("click", () => {
+        hide();
+        loginMenu.style.display = "block";
+        resolve("back");
+        }, { once: true });
+    });
+}
+
+// When the user lands on your app with a token, show new-password form and confirm it
+async function resetPasswordMenu(token) {
+    const loginMenu = document.getElementById("loginMenu");
+    const rpMenu = document.getElementById("resetPasswordMenu");
+    const p1 = document.getElementById("rpPassword");
+    const p2 = document.getElementById("rpPassword2");
+    const err = document.getElementById("errorMessageRP");
+    const info = document.getElementById("infoMessageRP");
+    const setBtn = document.getElementById("setNewPasswordBtn");
+    const backBtn = document.getElementById("rpBackButton");
+
+    const show = () => { rpMenu.classList.remove("hidden"); rpMenu.style.display = "block"; };
+    const hide = () => { rpMenu.style.display = "none"; rpMenu.classList.add("hidden"); };
+
+    show(); loginMenu.style.display = "none";
+    err.textContent = ""; info.textContent = "";
+
+    return new Promise((resolve) => {
+        const onSubmit = async () => {
+        err.textContent = ""; info.textContent = "";
+
+        if (!p1.value || !p2.value) { err.textContent = "Please fill both fields."; return; }
+        if (p1.value !== p2.value)   { err.textContent = "Passwords do not match."; return; }
+        if (p1.value.length < 8)     { err.textContent = "Use at least 8 characters."; return; }
+
+        try {
+            // Confirm with the token + new password
+            await pb.collection('users').confirmPasswordReset(token, p1.value, p2.value);
+            info.textContent = "Password updated. You can log in now.";
+        } catch (e) {
+            err.textContent = e?.data?.message || "Reset failed.";
+        }
+        };
+
+        setBtn.addEventListener("click", onSubmit);
+        backBtn.addEventListener("click", () => {
+        hide();
+        loginMenu.style.display = "block";
+        resolve("back");
+        }, { once: true });
+    });
 }
 
 //menu that allows users to enter a room number to join an available room
@@ -1729,6 +2070,57 @@ async function lobbyMenu(socket, roomCode){
     });
 }
 
+function renderPlayerInfo(el, player, i) {
+    if (!el) return;
+
+    // Compact, self-sized container
+    el.style.display = 'flex';
+    el.style.alignItems = 'center';
+    el.style.gap = '0.5rem';
+    el.style.borderRadius = '0.5rem';
+    el.style.padding = '0.2rem 0.3rem';
+    el.style.backgroundColor = 'rgba(255,255,255,0.9)';
+    el.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+    el.style.width = 'fit-content';     // keeps it only as wide as needed
+    el.style.minWidth = '0';            // prevents flex weirdness if nested
+    el.style.justifyContent = 'center'; // centers contents horizontally
+
+    // Clear previous content
+    el.textContent = '';
+
+    // --- Avatar (exact 32x32 render, 100x100 intrinsic) ---
+    const img = document.createElement('img');
+    const url1x = pbAvatarUrl(player.pbId, player.avatar, '100x100');
+    const url2x = pbAvatarUrl(player.pbId, player.avatar, '200x200');
+    const fallback = `/avatars/default${i + 1}.png`;
+
+    if (url1x) {
+        img.src = url1x;
+        img.srcset = `${url1x} 1x, ${url2x} 2x`;
+        img.sizes = '32px';
+    } else {
+        img.src = fallback;
+    }
+
+    // Tailwind + inline tweaks for perfect 32x32 render
+    img.className = 'w-7 h-7 object-cover border border-gray-300 rounded-md box-border';
+    img.style.aspectRatio = '1 / 1';   // force square cropping
+    img.style.flexShrink = '0';
+    img.alt = player.username || `Player ${i + 1}`;
+    img.loading = 'lazy';
+    img.decoding = 'async';
+
+    // --- Username text ---
+    const name = document.createElement('div');
+    name.className = 'font-medium text-gray-800 dark:text-white text-center';
+    name.textContent = player.username || `Player ${i + 1}`;
+    name.style.whiteSpace = 'nowrap';   // keeps name on one line
+
+    // --- Append both ---
+    el.append(img, name);
+}
+
+
 // once all four clients toggle toggleReadyState, call startGameForRoom function on server and update local gamestate to match server generated one 
 async function startGame(socket, roomCode){
     //unhide buttons and gameInfo divs
@@ -1781,19 +2173,22 @@ async function startGame(socket, roomCode){
                 console.log("LOCAL PLAYER INDEX:", localPlayerIndex);
 
                 if (localPlayerIndex !== -1) {
-                // Rotate server order so local player is index 0 in GameModule
-                players.forEach((p, index) => {
-                    const gameModuleIndex = (index - localPlayerIndex + 4) % 4; // Calculate GameModule index
-                    GameModule.players[gameModuleIndex].username = p.username;
-                    GameModule.players[gameModuleIndex].clientId = p.clientId;
-                    GameModule.players[gameModuleIndex].socketId = p.socketId;
-                });
+                    // Rotate server order so local player is index 0 in GameModule
+                    players.forEach((p, index) => {
+                        const gameModuleIndex = (index - localPlayerIndex + 4) % 4; // Calculate GameModule index
+                        const gp = GameModule.players[gameModuleIndex];
+                        gp.username = p.username;
+                        gp.clientId = p.clientId;
+                        gp.socketId = p.socketId;
+                        gp.pbId     = p.pbId || null;
+                        gp.avatar   = p.avatar || null;
+                    });
                 }
 
                 // Update UI labels
                 for (let i = 0; i < playerInfo.length; i++) {
-                playerInfo[i].style.display = 'block';
-                playerInfo[i].innerHTML = GameModule.players[i].username + " " + GameModule.players[i].clientId; //maybe add points here as well?
+                    const p = GameModule.players[i];
+                    renderPlayerInfo(playerInfo[i], p, i);
                 }
                 resolve();
             });
@@ -1973,12 +2368,7 @@ const LAYOUT = {
     ]
 };
 
-function poseForSeat(seatIdx, k /* 0..N-1 within that seat */) {
-    const off = LAYOUT.BASE[seatIdx] + k * LAYOUT.STRIDE;
-    return LAYOUT.POSE[seatIdx](off);
-}
-
-// Build Deck.js Card objects from plain {rank,suit}
+// build Deck.js Card objects from rank,suit
 function buildCardsFromArray(cardsArr) {
     return cardsArr.map((c, idx) => {
         const card = Deck.Card(idx);        // create a card
@@ -1989,48 +2379,47 @@ function buildCardsFromArray(cardsArr) {
     });
 }
 
-
-// Mount a list of Deck.js cards into a seat div with the SAME spacing as dealCards
-function mountCardsToSeat(cards, seatIdx, faceUp = false) {
-    const target = document.getElementById(String(seatIdx));
-    if (!target) return;
-
-    // clear seat
-    target.querySelectorAll('.card').forEach(n => n.remove());
-
-    cards.forEach((card, i) => {
-        const { rot, x, y } = poseForSeat(seatIdx, i);
-
-        card.mount(target);
-        card.setSide(faceUp ? 'front' : 'back');
-        card.$el.style.zIndex = String(i + 1);
-
-        // force transform to apply (0ms animateTo avoids some libs skipping transform)
-        card.animateTo({ delay: 0, duration: 0, ease: 'linear', rot, x, y });
-
-        GameModule.players[seatIdx].addCard(card);
-    });
+// GC to local helper (explicitly to gameDeck)
+function gcToGameDeck(xGC, yGC) {
+    const gc = document.getElementById('gameContainer');
+    const gd = document.getElementById('gameDeck');
+    const gr = gc.getBoundingClientRect();
+    const dr = gd.getBoundingClientRect();
+    // translate GC space to gameDeck's local space
+    return { x: xGC - (dr.left - gr.left), y: yGC - (dr.top - gr.top) };
 }
 
-// Face-down placeholders for opponents, same spacing as dealCards
-function mountPlaceholdersToSeat(count, seatIdx) {
-    const target = document.getElementById(String(seatIdx));
-    if (!target) return;
+// mount cards into gameDeck using the SAME pose function as dealing
+function mountCardsInGC(cards, seatIdx, faceUp = false) {
+    const gameDeck = document.getElementById('gameDeck');
 
-    // clear seat
-    target.querySelectorAll('.card').forEach(n => n.remove());
+    const total = cards.length;
+    const mid   = (total - 1) / 2;
 
-    for (let i = 0; i < (Number(count) || 0); i++) {
-        const card = Deck.Card({ rank: 4, suit: 3 });
-        const { rot, x, y } = poseForSeat(seatIdx, i);
+    // (DEAL_ANCHORS are percents; poseBySeat returns GC pixel coords + rot)
+    const poseBySeat = buildGCPosesFromPercents(DEAL_ANCHORS);
+    const STRIDE     = 10 * (GameModule.players?.length || 4); // same as dealing
+    const SEAT_BASE  = [0, 10, 20, 30];                        // same as dealing
 
-        card.mount(target);
-        card.setSide('back');
-        card.$el.style.zIndex = String(i + 1);
-        card.animateTo({ delay: 0, duration: 0, ease: 'linear', rot, x, y });
+    cards.forEach((card, i) => {
+        // Deck.js needs the element in the DOM before animateTo
+        if (card.$el.parentElement !== gameDeck) gameDeck.appendChild(card.$el);
 
-        GameModule.players[seatIdx].addCard(card);
-    }
+        // offset index along the seat’s “rail” — identical to dealCards
+        const off = SEAT_BASE[seatIdx] + (i - mid) * STRIDE;
+
+        // pose in GC space (pixels), e.g. { x, y, rot }
+        const { x: xGC, y: yGC, rot } = poseBySeat[seatIdx](off);
+
+        // convert GC → gameDeck local space
+        const { x, y } = gcToGameDeck(xGC, yGC);
+
+        card.setSide(faceUp ? 'front' : 'back');
+        card.animateTo({ delay: 0, duration: 0, ease: 'linear', rot, x, y, z: i + 1 });
+
+        // keep your local state in sync
+        if (GameModule.players?.[seatIdx]) GameModule.players[seatIdx].addCard?.(card);
+    });
 }
 
 function detachGameEvents(socket) {
@@ -2196,101 +2585,114 @@ function setupPauseModal(socket, roomCode){
 
         // 2) Mount my real hand face-up
         const myCards = buildCardsFromArray(Array.isArray(hand) ? hand : []);
-        mountCardsToSeat(myCards, mySeat, true);
+        mountCardsInGC(myCards, mySeat, true);
 
         // 3) For other seats, mount face-down placeholders using their cardCount
         players.forEach((sp) => {
             const localSeat = GameModule.players.findIndex(p => p.clientId === sp.clientId);
             if (localSeat === mySeat) return;
-            const count = typeof sp.cardCount === 'number' ? sp.cardCount : 13; // fallback
-            mountPlaceholdersToSeat(count, localSeat);
+            const count = typeof sp.cardCount === 'number' ? sp.cardCount : 13;
+            const ph = buildCardsFromArray(Array.from({length: count}, () => ({rank:4, suit:3})));
+            mountCardsInGC(ph, localSeat, false);
         });
 
         // 4) Recreate finishedDeck pile from server snapshot
         if (Array.isArray(finishedDeck) && finishedDeck.length > 0) {
-            const finishedDeckDiv = document.getElementById("finishedDeck");
-            // Make sure finishedDeck is empty
+            const stage = document.getElementById('gameDeck');
             GameModule.finishedDeck.length = 0;
+
+            // Same anchor as your live finishDeckAnimation
+            const PCT_LEFT = 0.75;
+            const PCT_TOP  = 0.35;
+            const STACK_DRIFT = 0.25;
+
+            const { rect } = _getGCMeta();
+            const anchorXGC = rect.width  * PCT_LEFT;
+            const anchorYGC = rect.height * PCT_TOP;
 
             finishedDeck.forEach((c, i) => {
                 const card = Deck.Card(i);
                 card.rank = c.rank;
                 card.suit = c.suit;
                 card.setRankSuit(c.rank, c.suit);
-
-                // same pile position as during finish animations
                 card.setSide('back');
-                card.mount(finishedDeckDiv);
-                card.$el.style.zIndex = String(i + 1);
+
+                // Put card into main stage, same as finishDeckAnimation
+                stage.appendChild(card.$el);
+                GameModule.finishedDeck.push(card);
+
+                // stagger the pile slightly like live animation
+                const xGC = anchorXGC - (i * STACK_DRIFT);
+                const yGC = anchorYGC + (i * STACK_DRIFT);
+
+                // convert GC to gameDeck local space
+                const { x, y } = gcToLocal(xGC, yGC, stage);
+
                 card.animateTo({
                     delay: 0,
                     duration: 0,
                     ease: 'linear',
                     rot: 0,
-                    x: 225 - i * 0.15,
-                    y: -130 - i * 0.15,
-                    z: GameModule.finishedDeck.length,
+                    x,
+                    y,
+                    z: i + 1,
                 });
-
-                GameModule.finishedDeck.push(card);
             });
         }
 
-        // Recreate the gameDeck pile from server snapshot
-
+        // recreate the gameDeck pile from server snapshot
         if (Array.isArray(gameDeck) && gameDeck.length > 0) {
-            GameModule.gameDeck.length = 0 ; // reset gameDeck
+            GameModule.gameDeck.length = 0;
+            const stage = document.getElementById('gameDeck');
 
-            // how wide each "row" should be (1,2,3,5, etc)
-            const roundHandLength = (Array.isArray(lastValidHand) && lastValidHand.length) ? lastValidHand.length : 1;
+            // width of each row = size of the last valid hand (fallback 1)
+            const n = (Array.isArray(lastValidHand) && lastValidHand.length) ? lastValidHand.length : 1;
+            const mid = (n - 1) / 2;
 
-            // EXACT same horizontal gap as playCard(): 15px per card
-            const STEP_X = 15;
+            // same spacing/drift you use when playing a hand
+            const CARD_GAP_X = 15;
+            const STACK_DRIFT = 0.25;
 
-            // New: vertical row spacing (pick what looks good for you)
-            const STEP_Y = 20;
-
-            // Use the same base the live play uses (matches Player.PILE_BASE_* in player.js)
-            const PILE_BASE_X = -40;
-            const PILE_BASE_Y = -67;
-
-            // center each row like playCard’s tiny centering n*0.25
-            const rowCenterNudge = roundHandLength * 0.15;
+            // GC center to stage local
+            const { rect } = _getGCMeta();                      
+            const centerGC = { x: rect.width * 0.5, y: rect.height * 0.5 };
+            const centerLocal = gcToLocal(centerGC.x, centerGC.y, stage);
 
             gameDeck.forEach((c, i) => {
                 const card = Deck.Card(i);
                 card.rank = c.rank;
                 card.suit = c.suit;
                 card.setRankSuit(c.rank, c.suit);
-
-                card.setSide('front'); // pile is visible
-                document.getElementById('gameDeck').appendChild(card.$el);
+                card.setSide('front');
+                stage.appendChild(card.$el);
                 GameModule.gameDeck.push(card);
 
-                // --- lay out in rows of roundHandLength using same 15px gaps as playCard ---
-                const col = i % roundHandLength;             // 0..(n-1)
-                const row = Math.floor(i / roundHandLength); // 0,1,2,...
+                // lay out into rows of size n, centered on the table
+                const col = i % n;                    // index within this hand
+                const row = Math.floor(i / n);        // which prior hand (0,1,2,...)
 
-                const targetX = Math.round(PILE_BASE_X + (col * STEP_X) - rowCenterNudge);
-                const targetY = Math.round(PILE_BASE_Y - (row * STEP_Y));
+                // offsets identical in spirit to your player.js:
+                // x: spread around center; y: small downward drift per stacked hand
+                const offX = ((col - mid) * CARD_GAP_X) - (row * STACK_DRIFT);
+                const offY = (row * STACK_DRIFT);
+
+                const x = centerLocal.x + offX;
+                const y = centerLocal.y + offY;
+                const rot = Math.random() * 5 + -5;
 
                 card.animateTo({
                     delay: 0,
                     duration: 0,
                     ease: 'linear',
-                    rot: 0,
-                    x: targetX,
-                    y: targetY,
+                    rot,
+                    x,
+                    y,
                     z: GameModule.gameDeck.length,
                 });
-
             });
         }
 
         // restart game here and use info from payload that server will send in room:resumed emit, then window dispatch to send results like normal
-
-        // need to remount cards before game loop, 
-        
         gmCancelToken('room:resumed');   // safe even if none
         await Promise.resolve();         // give the old loop a tick to exit
         gmNewToken('room:resumed');
@@ -2365,11 +2767,38 @@ window.onload = async function() {
     // finally lock scrolling/zoom for mobile
     preventScrollAndZoom('gameContainer');
 
-    // require username and password to establish connection to socket.io server and resolve the connected socket object
-    const { socket: loginMenuSocket, username }  = await loginMenu()
+    // If the user came via email link
+    const url = new URL(window.location.href);
+    const token = url.searchParams.get('token') || url.hash.replace(/^#.*token=/, '').split('token=')[1];
+    if (token) {
+        await resetPasswordMenu(token);
+        // optional: clean URL
+        history.replaceState({}, document.title, location.pathname);
+    }
 
     while (true) {
         let joinedRoomSocket, roomCode, isRejoin;
+        // declare ALL the vars you’ll assign to
+        let loginMenuSocket, username;
+
+        // require username and password to establish connection to socket.io server and resolve the connected socket object
+        const authResult = await loginMenu();
+
+        // Go to registration
+        if (authResult?.type === 'createAccount') {
+            await createAccountMenu();   // returns when account created or user cancels
+            continue;                    // go back to login
+        }
+
+        // Lost password flow (request link)
+        if (authResult?.type === 'forgotPassword') {
+            await lostPasswordMenu();
+            continue;
+        }
+
+        // success path
+        loginMenuSocket = authResult.socket;
+        username = authResult.username;
 
         while (true) {
             // Once client has established connection to the server, require room code to join a game lobby and then resolve the socket that's connected to a room, also check if its a rejoining player

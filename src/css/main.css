@@ -37,7 +37,7 @@
     
 
     /*menu styling*/
-    #loginMenu {
+    #loginMenu, #createAccountMenu, #lostPasswordMenu, #resetPasswordMenu {
         position: absolute;
         top: 50%;
         left: 50%;
@@ -51,7 +51,16 @@
     #loginMenu .text-sm,
     #loginMenu .text-gray-500 {
         text-align: left !important;
-        font-size: 14px;
+        font-size: 13px;
+    }
+
+    #createAccountMenu form,
+    #createAccountMenu label,
+    #createAccountMenu input,
+    #createAccountMenu .text-sm,
+    #createAccountMenu .text-gray-500 {
+        text-align: left !important;
+        font-size: 13px;
     }
 
     button[disabled] {
@@ -358,8 +367,8 @@
     }
     
     #gameContainer {
-        width: 1100px;
-        height: 700px;
+        width: 1200px;
+        height: 750px;
         background-image: url('background/green-background.jpg');
         background-size: cover; background-position: center;
         background-repeat: no-repeat; /* Prevent the image from repeating */
@@ -371,18 +380,10 @@
     
     
     /*gameDeck styling*/
-    #gameDeck > div {
+    #gameDeck {
         position: absolute;
         top: 50%; /* Place it vertically in the middle */
         left: 50%; /* Place it horizontally in the middle */
-        transform: translate(-50%, -50%); /* Center it perfectly */
-    }
-    
-    /*gameDeck styling*/
-    #finishedDeck > div {
-        position: absolute;
-        top: 42%; /* Place it vertically in the middle */
-        left: 53%; /* Place it horizontally in the middle */
         transform: translate(-50%, -50%); /* Center it perfectly */
     }
     
@@ -398,20 +399,15 @@
         padding: 10px 12px;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
         border-radius: 5px; /* Adjust the border-radius value as needed */
+        pointer-events: none;
     }
 
     .playerInfo {
         display: none;
-        /*background-color: rgba(255, 255, 255, 0.3);*/
-        background-color: white;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
         transition: background-color 0.3s ease, color 0.3s ease;
         font-family: 'Poppins', sans-serif;
         font-size: 12px;
-    
-        padding: 5px; 
-       
-        border-radius: 5px; 
+        pointer-events: none;
     }
 
     #p0Info{
@@ -441,35 +437,21 @@
         left: 85%;
         transform: translate(-50%, -50%);
     }
-    
-    /* play hand, and pass buttons*/
+
+    #clear,
+    #pass,
     #play {
         position: absolute;
-        bottom: 10px; /* Adjust this value to set the distance from the bottom */
-        left: 50.5%;
-        display: none;
+        bottom: 0.5rem; /* matches Tailwind bottom-2 */
+        z-index: 40;
     }
 
-    #clear {
-        position: absolute;
-        bottom: 10px; /* Adjust this value to set the distance from the bottom */
-        left: 5%;
-        display: none;
-    }
-    
-    #pass {
-        position: absolute;
-        bottom: 10px; /* Adjust this value to set the distance from the bottom */
-        left: 43.5%;
-        display: none;
-    }
-    
-    #turn{
-        display: inline;
-        margin-left: 125px;
-    }
+    /* individual left positions */
+    #clear { left: 5%; }
+    #pass  { left: 41.5%; }
+    #play  { left: 50.5%; }
 
-    /* === Pause / Disconnect overlay (global) === */
+    /* Pause / Disconnect overlay (global) */
     .pause-overlay{
     position: fixed; inset: 0;
     display: grid; place-items: center;

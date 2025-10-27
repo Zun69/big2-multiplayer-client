@@ -2,12 +2,13 @@
 // Global sound setup
 // ---------------------------
 const playCardSounds = [
-  new Howl({ src: ["src/audio/playcard_03.wav"], volume: 0.9 }),
-  new Howl({ src: ["src/audio/playcard_04.wav"], volume: 0.9 }),
-  new Howl({ src: ["src/audio/playcard_07.wav"], volume: 0.9 }),
-  new Howl({ src: ["src/audio/playcard_08.wav"], volume: 0.9 }),
-  new Howl({ src: ["src/audio/playcard_09.wav"], volume: 0.9 }),
-  new Howl({ src: ["src/audio/playcard_10.wav"], volume: 0.9 })
+    new Howl({ src: ["src/audio/playcard_01.wav"], volume: 0.9 }),
+    new Howl({ src: ["src/audio/playcard_02.wav"], volume: 0.9 }),
+    new Howl({ src: ["src/audio/playcard_03.wav"], volume: 0.9 }),
+    new Howl({ src: ["src/audio/playcard_07.wav"], volume: 0.9 }),
+    new Howl({ src: ["src/audio/playcard_08.wav"], volume: 0.9 }),
+    new Howl({ src: ["src/audio/playcard_09.wav"], volume: 0.9 }),
+    new Howl({ src: ["src/audio/playcard_10.wav"], volume: 0.9 })
 ];
 
 const passSound = new Howl({ src: ["src/audio/passcard.wav"], volume: 0.9 });
@@ -815,6 +816,7 @@ export default class Player{
                                 
                                 onComplete: function () {
                                     if (cardIndex !== -1) {
+                                        
                                         console.log("card inserted: " + self.cards[cardIndex].suit + self.cards[cardIndex].rank);
                                         cardsToRemove.unshift(self.cards[cardIndex].suit + " " + self.cards[cardIndex].rank); //add card index into cardsToRemove array, so I can remove all cards at same time after animations are finished
                                         console.log("Cards to remove: " + cardsToRemove);
