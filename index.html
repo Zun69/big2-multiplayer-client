@@ -260,23 +260,101 @@
                     </div>
                 </form>
                 </div>
-                <div id="joinRoomMenu">
-                    <h2>Big 2 Multiplayer</h2>
-                    <div id="availableRooms"></div>
-                    <div id="errorMessage2"></div>
-                </div>
-                <div id="lobbyMenu">
-                    <h2>Lobby</h2>
-                    <div id="connectedClients"></div>
-                    <div id="chatBox">
-                        <div id="messageContainer"></div>
-                        <input type="text" id="messageInput" placeholder="Type Your Message">
-                        <button id="sendMessageButton">Send</button>
+                <div
+                    id="joinRoomMenu"
+                    class="hidden flex flex-col w-[80%] h-[65%] 
+                        bg-white/90 dark:bg-gray-900/90 rounded-xl shadow-xl
+                        overflow-hidden min-h-0">
+                    <!-- Top bar -->
+                    <div
+                        id="jrProfileButton"
+                        class="flex justify-between items-center px-3 py-2 border-b border-gray-200 bg-white dark:bg-gray-900 sticky top-0 z-10">
+                        <button
+                        id="jrRefresh"
+                        class="px-3 py-1.5 text-sm rounded-md border border-gray-300 bg-gray-50 hover:bg-gray-100 active:scale-[0.98] transition"
+                        >
+                        Profile
+                        </button>
+
+                        <button
+                        id="avatarButton"
+                        class="relative p-0 w-12 h-12 rounded-md overflow-hidden hover:ring-2 hover:ring-gray-300 transition"
+                        aria-label="Choose avatar"
+                        >
+                        <img
+                            id="jrAvatarImg"
+                            src="/src/css/background/avatar-placeholder.png"
+                            alt="Avatar"
+                            class="w-full h-full object-cover border border-gray-300 rounded-md box-border"
+                            style="aspect-ratio: 1 / 1;"
+                            loading="lazy"
+                            decoding="async"
+                        />
+                        </button>
+
+
+                        <button
+                        id="jrLeaderboardButton"
+                        class="px-3 py-1.5 text-sm rounded-md border border-gray-300 bg-gray-50 hover:bg-gray-100 active:scale-[0.98] transition"
+                        >
+                        Leaderboards
+                        </button>
                     </div>
-                    <div id="errorMessage3"></div>
-                    <button id="readyButton">Ready Up</button>
-                    <button id="backToJoinRoomButton">Go Back</button>
+
+                    <!-- Scrollable rooms list -->
+                    <div
+                        id="availableRooms"
+                        class="overflow-y-auto p-3 bg-gray-50 dark:bg-gray-800 space-y-2 min-h-0 max-h-[calc(100%-88px)] overscroll-contain">
+                    ></div>
+
+                    <!-- Error row -->
+                    <div
+                        id="errorMessage2"
+                        class="px-3 py-2 min-h-[24px] text-red-600 border-t border-gray-200 bg-white dark:bg-gray-900"
+                    ></div>
                 </div>
+
+                <div id="lobbyMenu" class="hidden w-[85%] h-[80%] p-4 bg-white border border-gray-200 rounded-xl shadow-lg dark:bg-gray-800 dark:border-gray-700 flex flex-col">
+                    <h2 id="lobbyHeading" class="text-2xl font-semibold text-gray-900 dark:text-white text-center mb-1">Lobby</h2>
+
+                    <!-- Player List -->
+                    <div id="connectedClients" 
+                    class="bg-gray-100 dark:bg-gray-900 p-0 rounded-lg mb-6 border 
+                        border-gray-200 dark:border-gray-700 
+                        text-gray-700 dark:text-gray-300 shadow-inner">
+                    </div>
+
+                    <!-- Chat Box -->
+                    <div id="chatBox" class="flex flex-col space-y-2 mb-4">
+                        <div id="messageContainer"
+                            class="overscroll-contain bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3 h-40 overflow-y-auto text-sm text-gray-800 dark:text-gray-200">
+                        </div>
+                        <div class="flex space-x-2">
+                        <input id="messageInput" type="text" placeholder="Type your message..."
+                                class="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 p-2"/>
+                        <button id="sendMessageButton"
+                                class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-md transition disabled:opacity-60 disabled:cursor-not-allowed">
+                            Send
+                        </button>
+                        </div>
+                    </div>
+
+                    <!-- Error -->
+                    <p id="errorMessage3" class="text-sm text-red-600 mb-3 text-center"></p>
+
+                    <!-- Buttons -->
+                    <div class="flex justify-between">
+                        <button id="readyButton"
+                                class="flex-1 mr-2 px-4 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-md transition">
+                        Ready Up
+                        </button>
+                        <button id="backToJoinRoomButton"
+                                class="flex-1 ml-2 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg shadow-md transition">
+                        Go Back
+                        </button>
+                    </div>
+                </div>
+
                 <div id="endMenu">
                     <div id ="leaderboard">
                         <h2>Game Results</h2>

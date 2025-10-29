@@ -826,7 +826,7 @@ async function finishDeckAnimation(socket, roomCode) {
 
 async function finishGameAnimation(roomCode, socket, gameDeck, players, losingPlayer){
     return new Promise(async function (resolve, reject) {
-        // ---- anchor config: % within gameContainer ----
+        // anchor config: % within gameContainer
         const PCT_LEFT  = 0.75;     
         const PCT_TOP   = 0.35;     
         const STACK_DRIFT = 0.25;   // same subtle stagger as your original
@@ -896,7 +896,7 @@ async function finishGameAnimation(roomCode, socket, gameDeck, players, losingPl
             const offY =  (GameModule.finishedDeck.length * STACK_DRIFT);
             
             //wait until each card is finished animating
-            await new Promise(() => {
+            await new Promise((cardResolve) => {
                 setTimeout(function () {
                     losingCard.animateTo({
                         delay: 0,
@@ -1103,16 +1103,6 @@ function waitForGameHasFinished(socket) {
   });
 }
 
-function clearFinishedDeck() {
-  const finishedDeckDiv = document.getElementById("finishedDeck");
-
-  // remove all card elements from DOM
-  finishedDeckDiv.querySelectorAll(".card").forEach(cardEl => cardEl.remove());
-
-  // reset the data array
-  GameModule.finishedDeck.length = 0;
-}
-
 //Actual game loop, 1 loop represents a turn
 const gameLoop = async (roomCode, socket, firstTurnClientId, onResume) => {
     const playButton = document.getElementById("play");
@@ -1153,7 +1143,6 @@ const gameLoop = async (roomCode, socket, firstTurnClientId, onResume) => {
         const gameOverPromise = waitForGameHasFinished(socket);
         const gameOverFlagHandler = () => { gameOver = true; };
         socket.on('gameHasFinished', gameOverFlagHandler);
-
 
         //GAME LOOP, each loop represents a single turn
         for(let i = 0; i < 100; i++){
@@ -1211,20 +1200,23 @@ const gameLoop = async (roomCode, socket, firstTurnClientId, onResume) => {
 
                     // Get final data (playersFinished, losingPlayer)
                     const { playersFinished, losingPlayer } = await gameOverPromise;
-                    let finshedResults = playersFinished;
                     console.log(losingPlayer);
 
                     // Now it's safe to animate: all clients have acked the last hand,
                     // and gameDeck includes those last cards, unmount finishedDeck after animations, and reset gameState
+                    // Now it's safe to animate: all clients have acked the last hand,
+                    // and gameDeck includes those last cards…
                     await finishGameAnimation(roomCode, socket, GameModule.gameDeck, GameModule.players, losingPlayer);
                     await finishedGame(socket);
 
-                    clearFinishedDeck(); //unmount finishedDeck cards
+                    // 🔒 Make sure no late events from this round can fire
+                    detachGameEvents(socket);          // turn/round events (cardsPlayed/passed/wonRound/ACKs/etc.)
+                    removeAllGameElements();           // hide HUD & clear any leftover DOM (safe after finish)
 
-                    console.log(finshedResults);
-
-                    GameModule.reset()
-                    return finshedResults;
+                    // Hand back a clean copy (avoid shared reference)
+                    const resultsOut = [...playersFinished];
+                    GameModule.reset();
+                    return resultsOut;
                 }
             }
             else if(GameModule.playedHand == 0){ //else if player passed
@@ -1675,6 +1667,12 @@ async function joinRoomMenu(socket) {
         let roomsClickBound = false;
         let onRoomsClick = null;
 
+        // remove old listeners first
+        const avatarBtn = document.getElementById('avatarButton');
+        const newAvatarBtn = avatarBtn.cloneNode(true);
+        avatarBtn.parentNode.replaceChild(newAvatarBtn, avatarBtn);
+        const img = document.getElementById('jrAvatarImg');
+
         function addListenerRoomButton() {
             if (roomsClickBound) return;
             roomsClickBound = true;
@@ -1699,45 +1697,162 @@ async function joinRoomMenu(socket) {
         // Display joinRoomMenu
         joinRoomMenu.style.display = "block";
 
-        // Function to request available rooms and update the available rooms div
-        function refreshAvailableRooms() {
-            // Request available rooms
-            socket.emit('getAvailableRooms');
-        }
+        (function syncJoinRoomAvatar() {
+            // Load current user's avatar like playerInfo
+            const u = pb?.authStore?.model; // PocketBase authed record
+            if (u?.id && u?.avatar) {
+                const url1x = pbAvatarUrl(u.id, u.avatar, '100x100');
+                const url2x = pbAvatarUrl(u.id, u.avatar, '200x200');
+                img.src = url1x;
+                img.srcset = `${url1x} 1x, ${url2x} 2x`;
+                img.sizes = '48px'; // crisp at ~32px like your playerInfo
+            } else {
+                img.src = '/src/css/background/avatar-placeholder.png';
+                img.removeAttribute('srcset');
+                img.removeAttribute('sizes');
+            }
+
+            // Click handler to open your avatar picker (stub for now)
+            newAvatarBtn.addEventListener('click', async () => {
+                // Guard: must be logged in
+                const u = pb?.authStore?.model;
+                if (!u?.id) {
+                    console.warn('Not logged in; cannot set avatar.');
+                    return;
+                }
+                // 1) Ask for an image (web file picker)
+                const file = await (async function pickImageFile() {
+                    return new Promise((resolve) => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = 'image/*';
+                    // hint camera on mobile; browsers may ignore
+                    input.capture = 'environment';
+                    input.style.display = 'none';
+                    document.body.appendChild(input);
+                    input.addEventListener('change', () => {
+                        const f = input.files && input.files[0] ? input.files[0] : null;
+                        input.remove();
+                        resolve(f || null);
+                    }, { once: true });
+                    input.click();
+                    });
+                })();
+
+                if (!file) return;
+
+                // 2) Validate (type + size)
+                const okTypes = new Set(['image/png','image/jpeg','image/webp','image/jpg']);
+                if (!okTypes.has(file.type)) {
+                    console.warn('Unsupported file type:', file.type);
+                    return;
+                }
+                if (file.size > 2 * 1024 * 1024) { // 2 MB
+                    console.warn('File too large (>2MB).');
+                    return;
+                }
+
+                // 3) Preview immediately
+                try {
+                    const blobUrl = URL.createObjectURL(file);
+                    img.src = blobUrl;          // show preview in the 48×48 avatar
+                    img.removeAttribute('srcset');
+                    img.sizes = getComputedStyle(img).width || '48px';
+                    // optional decode to avoid flicker
+                    img.decode?.().catch(()=>{});
+                } catch {}
+
+                // 4) Upload to PocketBase
+                try {
+                    const fd = new FormData();
+                    fd.append('avatar', file); // PB users collection "avatar" field
+
+                    const updated = await pb.collection('users').update(u.id, fd);
+                    // persist new auth record locally so future pbAvatarUrl calls use latest
+                    pb.authStore.save(pb.authStore.token, updated);
+
+                    // 5) Refresh to server-rendered thumbs (1x/2x) for crispness
+                    const url1x = pbAvatarUrl(updated.id, updated.avatar, '100x100');
+                    const url2x = pbAvatarUrl(updated.id, updated.avatar, '200x200');
+                    if (url1x) {
+                    img.src = url1x;
+                    img.srcset = `${url1x} 1x, ${url2x} 2x`;
+                    img.sizes = getComputedStyle(img).width || '48px';
+                    }
+                } catch (e) {
+                    console.error('Avatar upload failed:', e);
+                }
+            });
+        })();
 
         // Handler for updating available rooms
         function updateAvailableRooms(availableRooms) {
-            //console.log('Available rooms:', availableRooms);
+            availableRoomsDiv.innerHTML = `
+                <h3 class="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide mb-2">
+                Available Rooms
+                </h3>
+            `;
 
-            // Clear the existing content and add the heading
-            availableRoomsDiv.innerHTML = '<h3>Available Rooms</h3>';
-
-            if (availableRooms.length === 0) {
-                const noRoomsElement = document.createElement('p');
-                noRoomsElement.textContent = 'No available rooms';
-                availableRoomsDiv.appendChild(noRoomsElement);
-            } else {
-                availableRooms.forEach(({ roomCode, numClients }) => {
-                    const roomButton = document.createElement('button');
-                    roomButton.textContent = `${roomCode}: ${numClients}/4`;
-                    roomButton.classList.add('room-button'); // Optional: Add a class for styling purposes
-                    roomButton.dataset.roomCode = roomCode; // Assign roomCode to dataset
-                    roomButton.disabled = numClients >= 4;
-                    availableRoomsDiv.appendChild(roomButton);
-                });
+            if (!availableRooms?.length) {
+                const p = document.createElement('p');
+                p.className = 'text-sm text-gray-500 dark:text-gray-400';
+                p.textContent = 'No available rooms';
+                availableRoomsDiv.appendChild(p);
+                return;
             }
+
+            availableRooms.forEach(({ roomCode, numClients, usernames = [] }) => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.dataset.roomCode = roomCode;
+                btn.disabled = numClients >= 4;
+
+                btn.className = [
+                    'room-button', // keep this so your click handler works
+                    'w-full text-left select-none',
+                    'rounded-xl border border-gray-200 dark:border-gray-700',
+                    'bg-white dark:bg-gray-900',
+                    'hover:bg-indigo-50 dark:hover:bg-gray-800',       // soft background tint on hover
+                    'hover:border-indigo-300 dark:hover:border-indigo-500', // subtle border glow
+                    'hover:shadow-md dark:hover:shadow-lg',             // lift effect
+                    'transition-all duration-200 ease-out',             // smooth animation
+                    'active:scale-[0.98]',                              // click press feedback
+                    'px-4 py-3 shadow-sm',
+                    'cursor-pointer',
+                    'disabled:opacity-60 disabled:cursor-not-allowed'
+                ].join(' ');
+
+                const names = usernames.length ? usernames.join(', ') : '—';
+                const capacityBadge =
+                numClients >= 4
+                    ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300'
+                    : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300';
+
+                btn.innerHTML = `
+                <div class="flex items-center justify-between gap-3">
+                    <div class="flex items-center gap-2">
+                    <span class="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        Room ${roomCode}
+                    </span>
+                    <span class="inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full ${capacityBadge}">
+                        ${numClients}/4
+                    </span>
+                    </div>
+                    <div class="flex-1 text-right truncate text-xs text-gray-600 dark:text-gray-400">
+                    ${names}
+                    </div>
+                </div>
+                `;
+
+                availableRoomsDiv.appendChild(btn);
+            });
         }
         
         // call once during setup
         addListenerRoomButton();
 
-        // Initial request for available rooms, to immediately populate the UI with the current list of available rooms
-        refreshAvailableRooms();
-
-        // Set interval to refresh available rooms every 3 seconds and activate the following lines of code
-        const refreshInterval = setInterval(refreshAvailableRooms, 3000);
-
-        // Ensure the existing event listener is removed before adding a new one, these lines are activated when the setInterval goes off
+        // One-shot snapshot, then live pushes from server
+        socket.emit('getAvailableRooms');
         socket.off('availableRooms', updateAvailableRooms);
         socket.on('availableRooms', updateAvailableRooms);
 
@@ -1755,7 +1870,6 @@ async function joinRoomMenu(socket) {
             // --- one-shot settle pattern ---
             let settled = false;
             const cleanup = () => {
-                clearInterval(refreshInterval);
                 socket.off('availableRooms', updateAvailableRooms);
                 socket.off('errorMessage', onError);
                 socket.off('rejoin', onRejoin);   // in case .once didn't fire
@@ -1896,6 +2010,7 @@ async function endMenu(socket, roomCode, results) {
 async function lobbyMenu(socket, roomCode){
     const lobbyMenu = document.getElementById("lobbyMenu");
     const connectedClientsDiv = document.getElementById("connectedClients");
+    const lobbyHeadingEl = document.getElementById('lobbyHeading');
     const messageContainer = document.getElementById("messageContainer");
     const messageInput = document.getElementById("messageInput");
     const sendMessageButton = document.getElementById("sendMessageButton");
@@ -1904,30 +2019,71 @@ async function lobbyMenu(socket, roomCode){
 
     let isReady = false; // Track the local client's ready state
 
+    lobbyHeadingEl.textContent = 'Room ' + roomCode;
+
     // Display lobbyMenu
     lobbyMenu.style.display = "block";
-
-    // Function to request clients and update the connectedClientsDiv
-    function refreshClientList() {
-        // Request client list
-        socket.emit('getClientList', roomCode);
-    }
     
-    // Function to update the client list, takes in clientList event from server
-    function updateClientList(clientList) {
-       // Clear the existing content and add the heading
-        connectedClientsDiv.innerHTML = `<h3>Players in Room ${roomCode}</h3>`;
+    function updateClientList(clientList = []) {
+        // 1) reset the container each render
+        connectedClientsDiv.innerHTML = ``;
 
-        // Extract usernames from clientList & create an array to hold usernames with (host) tag if applicable
-        const usernames = clientList.map(client => {
-            return client.username;
+        if (!clientList.length) {
+            const p = document.createElement('p');
+            p.className = 'm-0 text-sm text-gray-500 dark:text-gray-400';
+            p.textContent = 'No players connected';
+            connectedClientsDiv.appendChild(p);
+            return;
+        }
+
+        // 2) build a fresh grid
+        const grid = document.createElement('div');
+        grid.className = 'grid grid-cols-4 gap-3 mt-2 justify-items-center';
+
+        clientList.forEach(c => {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'flex flex-col items-center space-y-1 mb-2';
+
+            // avatar
+            const img = document.createElement('img');
+            const url1x = pbAvatarUrl(c.pbId, c.avatar, '100x100');
+            const url2x = pbAvatarUrl(c.pbId, c.avatar, '200x200');
+            if (url1x) {
+            img.src = url1x;
+            img.srcset = `${url1x} 1x, ${url2x} 2x`;
+            img.sizes = '48px';
+            } else {
+            img.src = '/src/css/background/avatar-placeholder.png';
+            }
+            img.className = [
+            'w-12 h-12 object-cover rounded-md border shadow-sm',
+            c.isReady ? 'border-emerald-500 dark:border-emerald-400'
+                        : 'border-gray-300 dark:border-gray-600 opacity-80'
+            ].join(' ');
+            img.alt = c.username;
+
+            // username
+            const name = document.createElement('div');
+            name.className = 'text-xs font-medium text-gray-700 dark:text-gray-300 text-center';
+            name.textContent = c.username;
+
+            // ready badge
+            const badge = document.createElement('div');
+            badge.className = [
+            'text-[10px] px-2 py-[1px] rounded-full mt-0.5',
+            c.isReady ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                        : 'bg-gray-200 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
+            ].join(' ');
+            badge.textContent = c.isReady ? '✅ Ready' : '💤 Waiting';
+
+            wrapper.append(img, name, badge);
+            grid.appendChild(wrapper);
         });
-        
-        // Display usernames in a single line
-        const clientElement = document.createElement('p');
-        clientElement.textContent = usernames.join(', '); // Join usernames with a comma and space
-        connectedClientsDiv.appendChild(clientElement);
+
+        // 3) append exactly one grid per render
+        connectedClientsDiv.appendChild(grid);
     }
+
 
     // Function to append a message to the message container
     function appendMessage(message) {
@@ -1977,16 +2133,6 @@ async function lobbyMenu(socket, roomCode){
         appendMessage(message);
     });
 
-    // Initial request for clients in the room, to immediately populate the UI with the current list of clients
-    refreshClientList();
-
-    // Set interval to refresh available rooms every 0.5 seconds and activate the following lines of code
-    const refreshInterval = setInterval(refreshClientList, 500);
-
-    // Ensure the existing event listener is removed before adding a new one
-    socket.off('clientList', updateClientList);
-    socket.on('clientList', updateClientList);
-
     //If the client is readied up the text content of the button should change to ('unready up 1/4' and then if the client clicks the button again the button should read 'ready up 0/4')
     function toggleReadyState() {
         isReady = !isReady;
@@ -1997,6 +2143,9 @@ async function lobbyMenu(socket, roomCode){
 
     return new Promise((resolve) => {
         socket.on('updateReadyState', (clientList) => {
+            // no polling; roster is driven by server pushes:
+            // joinRoom/leaveRoom/toggleReadyState all trigger `updateReadyState`
+            // we’ll render the player list inside that handler
             updateClientList(clientList);
 
              // figure out *your* current ready state from the list
@@ -2037,7 +2186,6 @@ async function lobbyMenu(socket, roomCode){
         
             // Hide the lobby menu and clear the interval
             lobbyMenu.style.display = "none";
-            clearInterval(refreshInterval);
 
             resolve(socket);
         });
@@ -2063,7 +2211,6 @@ async function lobbyMenu(socket, roomCode){
 
             // Hide the lobby menu and clear the interval
             lobbyMenu.style.display = "none";
-            clearInterval(refreshInterval);
 
             resolve('goBackToJoinRoomMenu');
         }
@@ -2073,27 +2220,30 @@ async function lobbyMenu(socket, roomCode){
 function renderPlayerInfo(el, player, i) {
     if (!el) return;
 
-    // Compact, self-sized container
+    // container
     el.style.display = 'flex';
     el.style.alignItems = 'center';
-    el.style.gap = '0.5rem';
+    el.style.gap = '0.25rem';
     el.style.borderRadius = '0.5rem';
     el.style.padding = '0.2rem 0.3rem';
     el.style.backgroundColor = 'rgba(255,255,255,0.9)';
     el.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
-    el.style.width = 'fit-content';     // keeps it only as wide as needed
-    el.style.minWidth = '0';            // prevents flex weirdness if nested
-    el.style.justifyContent = 'center'; // centers contents horizontally
+    el.style.width = 'fit-content';
+    el.style.minWidth = '0';
+    el.style.justifyContent = 'center';
 
-    // Clear previous content
+    // mirror p3 (right side)
+    const mirrored = i === 3;
+    el.style.flexDirection = mirrored ? 'row-reverse' : 'row';
+
+    // reset content
     el.textContent = '';
 
-    // --- Avatar (exact 32x32 render, 100x100 intrinsic) ---
+    // avatar
     const img = document.createElement('img');
     const url1x = pbAvatarUrl(player.pbId, player.avatar, '100x100');
     const url2x = pbAvatarUrl(player.pbId, player.avatar, '200x200');
     const fallback = `/avatars/default${i + 1}.png`;
-
     if (url1x) {
         img.src = url1x;
         img.srcset = `${url1x} 1x, ${url2x} 2x`;
@@ -2101,24 +2251,24 @@ function renderPlayerInfo(el, player, i) {
     } else {
         img.src = fallback;
     }
-
-    // Tailwind + inline tweaks for perfect 32x32 render
-    img.className = 'w-7 h-7 object-cover border border-gray-300 rounded-md box-border';
-    img.style.aspectRatio = '1 / 1';   // force square cropping
+    img.className = 'w-8 h-8 object-cover border border-gray-300 rounded-md box-border';
+    img.style.aspectRatio = '1 / 1';
     img.style.flexShrink = '0';
     img.alt = player.username || `Player ${i + 1}`;
     img.loading = 'lazy';
     img.decoding = 'async';
 
-    // --- Username text ---
+    // name
     const name = document.createElement('div');
-    name.className = 'font-medium text-gray-800 dark:text-white text-center';
+    name.className = 'font-medium text-gray-800 dark:text-white';
     name.textContent = player.username || `Player ${i + 1}`;
-    name.style.whiteSpace = 'nowrap';   // keeps name on one line
+    name.style.whiteSpace = 'nowrap';
+    name.style.textAlign = mirrored ? 'right' : 'left';
 
-    // --- Append both ---
+    // assemble
     el.append(img, name);
 }
+
 
 
 // once all four clients toggle toggleReadyState, call startGameForRoom function on server and update local gamestate to match server generated one 
@@ -2249,6 +2399,8 @@ async function startGame(socket, roomCode){
         gmCancelToken('startGame');
         gmNewToken('startGame');
         const results = await gameLoop(roomCode, socket, firstTurnClientId, false);
+        
+        console.log(results);
         return results;
 
     } finally {
@@ -2356,17 +2508,6 @@ function removeAllGameElements() {
     if (pauseMsg) pauseMsg.textContent = 'Game paused';
 }
 
-// --- Shared layout (matches dealCards) ---
-const LAYOUT = {
-    STRIDE: 10 * (GameModule.players?.length || 4), // 40px with 4 players
-    BASE:   [0, 10, 20, 30],
-    POSE: [
-        (off) => ({ rot: 0,  x: -212 + off, y:  230 }), // seat 0 (you)
-        (off) => ({ rot: 90, x: -425,       y: -250 + off }),
-        (off) => ({ rot: 0,  x:  281 - off, y: -250 }),
-        (off) => ({ rot: 90, x:  440,       y:  272 - off }),
-    ]
-};
 
 // build Deck.js Card objects from rank,suit
 function buildCardsFromArray(cardsArr) {
@@ -2458,12 +2599,12 @@ function setupPauseModal(socket, roomCode){
     let tick = null;
     let lastClientList = [];
 
-    // keep a live copy of the client list (the server already emits this)
-    socket.off?.('updateReadyState');
-    socket.on('updateReadyState', (clientList) => {
-        lastClientList = clientList || [];
-        paintClientList(lastClientList);
-    });
+    // Scoped handlers so we can remove exactly ours later
+    const onUpdateReadyStatePause = (clientList=[]) => {
+    lastClientList = clientList;
+    paintClientList(lastClientList);
+    };
+    socket.on('updateReadyState', onUpdateReadyStatePause);
 
     function paintClientList(clients){
         listEl.innerHTML = clients.map(c =>
@@ -2471,12 +2612,22 @@ function setupPauseModal(socket, roomCode){
         ).join('');
     }
 
-    socket.off?.('room:paused');
-    socket.off?.('room:resumed');
-    socket.off?.('room:forceReset');
-    
+    const cleanupPauseBindings = () => {
+        clearInterval(tick);
+        socket.off?.('clientList', onClientListOnceOrStream);
+        socket.off?.('updateReadyState', onUpdateReadyStatePause);
+        socket.off?.('room:paused', onRoomPaused);
+        socket.off?.('room:resumed', onRoomResumed);
+        socket.off?.('room:forceReset', onRoomForceReset);
+    };
+
+    const onClientListOnceOrStream = (clients=[]) => {
+        lastClientList = clients;
+        paintClientList(lastClientList);
+    };
+        
     // when room is paused (caused by disconnect)
-    socket.on('room:paused', async ({ reason, pausedUntil, disconnectedUsernames }) => {
+    const onRoomPaused = async ({ reason, pausedUntil, disconnectedUsernames }) => {
         gmCancelToken('room:paused');
         await Promise.resolve();           // let any awaits wake and exit
         detachGameEvents(socket); // remove all sockets from gameLoop
@@ -2490,17 +2641,9 @@ function setupPauseModal(socket, roomCode){
         overlay.classList.remove('pause-hidden');
         document.body.classList.add('is-paused');
 
-        // refresh client list on change and then paint the change in pause menu
         socket.emit('getClientList', roomCode);
-
-        const onClientList = (clients) => {
-            lastClientList = clients || [];
-            // Paint current clients
-            paintClientList(lastClientList);            
-        };
-
-        socket.off?.('clientList'); // avoid dupes if multiple pauses
-        socket.on('clientList', onClientList);
+        socket.off?.('clientList', onClientListOnceOrStream);
+        socket.on('clientList', onClientListOnceOrStream);
 
         // Rejoin countdown
         clearInterval(tick);
@@ -2512,13 +2655,17 @@ function setupPauseModal(socket, roomCode){
         };
         step();
         tick = setInterval(step, 250);
-    });
+    };
 
-    socket.on('room:resumed', async ({ players, turnClientId, finishedDeck, gameDeck, hand, me, isFirstMove, lastValidHand }) => {
+    // Make sure we don't double-bind our own pause handlers on reentry
+    socket.off?.('room:paused', onRoomPaused);
+    socket.on('room:paused', onRoomPaused);
+
+    const onRoomResumed = async ({ players, turnClientId, finishedDeck, gameDeck, hand, me, isFirstMove, lastValidHand }) => {
         // remove pause menu
         overlay.classList.add('pause-hidden');
         document.body.classList.remove('is-paused');
-        clearInterval(tick);
+        cleanupPauseBindings(); // clears tick + listeners
 
         //unhide buttons and gameInfo divs
         const playButton = document.getElementById("play");
@@ -2700,17 +2847,27 @@ function setupPauseModal(socket, roomCode){
 
         // hand results to the onload window
         window.dispatchEvent(new CustomEvent('resumedResults', { detail: results }));
-    });
+    };
+
+    socket.off?.('room:resumed', onRoomResumed);
+    socket.on('room:resumed', onRoomResumed);
 
     // listen for force reset emit from server (means 1 player left in server)
-    socket.on('room:forceReset', ({ reason }) => {
-        console.log(reason);
-        GameModule.reset(); // reset game before leaving it
-        // clear all dom elements
+    const onRoomForceReset = ({ reason }) => {
+        console.log('Force reset:', reason);
+
+        cleanupPauseBindings();
+        gmCancelToken('forceReset');
+        detachGameEvents(socket);
+
+        GameModule.reset();
         removeAllGameElements();
-        socket.emit('leaveRoom');               // inform server we’ve left this room
+        
+        socket.emit('leaveRoom'); // inform server we’ve left this room
         window.dispatchEvent(new CustomEvent('forceReset'));
-    });   
+    };
+    socket.off?.('room:forceReset', onRoomForceReset);
+    socket.on('room:forceReset', onRoomForceReset);
 }
 
 // if socket.force
@@ -2765,7 +2922,7 @@ function preventScrollAndZoom(targetId = 'gameContainer') {
 
 window.onload = async function() {
     // finally lock scrolling/zoom for mobile
-    preventScrollAndZoom('gameContainer');
+    //preventScrollAndZoom('gameContainer');
 
     // If the user came via email link
     const url = new URL(window.location.href);
@@ -2800,76 +2957,71 @@ window.onload = async function() {
         loginMenuSocket = authResult.socket;
         username = authResult.username;
 
+        // one loop that contains both joinRoomMenu and the game cycle
         while (true) {
-            // Once client has established connection to the server, require room code to join a game lobby and then resolve the socket that's connected to a room, also check if its a rejoining player
             const { socket, roomCode: rc, isRejoin: rejoinFlag } = await joinRoomMenu(loginMenuSocket);
             joinedRoomSocket = socket;
             roomCode = rc;
             isRejoin = rejoinFlag;
 
-            // if rejoining player, skip lobby menu, but still listen for pause menu
-            if (isRejoin) {
-                window.isResume = true; // use global flag to stop safeStartGame from running in onload race
-                setupPauseModal(joinedRoomSocket, roomCode);
-                break;
-            }
-
-            // Hook pause/resume for this room (covers lobby + in-game)
             setupPauseModal(joinedRoomSocket, roomCode);
 
-            // A lobby room where clients wait and can chat with each other until 4 clients join, where they can then start the game, might allow bots as filler
-            let lobbyMenuResolve = await lobbyMenu(joinedRoomSocket, roomCode);
-
-            if (lobbyMenuResolve !== "goBackToJoinRoomMenu") {
-                break; // Exit the inner loop if not going back to join room menu
-            }
-        }
-
-        while (true) {
-            const startOutcome = await Promise.race([
-                startGameSafe(joinedRoomSocket, roomCode, username), // becomes a no-op during resume
-                waitForForceResetOnce(),
-                waitForResumedResultsOnce(),                       // fires during a resume cycle
-            ]);
-            
-            if (startOutcome === 'forceReset') {
-                // clear the busy flag to avoid the warning
-                startGame._busy = false;
-                // jump back to join flow
-                break;
-            }
-
-            if (startOutcome === '__START_ERR__') {
-                // startGame threw; just loop again to wait properly
+            if (!isRejoin) {
+                const lobbyResult = await lobbyMenu(joinedRoomSocket, roomCode);
+                if (lobbyResult === 'goBackToJoinRoomMenu') {
+                // back button for lobby room
                 continue;
+                }
+            } else {
+                window.isResume = true;
             }
 
-            // must be the results array at this point
-            if (!Array.isArray(startOutcome)) {
-                console.warn('Non-results outcome, waiting again…', startOutcome);
-                continue;
+            // game cycle 
+            while (true) {
+                const startOutcome = await Promise.race([
+                    startGameSafe(joinedRoomSocket, roomCode, username),
+                    waitForForceResetOnce(),
+                    waitForResumedResultsOnce(),
+                ]);
+
+                // if three players leave, kick player back to joinRoomMenu
+                if (startOutcome === 'forceReset') {
+                    startGame._busy = false;
+                    // break to the OUTERMOST loop (which shows login),
+                    break;
+                }
+
+                if (startOutcome === '__START_ERR__') continue;
+                if (!Array.isArray(startOutcome)) continue;
+
+                const results = startOutcome;
+                console.log(results);
+                
+                const endOutcome = await Promise.race([
+                    endMenu(joinedRoomSocket, roomCode, results),
+                    waitForForceResetOnce(),
+                ]);
+
+                if (endOutcome === 'forceReset') {
+                    // Exit the inner game loop → back to joinRoomMenu
+                    break;
+                }
+
+                if (endOutcome === 'continue') {
+                    startGame._busy = false;
+                    window.isResume = false;
+                    // Play again in same room or rejoin flow (your choice); here we loop and show join again
+                    continue;
+                }
+
+                if (endOutcome === 'goBackToJoinRoomMenu') {
+                    // User chose to leave to room list
+                    break;  // break inner game loop, then continue outer join+game loop
+                }
             }
-            const results = startOutcome; // real results from startGame
 
-            // Race endMenu vs force reset
-            const endOutcome = await Promise.race([
-                endMenu(joinedRoomSocket, roomCode, results),
-                waitForForceResetOnce(),
-            ]);
-
-            if (endOutcome === 'forceReset') {
-                break; // back to join flow
-            }
-
-            if (endOutcome === 'continue'){
-                startGame._busy = false;
-
-                // set rejoined clients back to normal status, so startGameSafe can run
-                window.isResume = false;
-                // play another game
-                continue; 
-            } 
-            if (endOutcome === 'goBackToJoinRoomMenu') break;   // to join flow
+            // After breaking inner game loop (back button), show Join Rooms again
+            continue;
         }
     }
 };

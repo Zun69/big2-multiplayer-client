@@ -4,13 +4,16 @@ import Player from "./player.js"
 // Global sound setup
 // ---------------------------
 const playCardSounds = [
-  new Howl({ src: ["src/audio/playcard_01.wav"], volume: 0.9 }),
-  new Howl({ src: ["src/audio/playcard_02.wav"], volume: 0.9 }),
-  new Howl({ src: ["src/audio/playcard_03.wav"], volume: 0.9 }),
-  new Howl({ src: ["src/audio/playcard_07.wav"], volume: 0.9 }),
-  new Howl({ src: ["src/audio/playcard_08.wav"], volume: 0.9 }),
-  new Howl({ src: ["src/audio/playcard_09.wav"], volume: 0.9 }),
-  new Howl({ src: ["src/audio/playcard_10.wav"], volume: 0.9 })
+    new Howl({ src: ["src/audio/playcard_01.wav"], volume: 0.9 }),
+    new Howl({ src: ["src/audio/playcard_02.wav"], volume: 0.9 }),
+    new Howl({ src: ["src/audio/playcard_03.wav"], volume: 0.9 }),
+    new Howl({ src: ["src/audio/playcard_04.wav"], volume: 0.9 }),
+    new Howl({ src: ["src/audio/playcard_05.wav"], volume: 0.9 }),
+    new Howl({ src: ["src/audio/playcard_06.wav"], volume: 0.9 }),
+    new Howl({ src: ["src/audio/playcard_07.wav"], volume: 0.9 }),
+    new Howl({ src: ["src/audio/playcard_08.wav"], volume: 0.9 }),
+    new Howl({ src: ["src/audio/playcard_09.wav"], volume: 0.9 }),
+    new Howl({ src: ["src/audio/playcard_10.wav"], volume: 0.9 })
 ];
 
 let lastSoundIndex = -1;

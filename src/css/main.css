@@ -76,35 +76,21 @@
 
     #joinRoomMenu {
         position: absolute;
-        font-family: 'Poppins', sans-serif;
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        width: 400px; /* Adjust as needed */
-        height: 280px; /* Adjust as needed */
-        background-color: #ffffff; /* White background */
-        border: 1px solid #000; /* Add border with 2px width and black color */
-        border-radius: 10px; /* Rounded corners */
-        display: none;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
+        font-family: 'Poppins', sans-serif;
     }
 
     #availableRooms {
-        margin-bottom: 20px;
         font-family: 'Poppins', sans-serif;
         color: black;
         text-align: left;
-        border: 1px solid #ddd;
-        border-radius: 5px;
-        padding: 10px;
-        background-color: #f9f9f9;
     }
 
     #availableRooms h3 {
         margin-top: 0;
-        font-size: 14px;
+        font-size: 18px;
         text-align: center;
         color: black;
     }
@@ -115,82 +101,6 @@
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        width: 700px; /* Adjust as needed */
-        height: 480px; /* Adjust as needed */
-        background-color: #ffffff; /* White background */
-        border: 1px solid #000; /* Add border with 2px width and black color */
-        border-radius: 10px; /* Rounded corners */
-        display: none;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-    }
-
-    /* Apply styles to lobbyMenu children */
-    #lobbyMenu > * {
-        margin: 10px 0; /* Add vertical margin for each child element */
-    }
-
-    /* CSS for connectedClients section */
-    #connectedClients {
-        margin-bottom: 20px;
-        color: black;
-        text-align: left;
-        border: 1px solid #ddd;
-        border-radius: 5px;
-        padding: 10px;
-        background-color: #f9f9f9;
-    }
-
-    #connectedClients p {
-        margin: 5px 0;
-        text-align: center;
-    }
-
-    #connectedClients h3 {
-        margin-top: 0;
-        font-size: 14px;
-        text-align: center;
-        color: black;
-    }
-
-    #chatBox {
-        background-color: #fff; /* Background color for the chat box */
-        padding: 10px;
-        margin-bottom: 10px;
-    }
-    
-    #messageContainer {
-        height: 150px;
-        max-height: 150px; /* Increase the maximum height */
-        overflow-y: auto; /* Enable vertical scrolling */
-        border: 1px solid #ccc;
-        padding: 10px;
-        margin-bottom: 10px;
-    }
-    
-    #messageInput {
-        width: calc(100% - 80px); /* Adjust width minus button width */
-        font-family: 'Poppins', sans-serif;
-        padding: 8px;
-        border: 1px solid #ccc;
-        border-radius: 5px;
-        margin-right: 5px;
-    }
-    
-    #sendMessageButton {
-        width: 70px; /* Adjust button width */
-        font-family: 'Poppins', sans-serif;
-        padding: 8px;
-        background-color: #4CAF50;
-        color: white;
-        border: none;
-        border-radius: 5px;
-        cursor: pointer;
-    }
-    
-    #sendMessageButton:hover {
-        background-color: #45a049;
     }
 
     #endMenu{
@@ -276,53 +186,9 @@
     /* style for input box validation message */
     #errorMessage2, #errorMessage3{
         font-size: 12px;
-        margin-top: 10px;
-        margin-bottom: -5px;
         display: none;
         text-align: center;
         font-weight: bold;
-    }
-
-    .room-button {
-        display: block;
-        margin: 20px auto; /* Center horizontally with margin */
-        width: 300px;
-        height: 30px;
-        transition-duration: 0.4s;
-        font-size: 15px;
-        font-family: Helvetica, Arial, sans-serif;
-        font-weight: 200;
-        border: 1px solid #ccc; /* Subtle gray border */
-        border-radius: 4px;
-        cursor: pointer;
-    }
-
-    #readyButton{
-        display: block;
-        margin: 15px auto; /* Center horizontally with margin */
-        width: 300px;
-        height: 30px;
-        transition-duration: 0.4s;
-        font-size: 15px;
-        font-family: Helvetica, Arial, sans-serif;
-        font-weight: 200;
-        border: 1px solid #ccc; /* Subtle gray border */
-        border-radius: 4px;
-        cursor: pointer;
-    }
-
-    #backToJoinRoomButton {
-        position: absolute;
-        top: 0px; /* adjust as needed */
-        left: 10px; /* adjust as needed */
-        padding: 5px 9px; /* size for a small but acceptable button */
-        transition-duration: 0.4s;
-        font-size: 15px;
-        font-family: Helvetica, Arial, sans-serif;
-        font-weight: 200;
-        border: 1px solid #ccc; /* Subtle gray border */
-        border-radius: 4px;
-        cursor: pointer;
     }
 
     #pass:hover {
@@ -368,7 +234,7 @@
     
     #gameContainer {
         width: 1200px;
-        height: 750px;
+        height: 780px;
         background-image: url('background/green-background.jpg');
         background-size: cover; background-position: center;
         background-repeat: no-repeat; /* Prevent the image from repeating */
@@ -410,32 +276,32 @@
         pointer-events: none;
     }
 
-    #p0Info{
+    #p0Info {
         position: absolute;
         top: 70%;
         left: 50%;
-        transform: translate(-50%, -50%);
+        transform: translate(-50%, -50%); /* center horizontally & vertically */
     }
 
-    #p1Info{
+    #p1Info {
         position: absolute;
         top: 50%;
-        left: 15%;
-        transform: translate(-50%, -50%);
+        left: 12%;
+        transform: translateY(-50%); /* center vertically only, no horizontal shift */
     }
 
-    #p2Info{
+    #p2Info {
         position: absolute;
         top: 22.8%;
         left: 50%;
-        transform: translate(-50%, -50%);
+        transform: translate(-50%, -50%); /* center horizontally & vertically */
     }
 
-    #p3Info{
+    #p3Info {
         position: absolute;
         top: 50%;
-        left: 85%;
-        transform: translate(-50%, -50%);
+        right: 12%;
+        transform: translateY(-50%); /* center vertically only */
     }
 
     #clear,
