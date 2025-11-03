@@ -1,6 +1,6 @@
 import Player from "./player.js"
 import Opponent from "./opponent.js"
-import PocketBase from "https://cdn.jsdelivr.net/npm/pocketbase@0.21.1/dist/pocketbase.es.mjs";
+import PocketBase, { BaseAuthStore } from "https://cdn.jsdelivr.net/npm/pocketbase@0.21.1/dist/pocketbase.es.mjs";
 
 // Lookup table for printing actual rank in last played hand
 const rankLookup = {
@@ -32,15 +32,47 @@ window.isResume = false;
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+let currentProfileUsername = null;
+
 let isJoiningRoom = false;
 
 const PB_URL = 'http://127.0.0.1:8090';
-const pb = new PocketBase(PB_URL);
+// store key "pb_auth" in sessionStorage (per tab), not localStorage (shared across tabs)
+
+class SessionAuthStore extends BaseAuthStore {
+    constructor(key = "pb_auth") {
+        super();
+        this.key = key;
+
+        // hydrate from sessionStorage
+        const raw = sessionStorage.getItem(this.key);
+        if (raw) {
+        try {
+            const { token, model } = JSON.parse(raw);
+            super.save(token, model);
+        } catch { sessionStorage.removeItem(this.key); }
+        }
+    }
+
+    save(token, model) {
+        super.save(token, model);
+        try { sessionStorage.setItem(this.key, JSON.stringify({ token, model })); } catch {}
+    }
+
+    clear() {
+        super.clear();
+        try { sessionStorage.removeItem(this.key); } catch {}
+    }
+}
+
+// Initialize the PocketBase client with your custom store
+const pb = new PocketBase(PB_URL, new SessionAuthStore("pb_auth"));
 
 function pbAvatarUrl(pbId, file, thumb='64x64') {
     if (!pbId || !file) return '';
-    return pb.getFileUrl({ collectionId: '_pb_users_auth_', id: pbId }, file, { thumb });
+    return pb.files.getUrl({ collectionId: '_pb_users_auth_', id: pbId }, file, { thumb });
 }
+
 
 //GameModule object encapsulate players, deck, gameDeck, finishedDeck (it represents the local gameState)
 const GameModule = (function() {
@@ -1269,6 +1301,8 @@ async function loginMenu() {
     userNameInput.addEventListener("input", updateLoginButtonState);
     passwordInput.addEventListener("input", updateLoginButtonState);
 
+
+
     return new Promise((resolve) => {
         let settled = false;
         function settle(v) { if (!settled) { settled = true; resolve(v); } }
@@ -1326,6 +1360,7 @@ async function loginMenu() {
             // if account verified then socket connect with token
             const socket = io(import.meta.env?.VITE_WS_URL || 'http://localhost:3000', {
                 auth: { pbToken: pb.authStore.token },
+                username: displayName, // export username
                 transports: ['polling','websocket'],
             });
 
@@ -1417,8 +1452,8 @@ async function loginMenu() {
 
 async function createAccountMenu() {
     const loginMenu = document.getElementById("loginMenu");
-    const createAccountMenu  = document.getElementById("createAccountMenu");
-    const form = createAccountMenu.querySelector("form");
+    const caMenu  = document.getElementById("createAccountMenu");
+    const form = caMenu.querySelector("form");
     const emailInput = document.getElementById("email");
     const usernameInput = document.getElementById("usernameRegistration");
     const passInput = document.getElementById("caPassword");
@@ -1427,8 +1462,8 @@ async function createAccountMenu() {
     const backBtn = document.getElementById("caBackButton");
     const registerBtn = form.querySelector('button[type="submit"]');
 
-    createAccountMenu.classList.remove("hidden"); // also remove Tailwind's .hidden
-
+    caMenu.classList.remove("hidden"); // also remove Tailwind's .hidden
+    
     const showError = (msg) => { if (err) err.textContent = msg || ''; };
 
     // username validation (letters/numbers/underscores only, 3–12 chars)
@@ -1516,8 +1551,7 @@ async function createAccountMenu() {
         backBtn?.addEventListener("click", () => {
             resetCAForm();
             // back to login
-            createAccountMenu.style.display = "none";
-            createAccountMenu.classList.add("hidden");
+            caMenu.classList.add("hidden");
             loginMenu.style.display = "block";
             resolve("back");
         }, { once: true });
@@ -1553,8 +1587,7 @@ async function createAccountMenu() {
                 await pb.collection('users').requestVerification(emailInput.value.trim());
 
                 // bounce to login with prefill + message
-                createAccountMenu.style.display = "none";
-                createAccountMenu.classList.add("hidden");
+                caMenu.classList.add("hidden");
                 loginMenu.style.display = "block";
                 const loginEmail = document.getElementById("username");
                 const loginErr   = document.getElementById("errorMessage1");
@@ -1658,20 +1691,593 @@ async function resetPasswordMenu(token) {
     });
 }
 
+// fetch the full player_stats record for the authed user.
+// returns null if not found or not authed.
+async function fetchPlayerStats(pb, username) {
+    if (!username) return null;
+
+    try {
+        const query = username.includes('-') 
+        ? `user.id="${username}"`
+        : `user.name="${username}"`;
+
+        const rec = await pb.collection('player_stats').getFirstListItem(query);
+
+        // Normalize + safe defaults
+        const s = {
+            id: rec.id,
+            user: rec.user,                              // relation id
+            games_played: rec.games_played ?? 0,
+            wins: rec.wins ?? 0,
+            seconds: rec.seconds ?? 0,
+            thirds: rec.thirds ?? 0,
+            fourths: rec.fourths ?? 0,
+            avg_finish: typeof rec.avg_finish === 'number' ? rec.avg_finish : null,
+            streak_wins: rec.streak_wins ?? 0,
+            streak_losses: rec.streak_losses ?? 0,
+            last_game: rec.last_game ?? null,           // relation id
+            updated: rec.updated ?? null,
+        };
+
+        // Derived metrics
+        const gp = s.games_played || 0;
+        s.win_rate = gp ? s.wins / gp : 0;
+        s.top2 = s.wins + s.seconds;
+        s.top2_rate = gp ? s.top2 / gp : 0;
+
+        return s;
+    } catch (err) {
+        console.error('Failed to fetch player_stats:', err);
+        return null;
+    }
+}
+
+// Fetch paginated game_results for a username
+async function fetchGameResultsForUsername(pb, username, { page = 1, perPage = 10, sort = '-created' } = {}) {
+    if (!username) return { items: [], page, perPage, totalPages: 1, totalItems: 0 };
+
+    const user = await getUserByName(username);
+    const uid = user?.id;
+    if (!uid) return { items: [], page, perPage, totalPages: 1, totalItems: 0 };
+
+    const filter = [
+        `first.id="${uid}"`,
+        `second.id="${uid}"`,
+        `third.id="${uid}"`,
+        `fourth.id="${uid}"`
+    ].join(' || ');
+
+    const res = await pb.collection('game_results').getList(page, perPage, {
+        filter,
+        expand: 'first,second,third,fourth',
+        sort
+    });
+
+    const items = res.items.map(it => {
+        const pickName = (rec) => rec ? (rec.name || rec.username || rec.id) : '';
+        const first  = pickName(it.expand?.first);
+        const second = pickName(it.expand?.second);
+        const third  = pickName(it.expand?.third);
+        const fourth = pickName(it.expand?.fourth);
+
+        return {
+        id: it.id,
+        created: it.created,
+        first, second, third, fourth
+        };
+    });
+
+    return {
+        items,
+        page: res.page,
+        perPage: res.perPage,
+        totalPages: res.totalPages,
+        totalItems: res.totalItems,
+    };
+}
+
+// return appropriate font colour for profile average score display
+function getAvgTier(avg) {
+    if (avg == null) {
+        return {
+        label: '—',
+        text: 'text-gray-400',
+        bg: 'bg-gray-100 dark:bg-gray-800',
+        border: 'border-gray-400/30',
+        ring: '',
+        title: 'No data'
+        };
+    }
+
+    if (avg <= 1.75) {
+        return {
+        label: 'Mythic',
+        text: 'text-emerald-600 dark:text-emerald-300',
+        bg: 'bg-emerald-50 dark:bg-emerald-900/25',
+        border: 'border-emerald-300/60 dark:border-emerald-400/40',
+        ring: 'shadow-[0_0_0_2px_rgba(16,185,129,.12)]',
+        title: 'Mythic (≤ 1.75)'
+        };
+    } else if (avg <= 2.0) {
+        return {
+        label: 'Legendary',
+        text: 'text-cyan-600 dark:text-cyan-300',
+        bg: 'bg-cyan-50 dark:bg-cyan-900/25',
+        border: 'border-cyan-300/60 dark:border-cyan-400/40',
+        ring: 'shadow-[0_0_0_2px_rgba(8,145,178,.12)]',
+        title: 'Legendary (≤ 2.00)'
+        };
+    } else if (avg <= 2.5) {
+        return {
+        label: 'Epic',
+        text: 'text-violet-600 dark:text-violet-300',
+        bg: 'bg-violet-50 dark:bg-violet-900/25',
+        border: 'border-violet-300/60 dark:border-violet-400/40',
+        ring: 'shadow-[0_0_0_2px_rgba(139,92,246,.12)]',
+        title: 'Epic (≤ 2.50)'
+        };
+    } else if (avg <= 3.0) {
+        return {
+        label: 'Rare',
+        text: 'text-amber-600 dark:text-amber-300',
+        bg: 'bg-amber-50 dark:bg-amber-900/25',
+        border: 'border-amber-300/60 dark:border-amber-400/40',
+        ring: 'shadow-[0_0_0_2px_rgba(245,158,11,.12)]',
+        title: 'Rare (≤ 3.00)'
+        };
+    } else if (avg <= 3.5) {
+        return {
+        label: 'Uncommon',
+        text: 'text-orange-600 dark:text-orange-300',
+        bg: 'bg-orange-50 dark:bg-orange-900/25',
+        border: 'border-orange-300/60 dark:border-orange-400/40',
+        ring: 'shadow-[0_0_0_2px_rgba(234,88,12,.12)]',
+        title: 'Uncommon (≤ 3.50)'
+        };
+    }
+
+    return {
+        label: 'Common',
+        text: 'text-rose-600 dark:text-rose-300',
+        bg: 'bg-rose-50 dark:bg-rose-900/25',
+        border: 'border-rose-300/60 dark:border-rose-400/40',
+        ring: 'shadow-[0_0_0_2px_rgba(244,63,94,.12)]',
+        title: 'Common (> 3.50)'
+    };
+}
+
+function esc(v) { return String(v).replace(/"/g, '\\"'); }
+
+async function getUserByName(name) {
+    return await pb.collection('users').getFirstListItem(`name="${esc(name)}"`);
+}
+
+async function renderProfileHeader(name) {
+    const header = profileMenu.querySelector('#profileHeader');
+    if (!header) return;
+
+    // Get pocketbase player object via querying with name given by server on auth
+    const u = await getUserByName(name);
+    const username = u?.name || u?.username || 'Player';
+
+    currentProfileUsername = username;
+
+    // Fetch stats via username query
+    const stats = await fetchPlayerStats(pb, username) || {};
+    const avg = stats?.avg_finish ?? null;
+
+    // Create elements
+    const img = document.createElement('img');
+    const nameDiv = document.createElement('div');
+    const avgDiv = document.createElement('div');
+    const leftWrapper = document.createElement('div');
+
+    // Avatar
+    if (u?.id && u?.avatar) {
+        const url1x = pbAvatarUrl(u.id, u.avatar, '100x100');
+        const url2x = pbAvatarUrl(u.id, u.avatar, '200x200');
+        img.src = url1x;
+        img.srcset = `${url1x} 1x, ${url2x} 2x`;
+        img.sizes = '4rem';
+    } else {
+        img.src = '/src/css/background/avatar-placeholder.png';
+        img.removeAttribute('srcset');
+        img.removeAttribute('sizes');
+    }
+
+    img.alt = username;
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    img.className = 'w-16 h-16 object-cover rounded-md border border-gray-300 dark:border-gray-600 shadow-sm';
+    img.style.aspectRatio = '1 / 1';
+
+    // Username
+    nameDiv.textContent = username;
+    nameDiv.className = 'text-xl font-semibold text-gray-900 dark:text-white truncate ml-3';
+
+    // Left side (avatar + name)
+    leftWrapper.className = 'flex items-center gap-3';
+    leftWrapper.append(img, nameDiv);
+
+    const tier = getAvgTier(avg);
+
+    avgDiv.textContent = avg !== null ? avg.toFixed(3) : '—';
+    avgDiv.className = [
+        // core badge look
+        'px-4 py-1 rounded-lg tracking-wider whitespace-nowrap font-extrabold text-3xl',
+        'border shadow-md', tier.ring,
+        // dynamic colors
+        tier.text, tier.bg, tier.border
+    ].join(' ');
+
+    // Inject into header
+    header.innerHTML = '';
+    header.className = [
+        "flex items-center justify-between p-2 rounded-lg border shadow-sm",
+        // use tier’s bg + border color for contrast
+        tier.bg, tier.border,
+        // fallback for text and dark mode
+        "dark:text-gray-100 transition-colors"
+    ].join(" ");
+    header.append(leftWrapper, avgDiv);
+
+    // stats strip
+    // remove an existing strip if present
+    const oldStrip = profileMenu.querySelector('#profileStatsStrip');
+    if (oldStrip) oldStrip.remove();
+
+    const oldPctStrip = profileMenu.querySelector('#profileStatsPercentageStrip');
+    if (oldPctStrip) oldPctStrip.remove();
+
+    // Helpers
+    const gp = stats.games_played ?? 0;
+    const wins = stats.wins ?? 0;
+    const seconds = stats.seconds ?? 0;
+    const thirds = stats.thirds ?? 0;
+    const fourths = stats.fourths ?? 0;        // treated as "Losses"
+    const top2 = (wins + seconds) | 0;
+    const winRate = gp ? (wins / gp) : 0;
+    const top2Rate = gp ? (top2 / gp) : 0;
+    const pct = (x) => (isFinite(x) ? (x * 100).toFixed(1) + '%' : '—');
+
+    const statsStrip = document.createElement('div');
+    statsStrip.id = 'profileStatsStrip';
+    statsStrip.className = `
+        mt-5
+        bg-gray-50 dark:bg-gray-800
+        border border-gray-200 dark:border-gray-700
+        rounded-lg shadow-sm
+        overflow-x-auto
+    `;
+
+    const statsPercentageStrip = document.createElement('div');
+    statsPercentageStrip.id = 'profileStatsPercentageStrip';
+    statsPercentageStrip.className = `
+        mt-2
+        bg-gray-50 dark:bg-gray-800
+        border border-gray-200 dark:border-gray-700
+        rounded-lg shadow-sm
+        overflow-x-auto
+    `;
+
+    const row = document.createElement('div');
+    row.className = `
+        flex gap-2 p-2
+        min-w-full
+        justify-between
+    `;
+
+    // --- Second row: percentage stats ---
+    const row2 = document.createElement('div');
+        row2.className = `
+        flex gap-2 p-2
+        min-w-full
+        justify-between
+    `;
+
+    // Pill builder
+    const makePill = (label, value, title = '') => {
+        const wrap = document.createElement('div');
+        wrap.className = `
+            flex flex-col items-center justify-center
+            w-20 
+            px-1 py-1 rounded-md
+            bg-gray-50 dark:bg-gray-900
+            border border-gray-200 dark:border-gray-700
+            shrink-0
+        `;
+        if (title) wrap.title = title;
+
+        const v = document.createElement('div');
+        v.className = 'text-[16px] font-semibold text-gray-900 dark:text-gray-100 leading-none';
+        v.textContent = value;
+
+        const l = document.createElement('div');
+        l.className = 'text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-1';
+        l.textContent = label;
+
+        wrap.append(v, l);
+        return wrap;
+    };
+
+    // thinner pill builder (percentages)
+    const makePill2 = (label, value, title = '') => {
+        const wrap = document.createElement('div');
+        wrap.className = `
+            flex flex-col items-center justify-center
+            w-20
+            px-1 py-1 rounded-md   /* thinner */
+            bg-gray-50 dark:bg-gray-900
+            border border-gray-200 dark:border-gray-700
+            shrink-0
+        `;
+        if (title) wrap.title = title;
+
+        const v = document.createElement('div');
+        v.className = 'text-[16px] font-semibold text-gray-900 dark:text-gray-100 leading-none';
+        v.textContent = value;
+
+        const l = document.createElement('div');
+        l.className = 'text-[10px] uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5';
+        l.textContent = label;
+
+        wrap.append(v, l);
+        return wrap;
+    };
+
+    row.append(
+        makePill('Games', gp),
+        makePill('Wins', wins),
+        makePill('Seconds', seconds),
+        makePill('Thirds', thirds),
+        makePill('Losses', fourths)
+    );
+
+    // individual rates (safe if gp === 0)
+    const winPct    = pct(winRate);
+    const secondPct = pct(gp ? seconds / gp : 0);
+    const thirdPct  = pct(gp ? thirds / gp : 0);
+    const lossPct   = pct(gp ? fourths / gp : 0);
+    const top2Pct   = pct(top2Rate);
+
+    row2.append(
+        makePill2('Top 2 %', top2Pct),
+        makePill2('Win %', winPct),
+        makePill2('Second %', secondPct),
+        makePill2('Third %', thirdPct),
+        makePill2('Loss %', lossPct),
+    );
+
+    statsStrip.append(row);
+    statsPercentageStrip.append(row2);
+
+    // Insert strip *below* the header
+    header.insertAdjacentElement('afterend', statsStrip);
+    statsStrip.insertAdjacentElement('afterend', statsPercentageStrip);
+}
+
+async function renderProfileTable(username) {
+    const statsPercentageStrip = document.getElementById("profileStatsPercentageStrip");
+    if (!statsPercentageStrip) {
+        console.warn("profileStatsPercentageStrip not found");
+        return;
+    }
+
+    document.getElementById("profileStatsTable")?.remove();
+
+    const wrapper = document.createElement("div");
+    wrapper.id = "profileStatsTable";
+    wrapper.className =
+        "mt-5 overflow-x-auto rounded-xl border border-gray-300 dark:border-gray-700 shadow-md bg-white dark:bg-gray-900";
+    const table = document.createElement("table");
+    table.className =
+        "min-w-full text-sm text-left divide-y divide-gray-200 dark:divide-gray-700";
+
+    // Header
+    const thead = document.createElement("thead");
+    thead.className =
+        "bg-emerald-600 dark:bg-emerald-700 text-white dark:text-gray-100 uppercase text-xs tracking-wider";
+    thead.innerHTML = `
+        <tr>
+            <th class="px-4 py-3 font-semibold">Game ID</th>
+            <th class="px-4 py-3 font-semibold">First</th>
+            <th class="px-4 py-3 font-semibold">Second</th>
+            <th class="px-4 py-3 font-semibold">Third</th>
+            <th class="px-4 py-3 font-semibold">Fourth</th>
+            <th class="px-4 py-3 font-semibold">Date</th>
+        </tr>
+    `;
+
+    // Body
+    const tbody = document.createElement("tbody");
+    tbody.className =
+        "divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-900";
+
+    // Footer / Pager
+    const footer = document.createElement("div");
+    footer.className =
+        "flex items-center justify-between gap-3 px-4 py-3 bg-gray-100 dark:bg-gray-800 border-t border-gray-300 dark:border-gray-700 rounded-b-xl";
+
+    const info = document.createElement("span");
+    info.className = "text-xs text-gray-700 dark:text-gray-400";
+
+    function makeBtn(label, title) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.title = title || label;
+        btn.className =
+            "px-2.5 py-1 text-xs rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 font-medium shadow-sm transition";
+        btn.textContent = label;
+        return btn;
+    }
+
+    const firstBtn = makeBtn("« First", "First page");
+    const prevBtn = makeBtn("‹ Prev", "Previous page");
+    const nextBtn = makeBtn("Next ›", "Next page");
+    const lastBtn = makeBtn("Last »", "Last page");
+
+    const pager = document.createElement("div");
+    pager.className = "flex items-center gap-2";
+    pager.append(firstBtn, prevBtn, info, nextBtn, lastBtn);
+
+    footer.append(pager);
+
+    table.append(thead, tbody);
+    wrapper.append(table, footer);
+    statsPercentageStrip.insertAdjacentElement("afterend", wrapper);
+
+    // Pagination state
+    let page = 1;
+    const perPage = 6;
+
+    function fmtDate(iso) {
+        const d = new Date(iso);
+        return d.toLocaleString(undefined, {
+            year: "numeric",
+            month: "short",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+        });
+    }
+
+    async function renderPage() {
+        const res = await fetchGameResultsForUsername(pb, username, {
+            page,
+            perPage,
+            sort: "-created",
+        });
+
+        tbody.innerHTML = "";
+        if (!res.items.length) {
+            tbody.innerHTML =
+                `<tr><td colspan="6" class="px-4 py-6 text-center text-gray-500 dark:text-gray-400 italic">No games yet</td></tr>`;
+        } else {
+            res.items.forEach((row, i) => {
+                const tr = document.createElement("tr");
+                tr.className =
+                    (i % 2 === 0
+                        ? "bg-gray-200 dark:bg-gray-800/60"
+                        : "bg-white dark:bg-gray-900") +
+                    " hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors";
+                tr.innerHTML = `
+                    <td class="px-4 py-2 font-mono text-xs text-gray-800 dark:text-gray-200">${row.id}</td>
+                    <td class="px-4 py-2 text-xs">${row.first || "—"}</td>
+                    <td class="px-4 py-2 text-xs">${row.second || "—"}</td>
+                    <td class="px-4 py-2 text-xs">${row.third || "—"}</td>
+                    <td class="px-4 py-2 text-xs">${row.fourth || "—"}</td>
+                    <td class="px-4 py-2 text-xs text-gray-600 dark:text-gray-400">${fmtDate(row.created)}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        info.textContent = `Page ${res.page} of ${res.totalPages} • ${res.totalItems} games`;
+
+        firstBtn.disabled = res.page <= 1;
+        prevBtn.disabled = res.page <= 1;
+        nextBtn.disabled = res.page >= res.totalPages;
+        lastBtn.disabled = res.page >= res.totalPages;
+
+        firstBtn.onclick = () => { clickSounds[0].play(); page = 1; renderPage(); };
+        prevBtn.onclick = () => { clickSounds[0].play(); if (page > 1) page -= 1; renderPage(); };
+        nextBtn.onclick = () => { clickSounds[2].play(); page += 1; renderPage(); };
+        lastBtn.onclick = () => { clickSounds[2].play(); page = res.totalPages; renderPage(); };
+
+        // Turn names in columns 2–5 into clickable links
+        tbody.querySelectorAll("td:nth-child(2), td:nth-child(3), td:nth-child(4), td:nth-child(5)")
+        .forEach(td => {
+            const name = td.textContent.trim();
+            if (name && name !== "—") {
+                const a = document.createElement("a");
+                a.href = "#";
+                a.dataset.username = name;
+                a.textContent = name;
+                a.className = "text-blue-700 dark:text-blue-400 hover:underline";
+                td.textContent = "";
+                td.appendChild(a);
+            }
+        });
+    }
+
+    await renderPage();
+}
+
+document.body.addEventListener("click", async (e) => {
+    const link = e.target.closest("a[data-username]");
+    if (!link) return;
+    e.preventDefault();
+
+    const clicked = link.dataset.username?.trim();
+    const showing = currentProfileUsername || document.getElementById("profileHeader")?.getAttribute("data-profile");
+    if (clicked && showing && clicked === showing) {
+        return; // same profile that's already displayed → no reload, no flicker
+    }
+    clickSounds[2].play();
+
+    // Clear current profile content
+    document.getElementById("profileHeader")?.replaceChildren();
+    document.getElementById("profileStatsTable")?.remove();
+    document.getElementById("profileStatsStrip")?.remove();
+    document.getElementById("profileStatsPercentageStrip")?.remove();
+
+    // Render new profile
+    await renderProfileHeader(clicked);
+    await renderProfileTable(clicked);
+});
+
+
 //menu that allows users to enter a room number to join an available room
-async function joinRoomMenu(socket) {
+async function joinRoomMenu(socket, username) {
     return new Promise((resolve, reject) => {
         const joinRoomMenu = document.getElementById("joinRoomMenu");
         const availableRoomsDiv = document.getElementById('availableRooms');
         const errorMessage2 = document.getElementById("errorMessage2");
+        const profileMenu = document.getElementById('profileMenu');
+
         let roomsClickBound = false;
         let onRoomsClick = null;
 
         // remove old listeners first
+        const profileBtn = document.getElementById('jrProfileButton')
         const avatarBtn = document.getElementById('avatarButton');
+        const closeProfileButton = document.getElementById('closeProfileButton');
+
+        const newCloseProfileButton = closeProfileButton.cloneNode(true);
         const newAvatarBtn = avatarBtn.cloneNode(true);
+        const newProfileBtn = profileBtn.cloneNode(true);
+
+        profileBtn.parentNode.replaceChild(newProfileBtn, profileBtn);
         avatarBtn.parentNode.replaceChild(newAvatarBtn, avatarBtn);
+        closeProfileButton.parentNode.replaceChild(newCloseProfileButton, closeProfileButton);
         const img = document.getElementById('jrAvatarImg');
+        
+
+        async function openProfile() {
+            // show popup above everything
+            clickSounds[2].play();
+            profileMenu.classList.remove('hidden');
+            await renderProfileHeader(username); // populate header from PB, will update to get profile via username
+            await renderProfileTable(username);
+        }
+
+        function closeProfile() {
+            clickSounds[0].play();
+            profileMenu.classList.add('hidden');
+        }
+
+        // 1) Delegated handler on the TOP BAR container (no buildup)
+        function onTopBarClick(e) {
+            // Only open when the actual "Profile" button is clicked
+            if (e.target.closest('#jrProfileButton')) {
+                openProfile();
+            }
+        }
+        
+        // 2) Close button on the modal itself
+        function onCloseProfileClick() {
+            closeProfile();
+        }
 
         function addListenerRoomButton() {
             if (roomsClickBound) return;
@@ -1697,15 +2303,19 @@ async function joinRoomMenu(socket) {
         // Display joinRoomMenu
         joinRoomMenu.style.display = "block";
 
-        (function syncJoinRoomAvatar() {
+        // bind once to the FRESHLY-CLONED nodes
+        newProfileBtn.addEventListener('click', onTopBarClick);
+        newCloseProfileButton.addEventListener('click', onCloseProfileClick);
+
+        (async function syncJoinRoomAvatar() {
             // Load current user's avatar like playerInfo
-            const u = pb?.authStore?.model; // PocketBase authed record
+            const u = pb?.authStore?.model;
             if (u?.id && u?.avatar) {
                 const url1x = pbAvatarUrl(u.id, u.avatar, '100x100');
                 const url2x = pbAvatarUrl(u.id, u.avatar, '200x200');
                 img.src = url1x;
                 img.srcset = `${url1x} 1x, ${url2x} 2x`;
-                img.sizes = '48px'; // crisp at ~32px like your playerInfo
+                img.sizes = '4.5rem'; // crisp at ~32px like playerInfo
             } else {
                 img.src = '/src/css/background/avatar-placeholder.png';
                 img.removeAttribute('srcset');
@@ -1720,6 +2330,7 @@ async function joinRoomMenu(socket) {
                     console.warn('Not logged in; cannot set avatar.');
                     return;
                 }
+
                 // 1) Ask for an image (web file picker)
                 const file = await (async function pickImageFile() {
                     return new Promise((resolve) => {
@@ -1764,23 +2375,40 @@ async function joinRoomMenu(socket) {
 
                 // 4) Upload to PocketBase
                 try {
-                    const fd = new FormData();
-                    fd.append('avatar', file); // PB users collection "avatar" field
+                    const authed = pb.authStore.model;
+                    if (!authed?.id) throw new Error('Not authenticated');
 
-                    const updated = await pb.collection('users').update(u.id, fd);
-                    // persist new auth record locally so future pbAvatarUrl calls use latest
+                    const fd = new FormData();
+                    fd.append('avatar', file);
+                    fd.append('name', authed.name); // your schema requires name (min 3)
+
+                    // capture the returned record
+                    const updated = await pb.collection('users').update(authed.id, fd);
+
+                    // keep authStore in sync so future calls use the latest avatar/name
                     pb.authStore.save(pb.authStore.token, updated);
 
-                    // 5) Refresh to server-rendered thumbs (1x/2x) for crispness
+                    // refresh thumbs
                     const url1x = pbAvatarUrl(updated.id, updated.avatar, '100x100');
                     const url2x = pbAvatarUrl(updated.id, updated.avatar, '200x200');
                     if (url1x) {
-                    img.src = url1x;
-                    img.srcset = `${url1x} 1x, ${url2x} 2x`;
-                    img.sizes = getComputedStyle(img).width || '48px';
+                        img.src = url1x;
+                        img.srcset = `${url1x} 1x, ${url2x} 2x`;
+                        img.sizes = getComputedStyle(img).width || '48px';
                     }
+
+                    socket.emit('user:profile:update', {
+                        pbId: pb.authStore.model.id,
+                        avatar: pb.authStore.model.avatar,      // new PB filename
+                        username: pb.authStore.model.name || pb.authStore.model.username
+                    });
                 } catch (e) {
-                    console.error('Avatar upload failed:', e);
+                    // PB puts useful info here:
+                    const status  = e?.status ?? e?.data?.code;
+                    const message = e?.data?.message || e?.message;
+                    const fieldErrs = e?.data?.data ? JSON.stringify(e.data.data, null, 2) : '';
+                    console.error('Avatar upload failed:', { status, message, fieldErrs });
+                    console.error(`Avatar upload failed: ${message}\n${fieldErrs}`);
                 }
             });
         })();
@@ -2046,14 +2674,19 @@ async function lobbyMenu(socket, roomCode){
 
             // avatar
             const img = document.createElement('img');
-            const url1x = pbAvatarUrl(c.pbId, c.avatar, '100x100');
-            const url2x = pbAvatarUrl(c.pbId, c.avatar, '200x200');
+
+            // If this entry is ME, prefer my freshly-synced authStore record
+            const isMe = (c.pbId && pb?.authStore?.model?.id && String(c.pbId) === String(pb.authStore.model.id));
+            const freshAvatarFile = isMe ? pb.authStore.model.avatar : c.avatar;
+
+            const url1x = pbAvatarUrl(c.pbId, freshAvatarFile, '100x100');
+            const url2x = pbAvatarUrl(c.pbId, freshAvatarFile, '200x200');
             if (url1x) {
-            img.src = url1x;
-            img.srcset = `${url1x} 1x, ${url2x} 2x`;
-            img.sizes = '48px';
+                img.src = url1x;
+                img.srcset = `${url1x} 1x, ${url2x} 2x`;
+                img.sizes = '48px';
             } else {
-            img.src = '/src/css/background/avatar-placeholder.png';
+                img.src = '/src/css/background/avatar-placeholder.png';
             }
             img.className = [
             'w-12 h-12 object-cover rounded-md border shadow-sm',
@@ -2148,7 +2781,7 @@ async function lobbyMenu(socket, roomCode){
             // we’ll render the player list inside that handler
             updateClientList(clientList);
 
-             // figure out *your* current ready state from the list
+            // figure out *your* current ready state from the list
             const me = clientList.find(c =>
                 c.clientId === socket.id || c.id === socket.id || c.socketId === socket.id
             );
@@ -2177,7 +2810,7 @@ async function lobbyMenu(socket, roomCode){
             readyButton.removeEventListener("click", toggleReadyState);
             sendMessageButton.removeEventListener('click', sendMessage);
             messageInput.removeEventListener('keydown', handleEnterKey);
-            backToJoinRoomButton.removeEventListener('click', handleBackClick); // <-- add this
+            backToJoinRoomButton.removeEventListener('click', handleBackClick); 
 
             socket.off('clientList', updateClientList);
             socket.off('updateReadyState');
@@ -2959,7 +3592,7 @@ window.onload = async function() {
 
         // one loop that contains both joinRoomMenu and the game cycle
         while (true) {
-            const { socket, roomCode: rc, isRejoin: rejoinFlag } = await joinRoomMenu(loginMenuSocket);
+            const { socket, roomCode: rc, isRejoin: rejoinFlag } = await joinRoomMenu(loginMenuSocket, username);
             joinedRoomSocket = socket;
             roomCode = rc;
             isRejoin = rejoinFlag;

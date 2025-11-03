@@ -74,6 +74,15 @@
         transition: opacity 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
     }
 
+ 
+    #profileMenu {
+        position: absolute;
+        top: 50%; /* Place it vertically in the middle */
+        left: 50%; /* Place it horizontally in the middle */
+        transform: translate(-50%, -50%); /* Center it perfectly */
+        font-family: 'Poppins', sans-serif;
+    }
+
     #joinRoomMenu {
         position: absolute;
         top: 50%;
