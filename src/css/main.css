@@ -74,20 +74,32 @@
         transition: opacity 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
     }
 
+    /* Make both close buttons hug the top-right corner */
+    #closeProfileButton,
+    #closeGameProfileButton,
+    #closeLeaderboardButton {
+        position: absolute;       /* keep absolute */
+        top: 0.25rem;             /* tighter top offset (≈4px) */
+        right: 0.25rem;           /* tighter right offset */
+        z-index: 10;              /* stay above menu contents */
+    }
+
+    #closeProfileButton:hover,
+    #closeGameProfileButton:hover,
+    #closeLeaderboardButton:hover {
+        background-color: rgba(0,0,0,0.05);
+    }
  
-    #profileMenu {
+    #profileMenu,
+    #gameProfileMenu,
+    #joinRoomMenu,
+    #leaderboardMenu,
+    #lobbyMenu,
+    #endMenu {
         position: absolute;
         top: 50%; /* Place it vertically in the middle */
         left: 50%; /* Place it horizontally in the middle */
         transform: translate(-50%, -50%); /* Center it perfectly */
-        font-family: 'Poppins', sans-serif;
-    }
-
-    #joinRoomMenu {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
         font-family: 'Poppins', sans-serif;
     }
 
@@ -102,58 +114,6 @@
         font-size: 18px;
         text-align: center;
         color: black;
-    }
-
-    #lobbyMenu{
-        position: absolute;
-        font-family: 'Poppins', sans-serif;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-    }
-
-    #endMenu{
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        width: 700px; /* Adjust as needed */
-        height: 450px; /* Adjust as needed */
-        background-color: #ffffff; /* White background */
-        border: 1px solid #000; /* Add border with 2px width and black color */
-        border-radius: 10px; /* Rounded corners */
-        display: none;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-    }
-
-    /* center the table itself */
-    #endMenu .results{
-        /* width:90%;            <- remove or keep as a max width */
-        width: auto;             /* let it size to content */
-        max-width: 90%;          /* don't overflow small screens */
-        margin: 8px auto 12px;   /* <-- centers horizontally */
-        border-collapse: collapse;
-    }
-
-    /* keep text inside cells left-aligned */
-    #endMenu .results th,
-    #endMenu .results td{
-        border: 1px solid #ddd;
-        padding: 8px;
-        text-align: center;
-    }
-
-    #endMenu .results th:first-child,
-    #endMenu .results td:first-child{
-        width: 25%;          /* narrow column */
-        text-align: center;
-    }
-
-    /* header style */
-    #endMenu .results thead th{ 
-        background: #f5f5f5; 
     }
 
     /*leaderboard styling*/
@@ -213,25 +173,6 @@
     #backToJoinRoomButton2:hover, #backToJoinRoomButton:hover {
         background-color: #f04034;
         color: white;
-    }
-
-    /* make the action buttons inline */
-    #endMenu .actions {
-        display: flex;
-        justify-content: center;
-        gap: 12px; /* space between buttons */
-        margin-top: 100px;
-    }
-
-    /* shared styles for both buttons */
-    #endMenu .actions button {
-        width: 120px;   /* shorter width */
-        height: 28px;   /* shorter height */
-        font-size: 14px;
-        font-family: 'Poppins', sans-serif;
-        border: 1px solid #ccc;
-        border-radius: 4px;
-        cursor: pointer;
     }
 
     #container {

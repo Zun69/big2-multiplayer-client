@@ -2,7 +2,7 @@ import Player from "./player.js"
 import Opponent from "./opponent.js"
 import PocketBase, { BaseAuthStore } from "https://cdn.jsdelivr.net/npm/pocketbase@0.21.1/dist/pocketbase.es.mjs";
 
-// Lookup table for printing actual rank in last played hand
+// lookup table for printing actual rank in last played hand
 const rankLookup = {
     1: 'A',
     2: '2',
@@ -19,12 +19,21 @@ const rankLookup = {
     13: 'K',
 };
 
-// Lookup table for printing suit icon in last played hand
+// lookup table for printing suit icon in last played hand
 const suitLookup = {
     0: '♦', // Diamonds
     1: '♣', // Clubs
     2: '♥', // Hearts
     3: '♠', // Spades
+};
+
+// helpers: rank/suit to Unicode playing card glyphs ---
+const SUIT_BASES = {
+  // your mapping: 0 ♦, 1 ♣, 2 ♥, 3 ♠  (server enforces first move contains 3♦)
+  0: 0x1F0C0, // Diamonds
+  1: 0x1F0D0, // Clubs
+  2: 0x1F0B0, // Hearts
+  3: 0x1F0A0, // Spades
 };
 
 // Global flag: are we resuming a paused game?
@@ -1852,6 +1861,294 @@ async function getUserByName(name) {
     return await pb.collection('users').getFirstListItem(`name="${esc(name)}"`);
 }
 
+function getSortForMetric(metric) {
+    switch (metric) {
+        case 'wins':     return '-wins, -games_played';      // more is better
+        case 'games':    return '-games_played, -wins';      // more is better
+        case 'losses':   return 'fourths, -games_played';    // fewer is better
+        case 'seconds':  return '-seconds, -games_played';   // more seconds
+        case 'thirds':   return '-thirds, -games_played';    // more thirds
+        case 'avg':
+        default:         return 'avg_finish, -games_played'; // lower is better
+    }
+}
+
+async function fetchLeaderboardPage(pb, { page = 1, perPage = 10, metric = 'avg' } = {}) {
+  const sort = getSortForMetric(metric);
+  const res = await pb.collection('player_stats').getList(page, perPage, {
+    filter: 'games_played > 0',
+    sort,
+    expand: 'user',
+  });
+
+  const items = res.items.map((row) => {
+    const u = row.expand?.user;
+    const name = u?.name || u?.username || '(unknown)';
+    const avatar = (u?.id && u?.avatar)
+      ? pbAvatarUrl(u.id, u.avatar, '100x100')
+      : '/src/css/background/avatar-placeholder.png';
+    const games = row.games_played ?? 0;
+    const wins  = row.wins ?? 0;
+    const fourths = row.fourths ?? null; // explicit “losses” if tracked
+    const losses = (fourths != null) ? fourths : Math.max(0, games - wins); // fallback if fourths missing
+
+    return {
+      id: row.id,
+      userId: u?.id || null,
+      name,
+      avatar,
+      games,
+      wins,
+      seconds: row.seconds ?? 0,
+      thirds:  row.thirds  ?? 0,
+      fourths,
+      losses,
+      avg: (typeof row.avg_finish === 'number') ? row.avg_finish : null,
+      updated: row.updated ?? null,
+    };
+  });
+
+  return {
+    items,
+    page: res.page,
+    perPage: res.perPage,
+    totalPages: res.totalPages,
+    totalItems: res.totalItems,
+  };
+}
+
+function metricHeader(metric) {
+    switch (metric) {
+        case 'wins':     return 'Wins';
+        case 'games':    return 'Games';
+        case 'losses':   return 'Losses';
+        case 'seconds':  return 'Seconds';
+        case 'thirds':   return 'Thirds';
+        case 'avg':
+        default:         return 'Average';
+    }
+}
+
+function metricCellValue(row, metric) {
+    switch (metric) {
+        case 'wins':     return row.wins ?? 0;
+        case 'games':    return row.games ?? 0;
+        case 'losses':   return row.losses ?? 0;             // from fourths or fallback
+        case 'seconds':  return row.seconds ?? 0;
+        case 'thirds':   return row.thirds ?? 0;
+        case 'avg':
+        default:         return (row.avg == null) ? '—' : row.avg.toFixed(3);
+    }
+}
+
+function td(cls, text) {
+  const c = document.createElement('td');
+  c.className = cls;
+  c.textContent = (text ?? '—').toString();
+  return c;
+}
+
+function setDropdownActive(metric) {
+    const map = {
+        avg:     document.getElementById('lbAvgOption'),
+        wins:    document.getElementById('lbWinsOption'),
+        games:   document.getElementById('lbGamesOption'),
+        losses:  document.getElementById('lbLossOption'),
+        seconds: document.getElementById('lbSecondsOption'),
+        thirds:  document.getElementById('lbThirdsOption'),
+    };
+
+    document.querySelectorAll('#dropdown a').forEach(el => {
+        el.classList.remove('bg-gray-600', 'dark:bg-gray-600');
+    });
+
+    const el = map[metric];
+    if (el) el.classList.add('bg-gray-600', 'dark:bg-gray-600');
+
+    const dropdownButton = document.getElementById('dropdownDefaultButton');
+    if (dropdownButton) {
+        const label = metricHeader(metric);
+        if (dropdownButton.childNodes && dropdownButton.childNodes[0]) {
+        dropdownButton.childNodes[0].textContent = label + ' ';
+        } else {
+        dropdownButton.textContent = label + ' ';
+        }
+    }
+}
+
+function bindDropdownHandlers() {
+    const bind = (id, metric) => {
+        const el = document.getElementById(id);
+        if (el && !el.dataset.bound) {
+        el.dataset.bound = '1';
+        el.addEventListener('click', (e) => {
+            e.preventDefault();
+            try { clickSounds?.[0]?.play(); } catch {}
+            renderLeaderboardMenu(metric);
+
+            // Correctly close via Flowbite API
+            const dropdownEl = document.getElementById('dropdown');
+            const buttonEl   = document.getElementById('dropdownDefaultButton');
+
+            // Try to get Flowbite’s existing controller instance
+            let dropdownInstance = Flowbite?.Dropdown?.getInstance?.(dropdownEl);
+
+            // If Flowbite hasn’t created one yet, create it
+            if (!dropdownInstance && typeof Dropdown !== 'undefined') {
+            dropdownInstance = new Dropdown(dropdownEl, buttonEl);
+            }
+
+            // Ask Flowbite to close it (keeps internal state synced)
+            dropdownInstance?.hide();
+        });
+        }
+    };
+    bind('lbAvgOption',     'avg');
+    bind('lbWinsOption',    'wins');
+    bind('lbGamesOption',   'games');
+    bind('lbLossOption',    'losses');
+    bind('lbSecondsOption', 'seconds');   
+    bind('lbThirdsOption',  'thirds');  
+}
+async function renderLeaderboardMenu(metric = 'avg') {
+    const container = document.getElementById('leaderboardMenu');
+    const dropdownButton = document.getElementById('dropdownDefaultButton');
+    if (!container || !dropdownButton) return;
+
+    container.classList.remove('hidden');
+
+    // ensure dropdown items are wired
+    bindDropdownHandlers();
+
+    // mark active + update button text
+    setDropdownActive(metric);
+
+    // remove prior table
+    const existing = document.getElementById('leaderboardWrapper');
+    if (existing) existing.remove();
+
+    // wrapper after the dropdown
+    const wrapper = document.createElement('div');
+    wrapper.id = 'leaderboardWrapper';
+    wrapper.className = 'mt-3 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden';
+    dropdownButton.insertAdjacentElement('afterend', wrapper);
+
+    // table
+    const table = document.createElement('table');
+    table.className = 'min-w-full table-fixed text-sm text-left';
+
+    const thead = document.createElement('thead');
+    thead.className = 'bg-emerald-600 dark:bg-gray-800 text-gray-800 dark:text-gray-100';
+    thead.innerHTML = `
+        <tr>
+        <th class="px-4 py-3 font-semibold w-14">#</th>
+        <th class="px-4 py-3 font-semibold">Player</th>
+        <th class="px-4 py-3 font-semibold text-right w-28">${metricHeader(metric)}</th>
+        </tr>
+    `;
+
+    const tbody = document.createElement('tbody');
+    tbody.className = 'divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-900';
+
+    // footer pager
+    const footer = document.createElement('div');
+    footer.className = 'flex items-center justify-between gap-3 px-4 py-3 bg-gray-100 dark:bg-gray-800 border-t border-gray-300 dark:border-gray-700';
+    const info = document.createElement('span');
+    info.className = 'text-xs text-gray-700 dark:text-gray-400';
+
+    function makeBtn(label, title) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.title = title || label;
+        btn.className = 'px-2.5 py-1 text-xs rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 font-medium shadow-sm transition';
+        btn.textContent = label;
+        return btn;
+    }
+    const firstBtn = makeBtn('« First', 'First page');
+    const prevBtn  = makeBtn('‹ Prev',  'Previous page');
+    const nextBtn  = makeBtn('Next ›',  'Next page');
+    const lastBtn  = makeBtn('Last »',  'Last page');
+
+    const pager = document.createElement('div');
+    pager.className = 'flex items-center gap-2';
+    pager.append(firstBtn, prevBtn, info, nextBtn, lastBtn);
+
+    footer.append(pager);
+
+    table.append(thead, tbody);
+    wrapper.append(table, footer);
+
+    // pagination state
+    let page = 1;
+    const perPage = 10;
+
+    async function renderPage() {
+        const res = await fetchLeaderboardPage(pb, { page, perPage, metric });
+        tbody.innerHTML = '';
+
+        if (!res.items.length) {
+        const empty = document.createElement('tr');
+        empty.innerHTML = `<td colspan="3" class="px-4 py-6 text-center text-gray-500 dark:text-gray-400 italic">No players yet</td>`;
+        tbody.appendChild(empty);
+        } else {
+        const rankStart = (res.page - 1) * res.perPage + 1;
+
+        res.items.forEach((row, i) => {
+            const tr = document.createElement('tr');
+            tr.className =
+            (i % 2 === 0 ? 'bg-gray-200 dark:bg-gray-800/60' : 'bg-white dark:bg-gray-900') +
+            ' hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors';
+
+            // position
+            tr.appendChild(td('px-4 py-2 font-mono text-xs text-gray-800 dark:text-gray-200 whitespace-nowrap', rankStart + i));
+
+            // player (avatar + name)
+            const playerTd = document.createElement('td');
+            playerTd.className = 'px-4 py-2';
+            const rowDiv = document.createElement('div');
+            rowDiv.className = 'flex items-center gap-3';
+
+            const img = document.createElement('img');
+            img.src = row.avatar;
+            img.alt = row.name;
+            img.loading = 'lazy';
+            img.decoding = 'async';
+            img.className = 'w-8 h-8 rounded-md object-cover border border-gray-300 dark:border-gray-600';
+            img.style.aspectRatio = '1 / 1';
+
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'font-semibold text-gray-900 dark:text-gray-100 truncate';
+            nameSpan.textContent = row.name;
+
+            rowDiv.append(img, nameSpan);
+            playerTd.appendChild(rowDiv);
+            tr.appendChild(playerTd);
+
+            // metric cell (right aligned)
+            const value = metricCellValue(row, metric);
+            tr.appendChild(td('px-4 py-2 text-right tabular-nums', value));
+
+            tbody.appendChild(tr);
+        });
+        }
+
+        info.textContent = `Page ${res.page} of ${res.totalPages} • ${res.totalItems} players`;
+
+        firstBtn.disabled = res.page <= 1;
+        prevBtn.disabled  = res.page <= 1;
+        nextBtn.disabled  = res.page >= res.totalPages;
+        lastBtn.disabled  = res.page >= res.totalPages;
+
+        const click = () => { try { clickSounds?.[0]?.play(); } catch {} };
+        firstBtn.onclick = () => { click(); page = 1; renderPage(); };
+        prevBtn.onclick  = () => { click(); if (page > 1) page -= 1; renderPage(); };
+        nextBtn.onclick  = () => { click(); if (page < res.totalPages) page += 1; renderPage(); };
+        lastBtn.onclick  = () => { click(); page = res.totalPages; renderPage(); };
+    }
+
+    await renderPage();
+}
+
 async function renderProfileHeader(name) {
     const header = profileMenu.querySelector('#profileHeader');
     if (!header) return;
@@ -2156,18 +2453,26 @@ async function renderProfileTable(username) {
             res.items.forEach((row, i) => {
                 const tr = document.createElement("tr");
                 tr.className =
-                    (i % 2 === 0
-                        ? "bg-gray-200 dark:bg-gray-800/60"
-                        : "bg-white dark:bg-gray-900") +
-                    " hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors";
-                tr.innerHTML = `
-                    <td class="px-4 py-2 font-mono text-xs text-gray-800 dark:text-gray-200">${row.id}</td>
-                    <td class="px-4 py-2 text-xs">${row.first || "—"}</td>
-                    <td class="px-4 py-2 text-xs">${row.second || "—"}</td>
-                    <td class="px-4 py-2 text-xs">${row.third || "—"}</td>
-                    <td class="px-4 py-2 text-xs">${row.fourth || "—"}</td>
-                    <td class="px-4 py-2 text-xs text-gray-600 dark:text-gray-400">${fmtDate(row.created)}</td>
-                `;
+                (i % 2 === 0 ? "bg-gray-200 dark:bg-gray-800/60" : "bg-white dark:bg-gray-900") +
+                " hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors";
+
+                // helpers
+                const td = (cls, text) => {
+                    const c = document.createElement("td");
+                    c.className = cls;
+                    c.textContent = text; // << safe
+                    return c;
+                };
+
+                tr.append(
+                    td("px-4 py-2 font-mono text-xs text-gray-800 dark:text-gray-200 whitespace-nowrap", row.id),
+                    td("px-4 py-2 text-xs truncate", row.first  ?? "—"),
+                    td("px-4 py-2 text-xs truncate", row.second ?? "—"),
+                    td("px-4 py-2 text-xs truncate", row.third  ?? "—"),
+                    td("px-4 py-2 text-xs truncate", row.fourth ?? "—"),
+                    td("px-4 py-2 text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap", fmtDate(row.created))
+                );
+
                 tbody.appendChild(tr);
             });
         }
@@ -2183,6 +2488,20 @@ async function renderProfileTable(username) {
         prevBtn.onclick = () => { clickSounds[0].play(); if (page > 1) page -= 1; renderPage(); };
         nextBtn.onclick = () => { clickSounds[2].play(); page += 1; renderPage(); };
         lastBtn.onclick = () => { clickSounds[2].play(); page = res.totalPages; renderPage(); };
+
+        // Turn Game IDs in column 1 into clickable links
+        tbody.querySelectorAll("td:nth-child(1)").forEach(td => {
+            const id = td.textContent.trim();
+            if (id) {
+                const a = document.createElement("a");
+                a.href = "#";
+                a.dataset.gameId = id;
+                a.textContent = id;
+                a.className = "text-current no-underline hover:underline"; // inherit font + color
+                td.textContent = "";
+                td.appendChild(a);
+            }
+        });
 
         // Turn names in columns 2–5 into clickable links
         tbody.querySelectorAll("td:nth-child(2), td:nth-child(3), td:nth-child(4), td:nth-child(5)")
@@ -2204,28 +2523,253 @@ async function renderProfileTable(username) {
 }
 
 document.body.addEventListener("click", async (e) => {
-    const link = e.target.closest("a[data-username]");
-    if (!link) return;
-    e.preventDefault();
+    const userLink = e.target.closest("a[data-username]");
+    const gameLink = e.target.closest("a[data-game-id]");
+    if (userLink) {
+        e.preventDefault();
+        const clicked = userLink.dataset.username?.trim();
+        const showing = currentProfileUsername || document.getElementById("profileHeader")?.getAttribute("data-profile");
+        if (clicked && showing && clicked === showing) return;
 
-    const clicked = link.dataset.username?.trim();
-    const showing = currentProfileUsername || document.getElementById("profileHeader")?.getAttribute("data-profile");
-    if (clicked && showing && clicked === showing) {
-        return; // same profile that's already displayed → no reload, no flicker
+        document.getElementById("profileHeader")?.replaceChildren();
+        document.getElementById("profileStatsTable")?.remove();
+        document.getElementById("profileStatsStrip")?.remove();
+        document.getElementById("profileStatsPercentageStrip")?.remove();
+
+        clickSounds[2].play();
+        await renderProfileHeader(clicked);
+        await renderProfileTable(clicked);
+        return;
     }
-    clickSounds[2].play();
 
-    // Clear current profile content
-    document.getElementById("profileHeader")?.replaceChildren();
-    document.getElementById("profileStatsTable")?.remove();
-    document.getElementById("profileStatsStrip")?.remove();
-    document.getElementById("profileStatsPercentageStrip")?.remove();
-
-    // Render new profile
-    await renderProfileHeader(clicked);
-    await renderProfileTable(clicked);
+    if (gameLink) {
+        e.preventDefault();
+        const gameId = gameLink.dataset.gameId;
+        const gameProfileMenu = document.getElementById("gameProfileMenu");
+        if (gameProfileMenu) {
+            gameProfileMenu.classList.remove("hidden");
+            // (we’ll populate its content next step)
+            clickSounds[2].play();
+            //await renderGameProfileBody
+            openGameProfile(gameId, gameProfileMenu);
+        }
+    }
 });
 
+// helper: safe avatar url (uses your pbAvatarUrl if present)
+function getAvatarUrl(user) {
+    if (!user) return "/src/css/background/avatar-placeholder.png";
+    try {
+        if (typeof pbAvatarUrl === "function") {
+        return pbAvatarUrl(user.id, user.avatar, "100x100");
+        }
+    } catch (_) {}
+    // Fallback PocketBase thumb URL shape (adjust if your helper differs)
+    if (user?.collectionId && user?.avatar) {
+        return `${pb.baseUrl}/api/files/${user.collectionId}/${user.id}/${user.avatar}?thumb=100x100`;
+    }
+    return "/src/css/background/avatar-placeholder.png";
+}
+
+// tiny badge style for places
+function placeBadge(place) {
+    const styles = {
+        "1st": "bg-yellow-100 text-yellow-800 border-yellow-200",
+        "2nd": "bg-gray-100 text-gray-800 border-gray-200",
+        "3rd": "bg-amber-100 text-amber-800 border-amber-200",
+        "Loser": "bg-rose-100 text-rose-800 border-rose-200",
+    };
+    return `inline-block text-[10px] px-1.5 py-0.5 rounded border ${styles[place] || "bg-gray-100 text-gray-700 border-gray-200"}`;
+}
+
+// compact player card (similar vibe to lobby cards, minus “ready”)
+function playerCard(placeLabel, user) {
+    const name = user?.name ?? "—";
+    const avatar = getAvatarUrl(user);
+
+    const wrap = document.createElement('div');
+    wrap.className = "flex flex-col items-center space-y-1 mb-2";
+
+    const img = document.createElement('img');
+    img.src = avatar;
+    img.alt = name;
+    img.className = "w-12 h-12 rounded-md object-cover border border-gray-200 dark:border-gray-700";
+    img.loading = "lazy";
+
+    const nameDiv = document.createElement('div');
+    nameDiv.className = "text-xs font-medium text-gray-900 dark:text-gray-100";
+    nameDiv.textContent = name;
+
+    const badge = document.createElement('span');
+    badge.className = placeBadge(placeLabel);
+    badge.textContent = placeLabel;
+
+    wrap.append(img, nameDiv, badge);
+    return wrap;
+}
+
+// Convert your numeric rank to a display symbol in Big 2 order
+function rankToSymbol(r) {
+    if (r === 1) return 'A';
+    if (r === 11) return 'J';
+    if (r === 12) return 'Q';
+    if (r === 13) return 'K';
+    if (r === 2) return '2';
+    return String(r); // 3–10
+}
+
+// Map the display symbol to the Unicode “nibble” used by the Playing Cards block
+// (10 -> 0xA, J -> 0xB, Q -> 0xD, K -> 0xE; C is the Knight which we skip)
+const NIBBLE = {
+    'A': 0x1,
+    '2': 0x2, '3': 0x3, '4': 0x4, '5': 0x5, '6': 0x6, '7': 0x7, '8': 0x8, '9': 0x9,
+    '10': 0xA, 'J': 0xB, 'Q': 0xD, 'K': 0xE,
+};
+
+// Render one card to a glyph like 🃑. Falls back to text badge if something’s off.
+function cardGlyph({ rank, suit }) {
+    const sym = rankToSymbol(Number(rank));
+    const nib = NIBBLE[sym] ?? NIBBLE[String(sym)] ?? null;
+    const base = SUIT_BASES[suit];
+    if (base && nib != null) {
+        try {
+        return String.fromCodePoint(base + nib);
+        } catch {
+        // noop → fallback below
+        }
+    }
+    // Fallback: e.g., "A♦"
+    const suitChar = ['♦','♣','♥','♠'][suit] ?? '?';
+    return `${sym}${suitChar}`;
+}
+
+// 1) Make each card a fixed-size box so every glyph occupies same visual slot
+function cardSpan(card) {
+    const sym = rankToSymbol(Number(card.rank));
+    const suitChar = ['♦','♣','♥','♠'][card.suit] ?? '?';
+    const label = `${sym}${suitChar}`;
+    const glyph = cardGlyph(card);
+    const isRed = card.suit === 0 || card.suit === 2;
+
+    return `
+        <span
+        class="inline-flex w-20 h-22 items-center justify-center text-[4rem] leading-none
+                ${isRed ? 'text-rose-600 dark:text-rose-400' : 'text-gray-900 dark:text-gray-100'}
+                align-middle select-none"
+        title="${label}" aria-label="${label}">
+        ${glyph}
+        </span>
+    `;
+}
+
+// 2) Use a two-column grid so the cards always start at the same x-position
+function historyRow(h, idx) {
+    const who = h?.username ?? `Seat ${h?.seat ?? '?'}`;
+    const action = h?.action ?? 'play';
+    const cards = Array.isArray(h?.cards) ? h.cards.map(cardSpan).join('') : '';
+
+    return `
+        <div class="grid grid-cols-[12rem,1fr] gap-3 py-1.5 px-2
+                    hover:bg-gray-100/70 dark:hover:bg-gray-800/60 rounded">
+        <div class="min-w-0">
+            <div class="text-xs font-medium text-gray-700 dark:text-gray-200 truncate">
+            ${idx + 1}. ${who} <span class="opacity-70">(${action})</span>
+            </div>
+        </div>
+
+        <div class="flex flex-wrap gap-x-1 gap-y-1">
+            ${cards || `<span class="text-xs opacity-70">—</span>`}
+        </div>
+        </div>
+    `;
+}
+
+// Build the scrollable HTML
+function renderHistoryAsCards(playedHistory, cap = 200) {
+    const total = Array.isArray(playedHistory) ? playedHistory.length : 0;
+    const rows = (playedHistory || [])
+        .slice(0, cap)
+        .map((h, i) => historyRow(h, i))
+        .join('');
+    const more = total > cap ? `<div class="px-2 py-1 text-[11px] opacity-70">…and ${total - cap} more</div>` : '';
+    return `
+        <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+            <div class="max-h-[21rem] overscroll-contain overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
+            ${rows || `<div class="px-3 py-2 text-xs opacity-70">No turns recorded</div>`}
+            ${more}
+            </div>
+        </div>
+        </div>`;
+}
+
+// function handles opening another player's profile from gameProfileMenu
+async function openGameProfile(gameId, container = document.getElementById("gameProfileMenu")) {
+    if (!container) return;
+    const body = container.querySelector('#gameProfileBody');
+    if (!body) return;
+
+    // Unhide + loading state (only the body, keep header/close button intact)
+    container.classList.remove("hidden");
+    body.innerHTML = `
+        <div class="p-4 text-sm text-gray-600 dark:text-gray-300">Loading game ${gameId}…</div>
+    `;
+
+    try {
+        const game = await pb.collection("game_results").getOne(gameId, {
+            expand: "first,second,third,fourth",
+        });
+
+        // keep playedHistory handy for the next step
+        const playedHistory = Array.isArray(game?.playedHistory) ? game.playedHistory : [];
+
+        const createdStr = game?.created ? new Date(game.created).toLocaleString() : "—";
+        const first  = game.expand?.first   ?? null;
+        const second = game.expand?.second  ?? null;
+        const third  = game.expand?.third   ?? null;
+        const fourth = game.expand?.fourth  ?? null; // loser
+
+        // Header row (like your profile header vibe, but lightweight)
+        const header = `
+        <div class="px-4 py-3 rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+            <div class="text-base font-semibold text-gray-900 dark:text-gray-100">Game <span class="text-blue-600 dark:text-blue-400">${game.id}</span></div>
+            </div>
+            <div class="text-xs text-gray-600 dark:text-gray-300">Played: ${createdStr}</div>
+        </div>
+        `;
+
+        // Players grid — mirrors the lobby’s compact card feel
+        const playersSectionHtml = `
+            <div class="mt-4 p-2 bg-gray-50 dark:bg-gray-900 rounded-lg mb-6 border 
+                        border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 shadow-inner">
+                <div id="playersGrid" class="grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
+            </div>
+            `;
+
+        // 
+        const historyPreview = renderHistoryAsCards(playedHistory);
+
+        // inject the strings, then append the card nodes
+        body.innerHTML = `${header}${playersSectionHtml}${historyPreview}`;
+
+        const grid = body.querySelector('#playersGrid');
+        grid.append(
+            playerCard("1st", first),
+            playerCard("2nd", second),
+            playerCard("3rd", third),
+            playerCard("Loser", fourth),
+        );
+
+        // return for any follow-up logic
+        return { game, playedHistory };
+    } catch (err) {
+        console.error("Failed to fetch game:", err);
+        body.innerHTML = `
+        <div class="p-4 text-red-500">Error loading game data.</div>
+        `;
+        throw err;
+    }
+}
 
 //menu that allows users to enter a room number to join an available room
 async function joinRoomMenu(socket, username) {
@@ -2234,6 +2778,8 @@ async function joinRoomMenu(socket, username) {
         const availableRoomsDiv = document.getElementById('availableRooms');
         const errorMessage2 = document.getElementById("errorMessage2");
         const profileMenu = document.getElementById('profileMenu');
+        const gameProfileMenu = document.getElementById('gameProfileMenu');
+        const leaderboardMenu = document.getElementById('leaderboardMenu');
 
         let roomsClickBound = false;
         let onRoomsClick = null;
@@ -2241,15 +2787,25 @@ async function joinRoomMenu(socket, username) {
         // remove old listeners first
         const profileBtn = document.getElementById('jrProfileButton')
         const avatarBtn = document.getElementById('avatarButton');
+        const jrLeaderboardButton = document.getElementById('jrLeaderboardButton');
         const closeProfileButton = document.getElementById('closeProfileButton');
+        const closeGameProfileButton = document.getElementById('closeGameProfileButton');
+        const closeLeaderboardButton = document.getElementById('closeLeaderboardButton');
 
         const newCloseProfileButton = closeProfileButton.cloneNode(true);
+        const newCloseGameProfileButton = closeGameProfileButton.cloneNode(true);
+        const newCloseLeaderboardButton = closeLeaderboardButton.cloneNode(true);
         const newAvatarBtn = avatarBtn.cloneNode(true);
         const newProfileBtn = profileBtn.cloneNode(true);
+        const newJrLeaderboardButton = jrLeaderboardButton.cloneNode(true);
 
         profileBtn.parentNode.replaceChild(newProfileBtn, profileBtn);
         avatarBtn.parentNode.replaceChild(newAvatarBtn, avatarBtn);
         closeProfileButton.parentNode.replaceChild(newCloseProfileButton, closeProfileButton);
+        closeGameProfileButton.parentNode.replaceChild(newCloseGameProfileButton, closeGameProfileButton);
+        closeLeaderboardButton.parentNode.replaceChild(newCloseLeaderboardButton, closeLeaderboardButton);
+        jrLeaderboardButton.parentNode.replaceChild(newJrLeaderboardButton, jrLeaderboardButton);
+
         const img = document.getElementById('jrAvatarImg');
         
 
@@ -2261,22 +2817,55 @@ async function joinRoomMenu(socket, username) {
             await renderProfileTable(username);
         }
 
+        async function openLeaderboard() {
+            clickSounds[2].play();
+            leaderboardMenu.classList.remove('hidden');
+            await renderLeaderboardMenu('avg');
+        }
+
         function closeProfile() {
             clickSounds[0].play();
             profileMenu.classList.add('hidden');
         }
 
-        // 1) Delegated handler on the TOP BAR container (no buildup)
-        function onTopBarClick(e) {
+        function closeGameProfile() {
+            clickSounds[0].play();
+            gameProfileMenu.classList.add('hidden');
+        }
+
+        function closeLeaderboard() {
+            clickSounds[0].play();
+            leaderboardMenu.classList.add('hidden');
+        }
+
+        // delegated handler on the TOP BAR container (no buildup)
+        function onProfileButtonClick(e) {
             // Only open when the actual "Profile" button is clicked
             if (e.target.closest('#jrProfileButton')) {
                 openProfile();
             }
         }
+
+        // delegated handler on the TOP BAR container (no buildup)
+        function onLeaderboardButtonClick(e) {
+            // Only open when the actual "Profile" button is clicked
+            if (e.target.closest('#jrLeaderboardButton')) {
+                openLeaderboard();
+            }
+        }
         
-        // 2) Close button on the modal itself
+        // close button for profile menu
         function onCloseProfileClick() {
             closeProfile();
+        }
+
+        // close button for gameProfile menu
+        function onCloseGameProfileClick() {
+            closeGameProfile();
+        }
+
+        function onCloseLeaderboardClick() {
+            closeLeaderboard();
         }
 
         function addListenerRoomButton() {
@@ -2304,8 +2893,12 @@ async function joinRoomMenu(socket, username) {
         joinRoomMenu.style.display = "block";
 
         // bind once to the FRESHLY-CLONED nodes
-        newProfileBtn.addEventListener('click', onTopBarClick);
+        newProfileBtn.addEventListener('click', onProfileButtonClick);
+        newJrLeaderboardButton.addEventListener('click', onLeaderboardButtonClick)
         newCloseProfileButton.addEventListener('click', onCloseProfileClick);
+        newCloseGameProfileButton.addEventListener('click', onCloseGameProfileClick);
+        newCloseLeaderboardButton.addEventListener('click', onCloseLeaderboardClick);
+        
 
         (async function syncJoinRoomAvatar() {
             // Load current user's avatar like playerInfo
@@ -2436,7 +3029,7 @@ async function joinRoomMenu(socket, username) {
                 btn.disabled = numClients >= 4;
 
                 btn.className = [
-                    'room-button', // keep this so your click handler works
+                    'room-button', 
                     'w-full text-left select-none',
                     'rounded-xl border border-gray-200 dark:border-gray-700',
                     'bg-white dark:bg-gray-900',
@@ -2457,20 +3050,17 @@ async function joinRoomMenu(socket, username) {
                     : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300';
 
                 btn.innerHTML = `
-                <div class="flex items-center justify-between gap-3">
-                    <div class="flex items-center gap-2">
-                    <span class="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                        Room ${roomCode}
-                    </span>
-                    <span class="inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full ${capacityBadge}">
-                        ${numClients}/4
-                    </span>
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="flex items-center gap-2">
+                        <span class="text-sm font-semibold text-gray-900 dark:text-gray-100">Room ${roomCode}</span>
+                        <span class="inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full ${capacityBadge}">
+                            ${numClients}/4
+                        </span>
+                        </div>
+                        <div id="roomNames" class="flex-1 text-right truncate text-xs text-gray-600 dark:text-gray-400"></div>
                     </div>
-                    <div class="flex-1 text-right truncate text-xs text-gray-600 dark:text-gray-400">
-                    ${names}
-                    </div>
-                </div>
                 `;
+                btn.querySelector('#roomNames').textContent = names; 
 
                 availableRoomsDiv.appendChild(btn);
             });
@@ -2566,15 +3156,76 @@ async function endMenu(socket, roomCode, results) {
         div.style.display = "none";
     }
 
-    const tbody = endMenu.querySelector("#resultsTbody");
-    tbody.innerHTML = "";
-    results.forEach((name, i) => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `<td>${i + 1}</td><td>${name}</td>`;
-        if (i === 0) tr.style.fontWeight = "700";   // winner
-        if (i === 3) tr.style.opacity = "0.85";     // 4th
-        tbody.appendChild(tr);
-    });
+    // Create a clean leaderboard layout
+    const resultsContainer = endMenu.querySelector("#resultsContainer");
+    resultsContainer.innerHTML = `
+    <div class="bg-gray-50 dark:bg-gray-900 shadow-md rounded-md p-4 mx-auto max-w-sm w-full mt-2 mb-12
+        border border-gray-100 dark:border-gray-700">
+        <h2 class="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100 text-center">Game Results</h2>
+        <ul id="resultsList" class="divide-y divide-gray-200 dark:divide-gray-700"></ul>
+    </div>
+    `;
+
+    const ul = resultsContainer.querySelector("#resultsList");
+    const preMap = getPreGameAvgMap(); // { [pbId]: avg_before }
+
+    // populate endMenu results container
+    for (let i = 0; i < results.length; i++) {
+        const name = results[i];
+        const place = i + 1;
+
+        // try PB avatar, and also capture pbId for stats
+        let avatar = "/src/css/background/avatar-placeholder.png";
+        let pbId = null;
+        try {
+        const user = await getUserByName(name);
+        if (user?.id) {
+            pbId = user.id;
+            if (user.avatar) avatar = pbAvatarUrl(user.id, user.avatar, "100x100");
+        }
+        } catch (_) {}
+
+        let pointsHtml = '—'; // will become avg + (delta)
+        try {
+            const latest = await fetchPlayerStatsByUserId(pb, pbId);
+            const avgNow = Number(latest?.avg_finish ?? NaN);
+            if (Number.isFinite(avgNow)) {
+                const avgBefore = Number(preMap[pbId] ?? NaN);
+                if (Number.isFinite(avgBefore)) {
+                const delta = avgNow - avgBefore;
+                const sgn = delta >= 0 ? '+' : '';
+                const color = delta >= 0 ? 'text-rose-500' : 'text-emerald-500'; // make avg delta text red if plus and green if minus
+                pointsHtml = `<span class="font-semibold">${avgNow.toFixed(3)}</span> <span class="${color}">(${sgn}${delta.toFixed(3)})</span>`;
+                } else {
+                // no snapshot → just show current
+                pointsHtml = `<span class="font-semibold">${avgNow.toFixed(3)}</span>`;
+                }
+            }
+        } catch (e) {
+        console.warn('avg render failed for', name, pbId, e);
+        }
+
+        const li = document.createElement("li");
+        li.className = "flex items-center justify-between py-2";
+        if (i !== results.length - 1) {
+            li.classList.add("border-b", "border-gray-200", "dark:border-gray-700");
+        }
+
+        li.innerHTML = `
+        <div class="flex items-center">
+            <span class="place text-lg font-semibold mr-4 text-gray-700 dark:text-gray-200"></span>
+            <img src="${avatar}" alt="" class="w-8 h-8 rounded-md border border-gray-300 dark:border-gray-600 mr-4 object-cover">
+            <span class="name text-gray-800 dark:text-gray-100 font-semibold"></span>
+        </div>
+        <span class="player-avg">${pointsHtml}</span> <!-- numeric HTML we generate -->
+        `;
+
+        // set dynamic string fields safely
+        li.querySelector('.place').textContent = String(place);
+        li.querySelector('.name').textContent  = name ?? "—";
+
+        ul.appendChild(li);
+    }
 
     endMenu.style.display = "block";
 
@@ -2587,12 +3238,13 @@ async function endMenu(socket, roomCode, results) {
 
     // toggle my ready state; server will rebroadcast counts
     const toggleReadyState = () => {
-        isReady = !isReady;
+        isReady = !isReady; // optimistic local toggle
         socket.emit('toggleReadyState', roomCode, isReady);
     };
 
     // leave to join room
     const handleBackClick = () => {
+        clickSounds[0].play();
         socket.emit('leaveRoom', roomCode);
         cleanup();
         endMenu.style.display = "none";
@@ -2602,6 +3254,16 @@ async function endMenu(socket, roomCode, results) {
     // update counts/label from server
     const onUpdateReadyState = (clientList) => {
         const readyPlayersCount = clientList.filter(c => c.isReady).length;
+        const me = clientList.find(c =>
+            c.clientId === socket.id || c.id === socket.id || c.socketId === socket.id
+        );
+        const myReadyNow = !!me?.isReady;
+
+        if (prevMyReady !== null && myReadyNow !== prevMyReady) {
+            (myReadyNow ? sfxReadyOn : sfxReadyOff).play();
+        }
+        prevMyReady = myReadyNow;
+    
         setContinueLabel(readyPlayersCount);
     };
 
@@ -2902,7 +3564,28 @@ function renderPlayerInfo(el, player, i) {
     el.append(img, name);
 }
 
+async function fetchPlayerStatsByUserId(pb, userId) {
+    if (!userId) return null;
+    try {
+        return await pb.collection('player_stats').getFirstListItem(`user.id="${userId}"`);
+    } catch { return null; }
+}
 
+async function cachePreGameAvgsForRoom(pb, players) {
+    // players: array with .pbId populated from playersSnapshot
+    const entries = await Promise.all(players.map(async (p) => {
+        const s = await fetchPlayerStatsByUserId(pb, p.pbId);
+        return [p.pbId, Number(s?.avg_finish ?? 0)];
+    }));
+    const map = Object.fromEntries(entries); // { [pbId]: avg_before }
+    sessionStorage.setItem('preGameAvgMap', JSON.stringify(map));
+    return map;
+}
+
+function getPreGameAvgMap() {
+    try { return JSON.parse(sessionStorage.getItem('preGameAvgMap') || '{}'); }
+    catch { return {}; }
+}
 
 // once all four clients toggle toggleReadyState, call startGameForRoom function on server and update local gamestate to match server generated one 
 async function startGame(socket, roomCode){
@@ -2968,11 +3651,17 @@ async function startGame(socket, roomCode){
                     });
                 }
 
+                console.log()
+
                 // Update UI labels
                 for (let i = 0; i < playerInfo.length; i++) {
                     const p = GameModule.players[i];
                     renderPlayerInfo(playerInfo[i], p, i);
                 }
+
+                cachePreGameAvgsForRoom(pb, GameModule.players).catch(e =>
+                    console.warn('Failed to cache pre-game avgs for room:', e)
+                );
                 resolve();
             });
         });
@@ -3240,9 +3929,13 @@ function setupPauseModal(socket, roomCode){
     socket.on('updateReadyState', onUpdateReadyStatePause);
 
     function paintClientList(clients){
-        listEl.innerHTML = clients.map(c =>
-        `<li class="pause-pill">${c.username}${c.isReady ? ' ✅' : ''}</li>`
-        ).join('');
+        listEl.textContent = ""; // clear
+        clients.forEach(c => {
+            const li = document.createElement("li");
+            li.className = "pause-pill";
+            li.textContent = c.username + (c.isReady ? " ✅" : "");
+            listEl.appendChild(li);
+        });
     }
 
     const cleanupPauseBindings = () => {
@@ -3330,22 +4023,25 @@ function setupPauseModal(socket, roomCode){
 
         console.log("LOCAL PLAYER INDEX:", localPlayerIndex);
 
+        // repopulate gamemodule players with info from server emit
         if (localPlayerIndex !== -1) {
-            // Rotate server order so local player is index 0 in GameModule
+            // Rotate server order so local player is index 0 in GameModule 
             players.forEach((p, index) => {
                 const gameModuleIndex = (index - localPlayerIndex + 4) % 4; // Calculate GameModule index
                 GameModule.players[gameModuleIndex].username = p.username;
                 GameModule.players[gameModuleIndex].clientId = p.clientId;
                 GameModule.players[gameModuleIndex].socketId = p.socketId;
+                GameModule.players[gameModuleIndex].pbId     = p.pbId;
+                GameModule.players[gameModuleIndex].avatar   = p.avatar;
             });
 
             players.forEach(sp => {
                 const i = GameModule.players.findIndex(lp => lp.clientId === sp.clientId);
                 if (i !== -1) {
                     Object.assign(GameModule.players[i], {
-                    passed: !!sp.passed,
-                    finishedGame: !!sp.finishedGame,
-                    wonRound: !!sp.wonRound,
+                        passed: !!sp.passed,
+                        finishedGame: !!sp.finishedGame,
+                        wonRound: !!sp.wonRound,
                     });
                 }
             });
@@ -3353,8 +4049,8 @@ function setupPauseModal(socket, roomCode){
 
         // Update UI labels
         for (let i = 0; i < playerInfo.length; i++) {
-            playerInfo[i].style.display = 'block';
-            playerInfo[i].innerHTML = GameModule.players[i].username + " " + GameModule.players[i].clientId; //maybe add points here as well?
+            const p = GameModule.players[i];
+            renderPlayerInfo(playerInfo[i], p, i);
         }
 
         // set turn to appopriate player index based off server's current turn client id

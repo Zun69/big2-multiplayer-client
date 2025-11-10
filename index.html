@@ -291,7 +291,6 @@
                         />
                         </button>
 
-
                         <button
                         id="jrLeaderboardButton"
                         class="px-3 py-1.5 text-sm rounded-md border border-gray-300 bg-gray-50 hover:bg-gray-100 active:scale-[0.98] transition"
@@ -314,17 +313,14 @@
                 </div>
 
                <div id="profileMenu"
-                    class="hidden w-[80%] h-[95%] p-4 bg-white border border-gray-200 rounded-xl shadow-2xl
-                        dark:bg-gray-800 dark:border-gray-700 flex flex-col z-[9999]">
+                    class="hidden w-[95%] h-[95%] p-4 bg-white border border-gray-200 rounded-xl shadow-2xl
+                        dark:bg-gray-800 dark:border-gray-700 flex flex-col z-[9998]">
 
                     <!-- Close (X) Button -->
                     <button id="closeProfileButton"
-                        class="absolute top-3 right-3 text-gray-400 hover:text-gray-600
-                            dark:text-gray-500 dark:hover:text-gray-300
-                            text-2xl leading-none font-light
-                            rounded-full w-8 h-8 flex items-center justify-center
-                            hover:bg-gray-100 dark:hover:bg-gray-700
-                            transition-all duration-150">
+                        class="absolute text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300
+                        text-2xl leading-none font-light rounded-full w-8 h-8 flex items-center justify-center
+                        hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-150">
                         &times;
                     </button>
 
@@ -337,6 +333,63 @@
                     <!-- Body -->
                     <div id="profileBody" class="mt-4 flex-1 overflow-y-auto text-gray-800 dark:text-gray-200">
                         <!-- More profile sections go here -->
+                    </div>
+                </div>
+
+                <div id="gameProfileMenu"
+                    class="hidden w-[85%] h-[95%] p-4 bg-white border border-gray-200 rounded-xl shadow-2xl
+                        dark:bg-gray-800 dark:border-gray-700 flex flex-col z-[9999]">
+
+                    <!-- Close (X) Button -->
+                    <button id="closeGameProfileButton"
+                        class="absolute text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300
+                        text-2xl leading-none font-light rounded-full w-8 h-8 flex items-center justify-center
+                        hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-150">
+                        &times;
+                    </button>
+
+                     <!-- Body -->
+                    <div id="gameProfileBody" class="mt-0 flex-1 overflow-y-auto text-gray-800 dark:text-gray-200">
+                        <!-- More profile sections go here -->
+                    </div>
+                </div>
+
+                <div id="leaderboardMenu"
+                    class="hidden w-[70%] h-[90%] p-4 bg-white border border-gray-200 rounded-xl shadow-2xl
+                        dark:bg-gray-800 dark:border-gray-700 flex flex-col z-[9999]">
+
+                    <!-- Close (X) Button -->
+                    <button id="closeLeaderboardButton"
+                        class="absolute text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300
+                        text-2xl leading-none font-light rounded-full w-8 h-8 flex items-center justify-center
+                        hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-150">
+                        &times;
+                    </button>
+
+                     <!-- Body -->
+                    <div id="leaderboardMenuBody" class="mt-0 flex-1 overflow-y-auto text-gray-800 dark:text-gray-200">
+                        
+                    <button id="dropdownDefaultButton" data-dropdown-toggle="dropdown" 
+                    class="mt-2 text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium 
+                    rounded-lg text-sm px-5 py-2.5 text-center inline-flex items-center dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800" 
+                    type="button">Dropdown Button<svg class="w-2.5 h-2.5 ms-3" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 10 6">
+                    <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m1 1 4 4 4-4"/>
+                    </svg>
+                    </button>
+
+                    <!-- Dropdown menu -->
+                    <div id="dropdown" class="z-10 hidden bg-gray-500 divide-y divide-gray-100 rounded-lg shadow-sm w-44 dark:bg-gray-700">
+                        <ul class="py-2 text-sm text-white dark:text-gray-200" aria-labelledby="dropdownDefaultButton">
+                            <li><a href="#" id="lbAvgOption"   class="block px-4 py-2 hover:bg-gray-600 dark:hover:bg-gray-600 dark:hover:text-white">Average</a></li>
+                            <li><a href="#" id="lbWinsOption"  class="block px-4 py-2 hover:bg-gray-600 dark:hover:bg-gray-600 dark:hover:text-white">Wins</a></li>
+                            <li><a href="#" id="lbSecondsOption" class="block px-4 py-2 hover:bg-gray-600 dark:hover:bg-gray-600 dark:hover:text-white">Seconds</a></li>
+                            <li><a href="#" id="lbThirdsOption"  class="block px-4 py-2 hover:bg-gray-600 dark:hover:bg-gray-600 dark:hover:text-white">Thirds</a></li>
+                            <li><a href="#" id="lbLossOption"  class="block px-4 py-2 hover:bg-gray-600 dark:hover:bg-gray-600 dark:hover:text-white">Losses</a></li>
+                            <li><a href="#" id="lbGamesOption" class="block px-4 py-2 hover:bg-gray-600 dark:hover:bg-gray-600 dark:hover:text-white">Games Played</a></li>
+                            
+                        </ul>
+                    </div>
+
                     </div>
                 </div>
 
@@ -381,23 +434,27 @@
                     </div>
                 </div>
 
-                <div id="endMenu">
-                    <div id ="leaderboard">
-                        <h2>Game Results</h2>
-                        <table id="resultsTable" class="results">
-                            <thead>
-                                <tr>
-                                    <th>#</th>
-                                    <th>Player</th>
-                                </tr>
-                            </thead>
-                            <tbody id="resultsTbody"></tbody>
-                        </table>
-                    </div>
-                    <div class="actions">
-                            <button id="backToJoinRoomButton2">Go Back</button>
-                            <button id="continueButton">Continue</button>
-                    </div>
+                <div id="endMenu" 
+                    class="hidden w-[50%] h-[70%] p-4
+                    bg-white border border-gray-200 rounded-xl shadow-lg
+                    dark:bg-gray-800 dark:border-gray-700
+                    flex flex-col items-center justify-center space-y-4">
+
+                <div id="resultsContainer" class="w-full max-w-sm mx-auto text-center">
+                    <!-- JS will populate this -->
+                </div>
+
+                <div class="flex justify-between gap-3 mt-4 w-full max-w-sm mx-auto">
+                    <button id="backToJoinRoomButton2"
+                        class="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg shadow-md transition">
+                        Go Back
+                    </button>
+                    <button id="continueButton"
+                        class="flex-1 px-4 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-md transition">
+                        Continue
+                    </button>
+                </div>
+                
                 </div>
 
                 <!-- Pause / Disconnect overlay -->

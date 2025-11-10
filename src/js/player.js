@@ -32,9 +32,6 @@ function playRandomCardSound() {
 const INITIAL_HAND_SIZE = 13;
 const INITIAL_HALF = (INITIAL_HAND_SIZE - 1) / 2;
 
-function pivotXForSeat(cfg){ return cfg.baseX + INITIAL_HALF * cfg.stepX; }
-function pivotYForSeat(cfg){ return cfg.baseY + INITIAL_HALF * cfg.stepY; }
-
 export default class Player{ 
     constructor(username, cards = []){ // Player object, which will contain name, cards, wonRound & finishedGame & pass status, point tally 
         this.username = username;
@@ -44,6 +41,7 @@ export default class Player{
         this.passed = false;
         this.clientId = null; // Set to null initially, will set later in the lobbyMenu
         this.socketId = null; //unique socketId from server
+        this.pbId = null; // PocketBase user id, set during lobby or snapshot
         this.points = 0;
         this.wins = 0;
         this.seconds = 0;
