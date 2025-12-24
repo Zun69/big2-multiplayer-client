@@ -1,5 +1,6 @@
 import Player from "./player.js"
 import Opponent from "./opponent.js"
+import spOpponent, { loadPolicyModel } from "./spOpponent.js";
 import PocketBase, { BaseAuthStore } from "https://cdn.jsdelivr.net/npm/pocketbase@0.21.1/dist/pocketbase.es.mjs";
 
 // lookup table for printing actual rank in last played hand
@@ -92,6 +93,8 @@ const GameModule = (function() {
     let player4 = new Opponent();
     let _currentLoopToken = null;
     let deckInstance = null;
+    let passTracker = 0;
+    let lastPlayedBy = null;
 
     // GameModule properties
     let players = [player1, player2, player3, player4];
@@ -99,7 +102,7 @@ const GameModule = (function() {
     let playersFinished = []; //stores finishing order
     let lastHand = []; //stores last hand played
     let playedHistory = [] //stores played card history
-    let isFirstMove = null;
+    let isFirstMove = true;
 
     let lastValidHand; //stores a number that lets program know if last turn was a pass or turn
     let turn;
@@ -132,7 +135,9 @@ const GameModule = (function() {
         GameModule.losingPlayer = undefined;
         GameModule.playedHand = 0;
         GameModule.turnClientId = null;   
-        GameModule.isFirstMove = null;
+        GameModule.isFirstMove = true;
+        GameModule.passTracker = 0;
+        GameModule.lastPlayedBy = null;
 
         // automatically unmount deck when resetting
         unmountDeck();
@@ -173,6 +178,8 @@ const GameModule = (function() {
         playedHand, // Expose playedHand
         losingPlayer, // Expose losingPlayer   
         turnClientId,
+        passTracker,
+        lastPlayedBy,
         isFirstMove,
         _currentLoopToken,
         get deck() { return getDeck(); },
@@ -216,6 +223,24 @@ function seedShadowKeysOnce() {
             card.meta.shadowKey = i;
         });
         }
+    });
+}
+
+// Sorts everybody's cards and plays the animation, resolves when animations finish
+async function spSortHands(){ 
+    // 1) sort everyone locally (keeps DOM/z-order consistent)
+    GameModule.players.forEach((p, i) => {
+        p.sortHand(); // local player normal sort
+    });
+
+    // 2) animate all seats in parallel
+    await Promise.all(
+        GameModule.players.map((p, i) => p.sortingAnimation(i))
+    );
+
+    return new Promise(resolve => {
+        // resolve when sorting animation is complete
+        resolve('sortComplete');
     });
 }
 
@@ -308,6 +333,37 @@ const shuffleSounds4 = [
 
 const shuffleSets = [shuffleSounds, shuffleSounds2, shuffleSounds3, shuffleSounds4];
 
+// Wait for deck.shuffle() animations to truly finish using the deck's own queue
+function shuffleSpDeckAsync(deck, times, delayBetweenShuffles) {
+  return new Promise((resolve) => {
+    // select shuffleSound set to use
+    const activeShuffleSet = shuffleSets[Math.floor(Math.random() * shuffleSets.length)];
+
+    for (let i = 0; i < times; i++) {
+      // Each call to shuffle() is queued and only starts after the previous finishes
+      deck.shuffle(); // this completes (calls next) when all card animations are done
+
+      // play the ith shuffle sound
+      deck.queue((next) => {
+        activeShuffleSet[i % activeShuffleSet.length].play();
+        next();
+      });
+
+      // Optional gap between shuffle runs (except after the last one)
+      if (delayBetweenShuffles > 0 && i < times - 1) {
+        deck.queue((next) => {
+          setTimeout(next, delayBetweenShuffles);
+        });
+      }
+    }
+
+    // After the last queued action, resolve
+    deck.queue((next) => {
+      resolve('shuffleComplete');
+      next();
+    });
+  });
+}
 
 // Wait for deck.shuffle() animations to truly finish using the deck's own queue
 function shuffleDeckAsync(deck, times, delayBetweenShuffles, serverDeck) {
@@ -403,13 +459,13 @@ function gcToLocal(xGC, yGC, parentEl) {
 // ---- Dealing layout (percent-of-container, no seat divs) ----
 const DEAL_ANCHORS = [
     // seat 0 (bottom; fan along X →)
-    { leftPct: 0.50, topPct: 0.85, axis: 'x', dir: +1, rot: 0 },
+    { leftPct: 0.50, topPct: 0.83, axis: 'x', dir: +1, rot: 0 },
     // seat 1 (left; fan down ↓)
     { leftPct: 0.06, topPct: 0.50, axis: 'y', dir: +1, rot: 90 },
     // seat 2 (top; fan along X ←)
     { leftPct: 0.50, topPct: 0.1, axis: 'x', dir: -1, rot: 0 },
     // seat 3 (right; fan up ↑)
-    { leftPct: 0.952, topPct: 0.50, axis: 'y', dir: -1, rot: 90 },
+    { leftPct: 0.940, topPct: 0.50, axis: 'y', dir: -1, rot: 90 },
 ];
 
 // Build pose functions (off → x,y) directly in gameContainer space
@@ -431,12 +487,6 @@ function buildGCPosesFromPercents(anchors, stridePx, baseBias = [0,10,20,30]) {
 // Animate and assign cards to GameModule.players
 async function dealCards(serverDeck, socket, roomCode, firstDealClientId) {
   return new Promise(function (resolve) {
-    // target divs for each seat (0: you, 1: left, 2: top, 3: right)
-    const p1Div = document.getElementById('0');
-    const p2Div = document.getElementById('1');
-    const p3Div = document.getElementById('2');
-    const p4Div = document.getElementById('3');
-
     // Build deck (server-supplied), mount to DOM, and shuffle/arrange
     let deck = Deck(false, serverDeck);
     GameModule.deck = deck; // store globally
@@ -530,20 +580,127 @@ async function dealCards(serverDeck, socket, roomCode, firstDealClientId) {
   });
 }
 
+// Animate and assign cards to GameModule.players
+async function dealSinglePlayerCards() {
+  return new Promise(function (resolve) {
+    // Build deck (server-supplied), mount to DOM, and shuffle/arrange
+    let deck = Deck(false);
+    GameModule.deck = deck; // store globally
+    const shufflePromise = shuffleSpDeckAsync(deck, 4, 35);
+    deck.mount(document.getElementById('gameDeck'));
+
+    // Choose index of player to start dealing to
+    let playerIndex = 0
+
+    console.log("local player dealt to first: " + playerIndex);
+
+    // Deterministic spacing (identical on all clients)
+    const playersCount = GameModule.players.length || 4;
+    const STRIDE = 10 * playersCount;      // 40px per card per seat (matches old look)
+    const SEAT_BASE = [0, 10, 20, 30];     // fixed bias per local seat (no host-dependent bias)
+
+    // Pose builders per seat
+    const poseBySeat = buildGCPosesFromPercents(DEAL_ANCHORS);
+
+    shufflePromise.then(function (value) {
+      if (value !== "shuffleComplete") return;
+
+      const animationPromises = [];
+      const perSeatCount = [0, 0, 0, 0]; // how many dealt to each seat
+      
+      deck.cards.reverse().forEach((card, dealIndex) => {
+        card.setSide('back'); // make sure everything starts back-side before any animation
+        const seat  = playerIndex;               // lock seat for this card
+        const k     = perSeatCount[seat];        // 0..12 within THIS seat
+        const delay = 150 + dealIndex * 60;       // delay after a card is animated
+        const totalCards = 13; // fixed for Big 2, or compute dynamically
+        const mid = (totalCards - 1) / 2;
+        const off = SEAT_BASE[seat] + (k - mid) * STRIDE;
+
+        const { rot, x: xGC, y: yGC } = poseBySeat[seat](off);
+
+        // compute coords for the card’s *current* parent (deck is mounted in #gameDeck)
+        const deckParent = card.$el.parentElement || document.getElementById('gameDeck');
+        const { x: xLocal, y: yLocal } = gcToLocal(xGC, yGC, deckParent);
+
+        const localSeat = 0; // you
+
+        const p = new Promise((cardResolve) => {
+          setTimeout(() => {
+            card.animateTo({
+              delay: 0,
+              duration: 50,
+              ease: 'linear',
+              rot,
+              x: xLocal,
+              y: yLocal,
+              onStart: function () {
+                dealNextCardSounds();
+              },
+              onComplete: function () {
+                // mount first, then set side to avoid any flicker
+                //card.mount(mountDiv);
+
+                if (seat === localSeat) {
+                    card.setSide('front');    // only your cards flip on arrival
+                } else {
+                    card.setSide('back');     // others stay hidden
+                }
+                cardResolve();
+              }
+            });
+          }, delay);
+        });
+
+        animationPromises.push(p);
+        GameModule.players[seat].addCard(card);
+
+        // Seat 'seat' just received a card; bump that seat’s personal count.
+        // We use this number (0,1,2,...) to space/fan THAT seat’s cards.
+        perSeatCount[seat] += 1;
+        
+        // Advance the dealer to the next seat in round-robin order.
+        // The % wraps us back to 0 after the last seat (e.g., 3→0 when playersCount=4).
+        playerIndex = (playerIndex + 1) % playersCount; 
+      });
+
+      Promise.all(animationPromises).then(() => {
+        //deck.unmount();
+        // find who has 3♦ (suit 0, rank 3)
+        const threeDiamondSeat = GameModule.players.findIndex(p =>
+          (p.cards || []).some(c => c.suit === 0 && c.rank === 3)
+        );
+
+        const threeDiamondClientId = threeDiamondSeat !== -1 ? GameModule.players[threeDiamondSeat].clientId : null;
+
+        deck = null;
+
+        // resolve 3 of dimaonds player's clientId
+        resolve(threeDiamondClientId);
+      });
+    });
+  });
+}
+
 // remove and add a border to playerInfo element based on turn
 function displayTurn(turn) {
     const playerInfo = document.getElementsByClassName("playerInfo");
 
     for (let i = 0; i < playerInfo.length; i++) {
         // Reset all player boxes to their default color
-        playerInfo[i].style.backgroundColor = "white";
-        playerInfo[i].style.color = ""; // reset text color
+        playerInfo[i].style.border = "none";
+        playerInfo[i].style.boxShadow = "none";
+        playerInfo[i].style.transition = "border-color 0.25s ease, box-shadow 0.25s ease";
     }
 
     // Highlight the current player's box with a contrasting fill
     const active = playerInfo[turn];
-    active.style.backgroundColor = "#ffcc33"; // gold works beautifully on green felt
-    active.style.color = "#000"; // ensure text stays readable
+    
+    // modern blue accent
+    active.style.border = "2px solid #3b82f6"; // Tailwind blue-500
+    active.style.boxShadow =
+        "0 0 0 2px rgba(59,130,246,0.35), " +
+        "0 6px 16px rgba(59,130,246,0.25)";
 }
 
 async function localPlayerHand(socket, roomCode) {
@@ -804,6 +961,60 @@ function _cardCenterInGC(cardEl, meta) {
 }
 
 // after round ends, adds all played cards into finished deck and animates them as well
+async function spFinishDeckAnimation() {
+    // ---- anchor config: % within gameContainer ----
+    const PCT_LEFT  = 0.75;     
+    const PCT_TOP   = 0.35;     
+    const STACK_DRIFT = 0.25;   // same subtle stagger as your original
+    
+    // compute once per run
+    const meta = _getGCMeta();
+    const anchorX = meta.rect.width  * PCT_LEFT;
+    const anchorY = meta.rect.height * PCT_TOP;
+
+    // keep animating until gameDeck is empty
+    while (GameModule.gameDeck.length > 0) {
+        // loop through all game deck cards (consume one at a time)
+        let card = GameModule.gameDeck.shift();
+        card.setSide('back');
+
+        // measure this card’s current visual center (relative to GC)
+        const { cx, cy } = _cardCenterInGC(card.$el, meta);
+
+        // delta to land the card’s center exactly on the anchor
+        const dx = anchorX - cx;
+        const dy = anchorY - cy;
+
+        // keep your original stagger look using finishedDeck length
+        const offX = -(GameModule.finishedDeck.length * STACK_DRIFT);
+        const offY =  (GameModule.finishedDeck.length * STACK_DRIFT);
+                
+        // wait until each card is finished animating
+        await new Promise((cardResolve) => {
+            setTimeout(function () {
+                card.animateTo({
+                delay: 0,
+                duration: 50,
+                ease: 'linear',
+                rot: 0,
+                x: Math.round(card.x + dx + offX),
+                y: Math.round(card.y + dy - offY),
+                onStart: () => {
+                    GameModule.finishedDeck.push(card); // push gameDeck card into finishedDeck
+                    // keep z stacking consistent as the pile grows
+                    card.$el.style.zIndex = String(GameModule.finishedDeck.length + 1);
+                },
+                onComplete: function () {
+                    dealNextCardSounds();
+                    cardResolve(); // resolve, so next card can animate
+                }
+            });
+            }, 10);
+        });
+    }
+}
+
+// after round ends, adds all played cards into finished deck and animates them as well
 async function finishDeckAnimation(socket, roomCode) {
     // ---- anchor config: % within gameContainer ----
     const PCT_LEFT  = 0.75;     
@@ -865,7 +1076,103 @@ async function finishDeckAnimation(socket, roomCode) {
     });
 }
 
-async function finishGameAnimation(roomCode, socket, gameDeck, players, losingPlayer){
+async function finishSpGameAnimation(gameDeck, losingPlayers) {
+  return new Promise(async function (resolve) {
+
+    // anchor config: % within gameContainer
+    const PCT_LEFT  = 0.75;
+    const PCT_TOP   = 0.35;
+    const STACK_DRIFT = 0.25;
+
+    // compute once per run
+    const meta = _getGCMeta();
+    const anchorX = meta.rect.width  * PCT_LEFT;
+    const anchorY = meta.rect.height * PCT_TOP;
+
+    // --------------------------------------------------
+    // 1) Animate all cards already in the game deck
+    // --------------------------------------------------
+    for (let i = 0; i < gameDeck.length; i++) {
+      const card = gameDeck[i];
+      card.setSide('back');
+
+      const { cx, cy } = _cardCenterInGC(card.$el, meta);
+      const dx = anchorX - cx;
+      const dy = anchorY - cy;
+
+      const offX = -(GameModule.finishedDeck.length * STACK_DRIFT);
+      const offY =  (GameModule.finishedDeck.length * STACK_DRIFT);
+
+      await new Promise((cardResolve) => {
+        setTimeout(() => {
+          card.animateTo({
+            delay: 0,
+            duration: 50,
+            ease: 'linear',
+            rot: 0,
+            x: Math.round(card.x + dx + offX),
+            y: Math.round(card.y + dy - offY),
+            onStart: () => {
+              GameModule.finishedDeck.push(card);
+              card.$el.style.zIndex = String(GameModule.finishedDeck.length + 1);
+            },
+            onComplete: () => {
+              dealNextFinishCardSounds();
+              cardResolve();
+            }
+          });
+        }, 20);
+      });
+    }
+
+    // --------------------------------------------------
+    // 2) Animate remaining cards from ALL losing players
+    // --------------------------------------------------
+    for (const lp of losingPlayers) {
+      const player = GameModule.players.find(p => p.clientId === lp.clientId);
+      if (!player || !player.cards || player.cards.length === 0) continue;
+
+      for (let i = 0; i < player.cards.length; i++) {
+        const losingCard = player.cards[i];
+        losingCard.setSide('back');
+
+        const { cx, cy } = _cardCenterInGC(losingCard.$el, meta);
+        const dx = anchorX - cx;
+        const dy = anchorY - cy;
+
+        const offX = -(GameModule.finishedDeck.length * STACK_DRIFT);
+        const offY =  (GameModule.finishedDeck.length * STACK_DRIFT);
+
+        await new Promise((cardResolve) => {
+          setTimeout(() => {
+            losingCard.animateTo({
+              delay: 0,
+              duration: 50,
+              ease: 'linear',
+              rot: 0,
+              x: Math.round(losingCard.x + dx + offX),
+              y: Math.round(losingCard.y + dy - offY),
+              onStart: () => {
+                GameModule.finishedDeck.push(losingCard);
+                losingCard.$el.style.zIndex = String(GameModule.finishedDeck.length + 1);
+              },
+              onComplete: () => {
+                dealNextFinishCardSounds();
+                cardResolve();
+              }
+            });
+          }, 20);
+        });
+      }
+    }
+
+    await sleep(200);
+    resolve();
+  });
+}
+
+
+async function finishGameAnimation(roomCode, socket, gameDeck, losingPlayer){
     return new Promise(async function (resolve, reject) {
         // anchor config: % within gameContainer
         const PCT_LEFT  = 0.75;     
@@ -1097,6 +1404,12 @@ function formatHand(cards) {
 }
 
 
+function getSpLastHand(gameDeck, lastValidHand) {
+  const deck = Array.isArray(gameDeck) ? gameDeck : [];
+  const n = Math.max(0, Math.min(deck.length, Number(lastValidHand) || 0));
+  return deck.slice(deck.length - n);
+}
+
 // Ask server for the current last hand; resolves only when server replies.
 function getLastHand(socket, roomCode) {
   return new Promise((resolve) => {
@@ -1142,6 +1455,291 @@ function waitForGameHasFinished(socket) {
     };
     socket.on('gameHasFinished', handler);
   });
+}
+
+async function applySpTurnOutcome({ actorIndex, outcome, gameOver }) {
+  const actor = GameModule.players[actorIndex];
+
+  if (outcome === 'passed') {
+    console.log('PASSED');
+    actor.passed = true;
+    GameModule.playedHand = 0;
+    // do NOT change gameDeck / lastValidHand on pass
+    GameModule.passTracker += 1;
+  } 
+  else {
+    actor.passed = false;
+    actor.wonRound = false;
+    GameModule.playedHand = outcome;   // number of cards just played
+    GameModule.isFirstMove = false;
+    GameModule.passTracker = 0; // if someone plays a card, reset passTracker
+    GameModule.lastPlayedBy = actorIndex;
+
+    // If actor emptied hand, mark finished
+    if (actor.cards.length === 0) {
+        actor.finishedGame = true;
+        GameModule.playersFinished.push(actor.clientId);
+
+        // prevent stale pass state from messing with next lead
+        GameModule.players.forEach(p => { p.passed = false; });
+        GameModule.passTracker = 0; // if someone plays a card, reset passTracker
+        
+        // if third player has finished, send signal that game is over
+        if(GameModule.playersFinished.length == 1){
+            gameOver = true;
+        }
+    }
+    }
+
+    // advance turn to next non-finished player
+    GameModule.turn = nextActiveSeat(actorIndex);
+    return gameOver;
+}
+
+function trickEnded() {
+  if (GameModule.lastPlayedBy == null) {
+    console.log('[TRICK] no leader yet');
+    return false;
+  }
+
+  const leaderIndex = GameModule.lastPlayedBy;
+  const leader = GameModule.players[leaderIndex];
+
+  const activePlayers = GameModule.players.filter(p => !p.finishedGame);
+  const activeCount = activePlayers.length;
+
+  const passesNeeded = activeCount - (leader.finishedGame ? 0 : 1);
+
+  /*console.groupCollapsed(
+    `%c[TRICK CHECK]`,
+    'color:#4caf50;font-weight:bold'
+  );
+
+  console.log('leaderIndex:', leaderIndex);
+  console.log('leader:', {
+    clientId: leader.clientId,
+    finishedGame: leader.finishedGame,
+    wonRound: leader.wonRound
+  });
+
+  console.log('activeCount:', activeCount);
+  console.log(
+    'activePlayers:',
+    activePlayers.map(p => ({
+      clientId: p.clientId,
+      finishedGame: p.finishedGame,
+      passed: p.passed
+    }))
+  );
+
+  console.log('passTracker:', GameModule.passTracker);
+  console.log('passesNeeded:', passesNeeded);*/
+
+  const ended =
+    passesNeeded > 0 &&
+    GameModule.passTracker >= passesNeeded;
+
+  /*console.log('TRICK ENDED?', ended);
+
+  console.groupEnd();*/
+
+  return ended;
+}
+
+function getLosingPlayersWithCards() {
+  return GameModule.players
+    .filter(p => !p.finishedGame) // players who did NOT finish
+    .map(p => ({
+      clientId: p.clientId,
+      cardsRemaining: Array.isArray(p.cards) ? p.cards.length : 0,
+    }));
+}
+
+function getResults(losingPlayers = []) {
+  // Build a map: clientId -> cardsRemaining (for losers we have it, for finishers assume 0)
+  const remainingMap = new Map();
+  for (const lp of losingPlayers) {
+    remainingMap.set(String(lp.clientId), Number(lp.cardsRemaining ?? 0));
+  }
+
+  // Everyone who finished has 0 remaining (safe default)
+  for (const cid of (GameModule.playersFinished || [])) {
+    const id = String(cid);
+    if (!remainingMap.has(id)) remainingMap.set(id, 0);
+  }
+
+  // Fallback: if somehow someone isn't in either list, fill from live GameModule.players
+  for (const p of (GameModule.players || [])) {
+    const id = String(p.clientId);
+    if (!remainingMap.has(id)) remainingMap.set(id, Array.isArray(p.cards) ? p.cards.length : 0);
+  }
+
+  // Winner = first finisher
+  const winnerId = String((GameModule.playersFinished || [])[0] ?? "");
+
+  // Winner score = sum of other players' remaining cards
+  let pot = 0;
+  for (const [id, left] of remainingMap.entries()) {
+    if (id === winnerId) continue;
+    pot += left;
+  }
+
+  // Build results rows
+  const results = [];
+  for (const [id, left] of remainingMap.entries()) {
+    const isWinner = id === winnerId;
+    results.push({
+      clientId: id,
+      cardsRemaining: left,
+      score: isWinner ? pot : -left,
+      isWinner
+    });
+  }
+
+  // Order all 4 players by cardsRemaining (winner(s) first)
+  // Tie-breakers:
+  // 1) winner first if tied on cardsRemaining
+  // 2) then by finishing order if available
+  const finishOrder = new Map();
+  (GameModule.playersFinished || []).forEach((cid, idx) => finishOrder.set(String(cid), idx));
+
+  results.sort((a, b) => {
+    if (a.cardsRemaining !== b.cardsRemaining) return a.cardsRemaining - b.cardsRemaining;
+    if (a.isWinner !== b.isWinner) return a.isWinner ? -1 : 1;
+    const ao = finishOrder.has(a.clientId) ? finishOrder.get(a.clientId) : 999;
+    const bo = finishOrder.has(b.clientId) ? finishOrder.get(b.clientId) : 999;
+    return ao - bo;
+  });
+
+  return results;
+}
+
+
+function nextActiveSeat(fromIndex) {
+  const n = GameModule.players.length;
+  for (let step = 1; step <= n; step++) {
+    const j = (fromIndex + step) % n;
+    if (!GameModule.players[j].finishedGame) return j;
+  }
+  return fromIndex; // fallback
+}
+
+//Actual game loop, 1 loop represents a turn
+const spGameLoop = async (firstTurnClientId) => {
+    const playButton = document.getElementById("play");
+    const passButton = document.getElementById("pass");
+    const clearButton = document.getElementById("clear");
+
+    //sort all player's cards, it will resolve once all 4 clients sorting animations are complete
+    let sortResolve = await spSortHands(); 
+
+    // after you get firstTurnClientId from dealSinglePlayerCards()
+    GameModule.turn = GameModule.players.findIndex(p => p.clientId === firstTurnClientId);
+
+    if(sortResolve === 'sortComplete'){
+        console.log("TURN IS: " + GameModule.turn);
+
+        //let rotation = initialAnimateArrow(turn); //return initial Rotation so I can use it to animate arrow
+        let gameInfoDiv = document.getElementById("gameInfo");
+
+        // listen for server event notifying that 3 players have finished
+        // ONE-SHOT waiter + quick flag to know when to break the loop
+        let gameOver = false;
+
+        //GAME LOOP, each loop represents a single turn
+        for(let i = 0; i < 100; i++){
+            playButton.disabled = true; //disable play button because no card is selected which is an invalid move
+            clearButton.disabled = true;
+            passButton.disabled = true
+
+            //log gameState values
+            console.log("GameState isFirstMove:", GameModule.isFirstMove);
+            console.log("GameState Players:", GameModule.players);
+            console.log("GameState Game Deck:", GameModule.gameDeck);
+            console.log("GameState Last Hand:", GameModule.lastHand);
+            console.log("GameState Turn:", GameModule.turn);
+            console.log("GameState Finished Deck:", GameModule.finishedDeck);
+            console.log("GameState Players Finished:", GameModule.playersFinished);
+            console.log("GameState playedHand:", GameModule.playedHand);
+            console.log("GameState passTracker:", GameModule.passTracker);
+
+            // return last hand (that wasn't a pass)
+            GameModule.lastHand = GameModule.playedHand > 0
+            ? GameModule.gameDeck.slice(GameModule.gameDeck.length - GameModule.playedHand)
+            : GameModule.lastHand; // unchanged on pass
+            
+            // print out last played hand
+            gameInfoDiv.textContent = `${formatHand(GameModule.lastHand)}`;
+
+            //Change turn here
+            displayTurn(GameModule.turn);
+            
+            // inside spGameLoop, after displayTurn(GameModule.turn)
+            const actorIndex = GameModule.turn;
+            const actor = GameModule.players[actorIndex];
+
+            if (trickEnded()) {
+                // reset pass state for new trick
+                GameModule.players.forEach(p => { p.passed = false; });
+                GameModule.passTracker = 0;
+                GameModule.playedHand = 0;     // optional: clear pile size
+
+                await spFinishDeckAnimation();
+
+                actor.wonRound = true;
+            }
+
+            let outcome;
+            if (actor.clientId === GameModule.players[0].clientId) {
+                outcome = await GameModule.players[0].spPlayCard(
+                    GameModule.gameDeck,
+                    GameModule.lastHand,
+                    GameModule.playersFinished,
+                    GameModule.isFirstMove
+                );
+            } else {
+                outcome = await actor.spPlayCard(
+                    GameModule.gameDeck,
+                    GameModule.lastHand,
+                    GameModule.players,
+                    GameModule.turn,
+                    GameModule.isFirstMove
+                );
+            }
+
+            // apply flags in one place, return gameOver if 3 players have finished
+            gameOver = await applySpTurnOutcome({ actorIndex, outcome, gameOver });
+
+            console.log("Played Hand Length: " + GameModule.playedHand)
+
+            //if player played a valid hand
+            if(GameModule.playedHand >= 1 && GameModule.playedHand <= 5){
+                //GameModule.playedHistory.push(GameModule.lastHand); //push last valid hand into playedHistory array
+                console.log("played hand debug: " + GameModule.playedHand);
+                
+                // check if game ended this loop 
+                if (gameOver) {
+                    // return other 3 player's clientIds and remaining cards
+                    const losingPlayers = getLosingPlayersWithCards();
+
+                    // see last card played for a bit
+                    await sleep(100); 
+
+                    // play finish game animation
+                    await finishSpGameAnimation(GameModule.gameDeck, losingPlayers);
+
+                    // return final finishing positions (client id + remaining cards)
+                    const resultsOut = getResults(losingPlayers)
+
+                    GameModule.reset();
+                    return resultsOut;
+                }
+            }
+            else if(GameModule.playedHand == 0){ //else if player passed
+                continue;
+            }
+        }
+    }
 }
 
 //Actual game loop, 1 loop represents a turn
@@ -1196,7 +1794,6 @@ const gameLoop = async (roomCode, socket, firstTurnClientId, onResume) => {
             passButton.disabled = true
 
             //log gameState values
-            console.log("GameState LastValidHand:", GameModule.lastValidHand);
             console.log("GameState isFirstMove:", GameModule.isFirstMove);
             console.log("GameState Players:", GameModule.players);
             console.log("GameState Game Deck:", GameModule.gameDeck);
@@ -1247,10 +1844,10 @@ const gameLoop = async (roomCode, socket, firstTurnClientId, onResume) => {
                     // and gameDeck includes those last cards, unmount finishedDeck after animations, and reset gameState
                     // Now it's safe to animate: all clients have acked the last hand,
                     // and gameDeck includes those last cards…
-                    await finishGameAnimation(roomCode, socket, GameModule.gameDeck, GameModule.players, losingPlayer);
+                    await finishGameAnimation(roomCode, socket, GameModule.gameDeck, losingPlayer);
                     await finishedGame(socket);
 
-                    // 🔒 Make sure no late events from this round can fire
+                    // Make sure no late events from this round can fire
                     detachGameEvents(socket);          // turn/round events (cardsPlayed/passed/wonRound/ACKs/etc.)
                     removeAllGameElements();           // hide HUD & clear any leftover DOM (safe after finish)
 
@@ -1285,6 +1882,7 @@ async function loginMenu() {
     let loginButton   = document.getElementById("loginButton");
     let createAccountButton = document.getElementById("createAccountButton");
     let lostPasswordButton  = document.getElementById("lostPasswordButton");
+    let spButton = document.getElementById("singlePlayerButton");
     const errorMessage1 = document.getElementById("errorMessage1");
 
     // reset & rebind references
@@ -1309,8 +1907,6 @@ async function loginMenu() {
     updateLoginButtonState();
     userNameInput.addEventListener("input", updateLoginButtonState);
     passwordInput.addEventListener("input", updateLoginButtonState);
-
-
 
     return new Promise((resolve) => {
         let settled = false;
@@ -1438,6 +2034,14 @@ async function loginMenu() {
             }
             handleClick();
         });
+
+        spButton.addEventListener("click", () => {
+            clickSounds[0].play();
+            loginMenu.style.display = "none";
+            settle({ type: "singlePlayer" });
+            },
+            { once: true }
+        );
 
         createAccountButton.addEventListener(
             "click",
@@ -2010,6 +2614,7 @@ function bindDropdownHandlers() {
     bind('lbSecondsOption', 'seconds');   
     bind('lbThirdsOption',  'thirds');  
 }
+
 async function renderLeaderboardMenu(metric = 'avg') {
     const container = document.getElementById('leaderboardMenu');
     const dropdownButton = document.getElementById('dropdownDefaultButton');
@@ -3137,6 +3742,181 @@ async function joinRoomMenu(socket, username) {
     });
 }
 
+async function spEndMenu(spResults) {
+    const endMenu     = document.getElementById("endMenu");
+    const continueBtn = document.getElementById("continueButton");
+    const backBtn     = document.getElementById("backToJoinRoomButton2");
+
+    let resolver;
+
+    // --------------------
+    // Hide in-game UI
+    // --------------------
+    document.getElementById("play").style.display = "none";
+    document.getElementById("clear").style.display = "none";
+    document.getElementById("pass").style.display = "none";
+    document.getElementById("gameInfo").style.display = "none";
+
+    for (const div of document.getElementsByClassName("playerInfo")) {
+        div.style.display = "none";
+    }
+
+    // --------------------
+    // Build container fresh
+    // --------------------
+    const resultsContainer = endMenu.querySelector("#resultsContainer");
+    resultsContainer.innerHTML = `
+        <div class="bg-gray-50 dark:bg-gray-900 shadow-md rounded-md p-4 mx-auto max-w-sm w-full mt-2 mb-6
+            border border-gray-100 dark:border-gray-700">
+            <h2 class="text-xl font-semibold mb-3 text-center">Single Player Results</h2>
+            <div id="endMenuSummary" class="text-center text-sm mb-3"></div>
+            <ul id="endMenuLeaderboard" class="divide-y"></ul>
+        </div>
+    `;
+
+    const ul = document.getElementById("endMenuLeaderboard");
+    const summary = document.getElementById("endMenuSummary");
+
+    // --------------------
+    // Identify local player
+    // --------------------
+    const me =
+        GameModule.players.find(p => p.isClient) ||
+        GameModule.players[0];
+
+    // --------------------
+    // Apply round scores to totals
+    // --------------------
+    spResults.forEach(r => {
+        const player = GameModule.players.find(
+            p => String(p.clientId) === String(r.clientId)
+        );
+        if (!player) return;
+
+        if (typeof player.points !== "number") {
+            player.points = 0;
+        }
+        player.points += r.score;
+    });
+
+    // --------------------
+    // Build rows + sort by TOTAL points
+    // --------------------
+    const rows = spResults.map(r => {
+        const player = GameModule.players.find(
+            p => String(p.clientId) === String(r.clientId)
+        );
+
+        return {
+            clientId: r.clientId,
+            cardsRemaining: r.cardsRemaining,
+            roundScore: r.score,
+            totalScore: player?.points ?? 0,
+            player
+        };
+    });
+
+    // Sort: total points DESC, tie-break by round score
+    rows.sort((a, b) => {
+        if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
+        return b.roundScore - a.roundScore;
+    });
+
+    // --------------------
+    // Render leaderboard
+    // --------------------
+    rows.forEach((row, idx) => {
+        const { player, cardsRemaining, roundScore, totalScore } = row;
+        if (!player) return;
+
+        const li = document.createElement("li");
+        li.className = "flex items-center justify-between py-2";
+
+        const roundStr = roundScore >= 0 ? `+${roundScore}` : `${roundScore}`;
+
+        li.innerHTML = `
+            <div class="flex items-center">
+                <span class="text-lg font-semibold w-6">${idx + 1}</span>
+                <img class="w-8 h-8 rounded-md border mr-3 object-cover player-avatar">
+                <div>
+                    <div class="font-semibold">
+                        ${player.username || player.name || "Player"}
+                    </div>
+                    <div class="text-xs opacity-70">
+                        ${cardsRemaining} cards left
+                    </div>
+                </div>
+            </div>
+            <div class="font-semibold">
+                ${totalScore} (${roundStr})
+            </div>
+        `;
+
+        const img = li.querySelector(".player-avatar");
+        img.src = `/src/css/background/${player.avatar}`;
+        img.onerror = () => (img.src = "/src/css/background/player.png");
+
+        ul.appendChild(li);
+    });
+
+    // --------------------
+    // Summary (local player)
+    // --------------------
+    const myRow = rows.find(r => String(r.clientId) === String(me.clientId));
+    const myPlace = spResults.findIndex(
+        r => String(r.clientId) === String(me.clientId)
+    ) + 1;
+    const myScore = myRow?.roundScore ?? 0;
+    const myTotal = myRow?.totalScore ?? 0;
+
+    const myScoreStr = myScore >= 0 ? `+${myScore}` : `${myScore}`;
+
+    summary.textContent = myRow
+        ? `You placed: #${myPlace} : ${myScoreStr} points (Total: ${myTotal})`
+        : "";
+
+    // --------------------
+    // Buttons
+    // --------------------
+    continueBtn.textContent = "Continue";
+    backBtn.textContent = "Back";
+
+    const cleanup = () => {
+        continueBtn.removeEventListener("click", onContinue);
+        backBtn.removeEventListener("click", onBack);
+    };
+
+    const onContinue = () => {
+        clickSounds?.[0]?.play?.();
+        cleanup();
+        endMenu.style.display = "none";
+        resolver({ action: "continue" });
+    };
+
+    const onBack = () => {
+        clickSounds?.[0]?.play?.();
+        cleanup();
+        endMenu.style.display = "none";
+
+        // reset SP points when leaving
+        for (const p of GameModule.players) {
+            p.points = 0;
+        }
+
+        resolver({ action: "back" });
+    };
+
+    continueBtn.addEventListener("click", onContinue);
+    backBtn.addEventListener("click", onBack);
+
+    endMenu.style.display = "block";
+
+    return new Promise(resolve => {
+        resolver = resolve;
+    });
+}
+
+
 async function endMenu(socket, roomCode, results) {
     const endMenu   = document.getElementById("endMenu");
     const continueBtn = document.getElementById("continueButton");         
@@ -3512,6 +4292,66 @@ async function lobbyMenu(socket, roomCode){
     });
 }
 
+function renderSinglePlayerInfo(el, player, i) {
+    if (!el) return;
+
+    // container
+    el.style.display = 'flex';
+    el.style.alignItems = 'center';
+    el.style.gap = '0.25rem';
+    el.style.borderRadius = '0.5rem';
+    el.style.padding = '0.2rem 0.3rem';
+    el.style.backgroundColor = 'rgba(255,255,255,0.9)';
+    el.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+    el.style.width = 'fit-content';
+    el.style.minWidth = '0';
+    el.style.justifyContent = 'center';
+
+    // mirror p3 (right side)
+    const mirrored = i === 3;
+    el.style.flexDirection = mirrored ? 'row-reverse' : 'row';
+
+    // reset content
+    el.textContent = '';
+
+    // avatar (LOCAL ONLY)
+    const img = document.createElement('img');
+
+    const fallback = `/avatars/default${i + 1}.png`;
+
+    // <-- change this path to match your actual served path -->
+    // If these are in src/, your bundler may require importing them.
+    // But if they're served as static files, this works.
+    const localAvatarPath = player?.avatar
+        ? `/src/css/background/${player.avatar}`
+        : fallback;
+
+    img.src = localAvatarPath;
+
+    // fallback if missing
+    img.onerror = () => {
+        img.onerror = null;
+        img.src = fallback;
+    };
+
+    img.className = 'w-8 h-8 object-cover border border-gray-300 rounded-md box-border';
+    img.style.aspectRatio = '1 / 1';
+    img.style.flexShrink = '0';
+    img.alt = player.username || `Player ${i + 1}`;
+    img.loading = 'lazy';
+    img.decoding = 'async';
+
+    // name
+    const name = document.createElement('div');
+    name.className = 'font-medium text-gray-800 dark:text-gray-800';
+    name.textContent = player.username || `Player ${i + 1}`;
+    name.style.whiteSpace = 'nowrap';
+    name.style.textAlign = mirrored ? 'right' : 'left';
+
+    // assemble
+    el.append(img, name);
+}
+
 function renderPlayerInfo(el, player, i) {
     if (!el) return;
 
@@ -3555,7 +4395,7 @@ function renderPlayerInfo(el, player, i) {
 
     // name
     const name = document.createElement('div');
-    name.className = 'font-medium text-gray-800 dark:text-white';
+    name.className = 'font-medium text-gray-800 dark:text-gray-800';
     name.textContent = player.username || `Player ${i + 1}`;
     name.style.whiteSpace = 'nowrap';
     name.style.textAlign = mirrored ? 'right' : 'left';
@@ -3586,6 +4426,85 @@ function getPreGameAvgMap() {
     try { return JSON.parse(sessionStorage.getItem('preGameAvgMap') || '{}'); }
     catch { return {}; }
 }
+
+
+async function spLoop(spContinue) {
+    // unhide buttons and gameInfo divs
+    const playButton = document.getElementById("play");
+    const passButton = document.getElementById("pass");
+    const clearButton = document.getElementById("clear");
+    const gameInfo = document.getElementById("gameInfo");
+    const playerInfo = document.getElementsByClassName("playerInfo");
+
+    // make sure gameInfo starts blank/neutral
+    if (gameInfo) {
+        gameInfo.textContent = '—';
+    }
+
+    playButton.style.display = "block";
+    passButton.style.display = "block";
+    clearButton.style.display = "block";
+    gameInfo.style.display = "block";
+
+    // show names here 
+    for (let i = 0; i < playerInfo.length; i++) {
+        playerInfo[i].style.display = 'block';
+    }
+
+    // single-player opponent ai name pool
+    const namePool = [
+        'Jason',
+        'Ivan',
+        'Kulin',
+        'Wong',
+        'Josh',
+    ];
+
+    // if its the first time spLoop, generate bot and player info
+    if(!spContinue) {
+        // shuffle & take 3 unique names
+        const shuffledNames = [...namePool].sort(() => Math.random() - 0.5);
+        const botNames = shuffledNames.slice(0, 3);
+
+        const bots = botNames.map((name, i) => {
+            const bot = new spOpponent();
+            bot.username = name;
+            bot.clientId = `sp-${i + 1}`;
+            bot.socketId = `sp-${i + 1}`; // keeps existing code happy
+            bot.isSinglePlayer = true;
+            bot.avatar = `${name.toLowerCase().trim()}.png`;
+            return bot;
+        });
+
+        GameModule.players[0].username = 'player';
+        GameModule.players[0].clientId = 'sp-0';
+        GameModule.players[0].socketId = 'sp-0';
+        GameModule.players[0].avatar   = 'player.png';
+
+        // replace GameModule opponents with singlePlayerOpponents
+        GameModule.players.splice(1, 3, ...bots);
+
+        await loadPolicyModel("./src/js/policy/model.json");
+    }
+    // if continuing new game, just continue with the loop
+    // Update UI labels
+    for (let i = 0; i < playerInfo.length; i++) {
+        const p = GameModule.players[i];
+        renderSinglePlayerInfo(playerInfo[i], p, i);
+    }
+
+    // create deck, shuffle, and deal animation, returns client id of player with 3 of diamonds when all animations are complete
+    const firstTurnClientId = await dealSinglePlayerCards();
+
+    // main single player game loop, return results array
+    const results = await spGameLoop(firstTurnClientId);
+    
+    console.log(results);
+    return results;
+
+    //implement continue menu copying the multiplayer one
+}
+
 
 // once all four clients toggle toggleReadyState, call startGameForRoom function on server and update local gamestate to match server generated one 
 async function startGame(socket, roomCode){
@@ -3624,7 +4543,7 @@ async function startGame(socket, roomCode){
         // set my socket id directly (server doesn't emit clientSocketId)
         GameModule.players[0].socketId = socket.id;
 
-        // Nshow names here from prior lobby state
+        // show names here from prior lobby state
         for (let i = 0; i < playerInfo.length; i++) {
             playerInfo[i].style.display = 'block';
         }
@@ -4265,10 +5184,27 @@ window.onload = async function() {
     while (true) {
         let joinedRoomSocket, roomCode, isRejoin;
         // declare ALL the vars you’ll assign to
-        let loginMenuSocket, username;
+        let loginMenuSocket, username, spResults;
+        let spEndMenuResolve = null; 
+        let spContinue = false;
 
         // require username and password to establish connection to socket.io server and resolve the connected socket object
         const authResult = await loginMenu();
+
+        if (authResult?.type === 'singlePlayer') {
+            // single player branch here, return results (containing clientIds)
+            while (spEndMenuResolve?.action !== 'back') 
+            {
+                spResults = await spLoop(spContinue);
+                spEndMenuResolve = await spEndMenu(spResults);
+
+                if(spEndMenuResolve.action === 'continue') {
+                    spContinue = true; //let spLoop know that its a continued game
+                }
+            }
+
+            continue; // go back to loginMenu()
+        }
 
         // Go to registration
         if (authResult?.type === 'createAccount') {

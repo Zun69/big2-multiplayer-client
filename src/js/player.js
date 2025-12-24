@@ -14,7 +14,7 @@ const playCardSounds = [
     new Howl({ src: ["src/audio/playcard_10.wav"], volume: 0.9 })
 ];
 
-const passSound = new Howl({ src: ["src/audio/passcard.wav"], volume: 0.9 });
+const passSound = new Howl({ src: ["src/audio/pass.wav"], volume: 0.9 });
 
 let lastSoundIndex = -1;
 
@@ -42,6 +42,7 @@ export default class Player{
         this.clientId = null; // Set to null initially, will set later in the lobbyMenu
         this.socketId = null; //unique socketId from server
         this.pbId = null; // PocketBase user id, set during lobby or snapshot
+        this.avatar = null;
         this.points = 0;
         this.wins = 0;
         this.seconds = 0;
@@ -106,10 +107,10 @@ export default class Player{
     // ---- GC-relative sorting anchors (percent-of-container) ----
     // axis: which axis the hand fans along; dir: +/- spread direction; rot: card face orientation
     SORT_ANCHORS = [
-        { leftPct: 0.50, topPct: 0.85, axis: 'x', dir: +1, rot: 0,   sideways: false }, // seat 0 (you, bottom)
+        { leftPct: 0.50, topPct: 0.83, axis: 'x', dir: +1, rot: 0,   sideways: false }, // seat 0 (you, bottom)
         { leftPct: 0.06, topPct: 0.50, axis: 'y', dir: +1, rot: 270, sideways: true  }, // seat 1 (left)
         { leftPct: 0.50, topPct: 0.1, axis: 'x', dir: -1, rot: 0,   sideways: false }, // seat 2 (top)
-        { leftPct: 0.952, topPct: 0.50, axis: 'y', dir: -1, rot: 270, sideways: true  }, // seat 3 (right)
+        { leftPct: 0.940, topPct: 0.50, axis: 'y', dir: -1, rot: 270, sideways: true  }, // seat 3 (right)
     ];
 
     // convert a GC-space (x,y) into the local space of `parentEl`
@@ -637,6 +638,282 @@ export default class Player{
             cx: (cr.left - gcR.left) + cr.width  / 2,
             cy: (cr.top  - gcR.top ) + cr.height / 2,
         };
+    }
+
+    async spPlayCard(gameDeck, lastValidHand, playersFinished, isFirstMove) {
+        var playButton = document.getElementById("play"); //set player class to active if its their turn
+        var passButton = document.getElementById("pass");
+        var clearButton = document.getElementById("clear");
+        var self = this; //assign player to self
+        var hand = []; //hand array holds selected cards
+        var cardValidate;
+        playButton.disabled = true; //disable play button because no card is selected which is an invalid move
+        clearButton.disabled = true;
+
+        //disable pass button because you can't pass on first move or on a wonRound
+        if(gameDeck.length == 0) {
+            passButton.disabled = true; 
+        } else {
+            passButton.disabled = false;
+        }
+        
+        // clean up any old handlers before arming again ---
+        if (this._playHandler) playButton.removeEventListener("click", this._playHandler);
+        if (this._passHandler) passButton.removeEventListener("click", this._passHandler);
+        if (this._clearHandler) passButton.removeEventListener("click", this._clearHandler);
+        this._playHandler = null;
+        this._passHandler = null;
+        this._clearHandler = null;
+
+        //function when player clicks on card
+        var cardClickListener = function(card) {
+            console.log('Card clicked:', card.$el);
+
+            //id the clicked card
+            let cardId = card.suit + " " + card.rank;
+            console.log(cardId);
+
+            if(hand.includes(cardId)) { 
+                //remove checked class
+                hand = hand.filter(id => id !== cardId); //fremove card from hand if you click on it again
+                card.animateTo({
+                    delay: 0, // wait 1 second + i * 2 ms
+                    duration: 100,
+                    ease: 'linear',
+                    rot: 0,
+                    x: card.x,
+                    y: card.y + 10,
+                })
+                console.log("unclicked");
+                console.log("currrent hand: " + hand);
+                console.log("currrent hand length: " + hand.length);
+            } else if (!hand.includes(cardId) && hand.length < 5){ //else if card isnt in hand array && hand length is less than 5
+                console.log("clicked");
+                hand.push(cardId); //insert clicked on card into hand
+                //add checked css class for styling
+                card.animateTo({
+                    delay: 0, // wait 1 second + i * 2 ms
+                    duration: 100,
+                    ease: 'linear',
+                    rot: 0,
+                    x: card.x,
+                    y: card.y - 10,
+                })
+                console.log("currrent hand length: " + hand.length);
+            }
+
+            self.sortHandArray(hand);
+            cardValidate = self.cardLogic(gameDeck, hand, lastValidHand, playersFinished, isFirstMove); //return valid if played card meets requirements
+            console.log("card validation: " + cardValidate);
+
+            //if current hand is validated, enable play button, else disable it because its an invalid move
+            if(cardValidate) {
+                playButton.disabled = false;
+            } else {
+                playButton.disabled = true;
+            }
+
+            if(hand.length > 0) {
+                clearButton.disabled = false;
+            } else {
+                clearButton.disabled = true;
+            }
+        };
+
+        //add event listeners on cards
+        this.cards.forEach(function(card) {
+            //add click listener for every card
+            var clickListener = function() {
+                cardClickListener(card);
+            };
+
+            // Add click listener for every card
+            card.$el.addEventListener('click', clickListener);
+
+            // Store the click listener reference on the card object
+            card.clickListener = clickListener;
+        });
+
+        //resolve promise when player clicks on play button or pass button
+        var myPromise = new Promise((resolve) => {
+            let animationPromises = []; //holds all animation promises
+            let cardsToRemove = []; //holds indexes of cards to be removed
+            let i = 0; //for staggered placing down animations (remove if i dont like it)
+
+            var playClickListener = async function() {
+                // clean up immediately
+                playButton.removeEventListener("click", self._playHandler);
+                passButton.removeEventListener("click", self._passHandler);
+                clearButton.removeEventListener("click", self._clearHandler);
+                self._playHandler = self._passHandler = self._clearHandler = null;
+
+                const resolveHandLength = hand.length;
+                
+                // get middle card index to center pairs, triples, and combos correctly
+                const { gx, gy } = self.getGameCenterXY();
+                const n = hand.length;
+                const mid = (n - 1) / 2;
+
+                hand.forEach(cardId => {
+                    //return index of player's card that matches a cardId in hand array
+                    let cardIndex = self.cards.findIndex(card => card.suit + " " + card.rank == cardId);
+                    let card = self.findCardObject(cardId); //return card object using cardId to search
+                    let stackInterval = 0.25;
+
+                    let rotationOffset = Math.random() * 5 + -5; // Calculate a new rotation offset for each card
+                    console.log("ROTATIONAL OFFSET: " + rotationOffset)
+
+                    // simple, global target for everyone
+                    // set x coord as center of middle card
+                    const offX = ((i - mid) * 15) - (gameDeck.length * stackInterval);
+                    const offY = (gameDeck.length * stackInterval);
+
+                    const { cx, cy } = self.getCardCenterInGC(card.$el);
+
+                    // delta needed to land the card’s center on the anchor:
+                    const dx = (gx - cx);
+                    const dy = (gy - cy);
+
+                    //animate card object to gameDeck position (//can use turn to slightly stagger the cards like uno on ios)
+                    let p1Promise = new Promise((cardResolve) => {
+                        card.animateTo({
+                            delay: i * 30, // wait 1 second + i * 2 ms
+                            duration: 150,
+                            ease: 'linear',
+                            rot: rotationOffset,
+                            x: Math.round(card.x + dx + offX),
+                            y: Math.round(card.y + dy - offY),
+                            onStart: function() {
+                                gameDeck.push(self.cards[cardIndex]); //insert player's card that matches cardId into game deck
+                                card.$el.style.zIndex = gameDeck.length; //make it equal gameDeck.length
+                                playRandomCardSound();
+                            },
+                            
+                            onComplete: function () {
+                                if (cardIndex !== -1) {
+                                    console.log("card inserted: " + self.cards[cardIndex].suit + self.cards[cardIndex].rank);
+                                    cardsToRemove.unshift(self.cards[cardIndex].suit + " " + self.cards[cardIndex].rank); //add card index into cardsToRemove array, so I can remove all cards at same time after animations are finished
+                                    console.log("Cards to remove: " + cardsToRemove);
+                                }
+                                //card.mount(gameDeckDiv);
+                                cardResolve(); //only resolve promise when animation is complete
+                            }
+                        })                                  
+                    });
+                    animationPromises.push(p1Promise); //add animation promise to promise array
+                    i++;
+                })
+                // Wait for all card animations to complete
+                Promise.all(animationPromises)
+                    .then(() => {
+                        // remove played cards from self.cards
+                        cardsToRemove.forEach(cardToRemove => {
+                        const indexToRemove = self.cards.findIndex(card =>
+                            (card.suit + ' ' + card.rank) === cardToRemove
+                        );
+                        if (indexToRemove !== -1) self.cards.splice(indexToRemove, 1);
+                        });
+
+                        hand.length = 0; // clear selected hand
+
+                        // sort remaining cards in data
+                        self.sortHand();
+
+                        // return the sort animation promise so the chain waits for it
+                        return self.sortingAnimation(0, { duration: 200, stagger: 10 });
+                    })
+                    .then(() => {
+                        // now resolve AFTER sorting animation finishes
+                        resolve(resolveHandLength);
+                });
+                //remove click listener on card, so they dont stack up
+                self.cards.forEach(function(card) {
+                    card.$el.removeEventListener('click', card.clickListener);
+                });
+
+                //remove playButton event listener to prevent propogation
+                playButton.removeEventListener('click', playClickListener);
+                
+                //remove pass button listener, when player passes so event listeners dont propogate
+                passButton.removeEventListener('click', passClickListener);
+            }
+                
+            //when player passes
+            var passClickListener = async function() {
+                // clean up immediately
+                playButton.removeEventListener("click", self._playHandler);
+                passButton.removeEventListener("click", self._passHandler);
+                clearButton.removeEventListener("click", self._clearHandler);
+                self._playHandler = self._passHandler = self._clearHandler = null;
+                
+                //remove click listeners on all cards 
+                self.cards.forEach(function(card) {
+                    card.$el.removeEventListener('click', card.clickListener);
+                });
+
+                //animate cards in selected hand back to original position
+                hand.forEach(function (cardId) {
+                    let card = self.findCardObject(cardId); 
+                    card.animateTo({
+                        delay: 0, // wait 1 second + i * 2 ms
+                        duration: 100,
+                        ease: 'linear',
+                        rot: 0,
+                        x: card.x,
+                        y: card.y + 10,
+                    })  
+                });
+
+                //remove passButton event listener after pass button functions are completed
+                passButton.removeEventListener('click', passClickListener);
+
+                //remove play button listener, when player passes so event listeners dont propogate
+                playButton.removeEventListener('click', playClickListener); 
+
+
+                //remove all selected cards, play pass audio and resolve 0
+                hand.length = 0
+
+                passSound.play(); 
+                resolve('passed'); 
+            }
+
+            var clearClickListener = async function() {
+                clearButton.disabled = true; // lock immediately
+                playButton.disabled = true; // disable play button as it stays active if cleared hand was valid
+
+                //animate cards in selected hand back to original position
+                hand.forEach(function (cardId) {
+                    let card = self.findCardObject(cardId); 
+                    card.animateTo({
+                        delay: 0, // wait 1 second + i * 2 ms
+                        duration: 100,
+                        ease: 'linear',
+                        rot: 0,
+                        x: card.x,
+                        y: card.y + 10,
+                    })  
+                });
+
+                //remove all selected cards, play pass audio and resolve 0
+                hand.length = 0
+                
+                // dont remove listener here, remove clear listener if player plays cards or passes
+            }
+
+            // --- store refs so we can clean up next turn ---
+            this._playHandler = playClickListener;
+            this._passHandler = passClickListener;
+            this._clearHandler = clearClickListener;
+
+            //call playClickListener function when playButton is clicked, the function will remove event listener after its called
+            playButton.addEventListener("click", this._playHandler, { once: true });
+            //call passClickListener function when passButton is clicked, the function will remove event listener after its called
+            passButton.addEventListener("click", this._passHandler, { once: true });
+            clearButton.addEventListener("click", this._clearHandler);
+        });
+
+        return myPromise;
     }
 
     //function takes care of selecting cards and inserting cards into hand, sorting the hand, validating move and inserting the hand onto the game deck, and returning promise
