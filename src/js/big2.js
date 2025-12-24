@@ -4323,7 +4323,7 @@ function renderSinglePlayerInfo(el, player, i) {
     // If these are in src/, your bundler may require importing them.
     // But if they're served as static files, this works.
     const localAvatarPath = player?.avatar
-        ? `/src/css/background/${player.avatar}`
+        ? `src/css/background/${player.avatar}`
         : fallback;
 
     img.src = localAvatarPath;
