@@ -229,7 +229,7 @@
 
     #p0Info {
         position: absolute;
-        top: 70%;
+        top: 68%;
         left: 50%;
         transform: translate(-50%, -50%); /* center horizontally & vertically */
     }
@@ -243,7 +243,7 @@
 
     #p2Info {
         position: absolute;
-        top: 22.8%;
+        top: 25%;
         left: 50%;
         transform: translate(-50%, -50%); /* center horizontally & vertically */
     }

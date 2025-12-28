@@ -4296,60 +4296,67 @@ function renderSinglePlayerInfo(el, player, i) {
 
     // container
     el.style.display = 'flex';
+    el.style.flexDirection = 'column'; // 👈 stack vertically
     el.style.alignItems = 'center';
-    el.style.gap = '0.25rem';
+    el.style.gap = '0.2rem';
     el.style.borderRadius = '0.5rem';
-    el.style.padding = '0.2rem 0.3rem';
-    el.style.backgroundColor = 'rgba(255,255,255,0.9)';
-    el.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+    el.style.padding = '0.25rem 0.35rem';
+    
+    // glass effect — white, still transparent
+    el.style.background = 'rgba(255,255,255,0.6)'; // white but translucent
+    el.style.backdropFilter = 'blur(10px)';
+    el.style.webkitBackdropFilter = 'blur(10px)';
+
+    // subtle definition
+    el.style.border = '1px solid rgba(255,255,255,0.45)';
+    el.style.boxShadow =
+        '0 4px 10px rgba(0,0,0,0.08), ' +
+        'inset 0 1px 0 rgba(255,255,255,0.65)';
+
     el.style.width = 'fit-content';
     el.style.minWidth = '0';
     el.style.justifyContent = 'center';
 
-    // mirror p3 (right side)
-    const mirrored = i === 3;
-    el.style.flexDirection = mirrored ? 'row-reverse' : 'row';
-
     // reset content
     el.textContent = '';
 
-    // avatar (LOCAL ONLY)
+    // avatar
     const img = document.createElement('img');
 
     const fallback = `/avatars/default${i + 1}.png`;
 
-    // <-- change this path to match your actual served path -->
-    // If these are in src/, your bundler may require importing them.
-    // But if they're served as static files, this works.
     const localAvatarPath = player?.avatar
         ? `./src/css/background/${player.avatar}`
         : fallback;
 
     img.src = localAvatarPath;
 
-    // fallback if missing
     img.onerror = () => {
         img.onerror = null;
         img.src = fallback;
     };
 
-    img.className = 'w-8 h-8 object-cover border border-gray-300 rounded-md box-border';
+    img.className = 'w-12 h-12 object-cover border border-gray-300 rounded-md box-border';
     img.style.aspectRatio = '1 / 1';
     img.style.flexShrink = '0';
     img.alt = player.username || `Player ${i + 1}`;
     img.loading = 'lazy';
     img.decoding = 'async';
 
-    // name
+    // name (under avatar)
     const name = document.createElement('div');
-    name.className = 'font-medium text-gray-800 dark:text-gray-800';
+    name.className = 'font-medium text-gray-800';
     name.textContent = player.username || `Player ${i + 1}`;
     name.style.whiteSpace = 'nowrap';
-    name.style.textAlign = mirrored ? 'right' : 'left';
+    name.style.fontSize = '0.5rem';
+    name.style.lineHeight = '1';
+    name.style.textAlign = 'center';
+    
 
     // assemble
     el.append(img, name);
 }
+
 
 function renderPlayerInfo(el, player, i) {
     if (!el) return;
