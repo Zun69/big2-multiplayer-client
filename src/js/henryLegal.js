@@ -82,6 +82,42 @@ export function isFullHouse(hand) {
   return { ok: false };
 }
 
+// ---- 5-card: four of a kind + kicker detection + comparison key ----
+function fourKindInfo5(hand) {
+  if (!hand || hand.length !== 5) return { ok: false };
+
+  const counts = new Map();
+  for (const id of hand) {
+    const v = cardValue(id); // 1..13
+    counts.set(v, (counts.get(v) || 0) + 1);
+  }
+
+  if (counts.size !== 2) return { ok: false };
+
+  let quadVal = null;
+  for (const [v, c] of counts.entries()) {
+    if (c === 4) quadVal = v;
+  }
+  if (quadVal == null) return { ok: false };
+
+  // kicker = the lone card not in the quad
+  let kickerId = null;
+  for (const id of hand) {
+    if (cardValue(id) !== quadVal) { kickerId = id; break; }
+  }
+
+  // for comparisons: compare quad value first, then kicker id as tie-break
+  return { ok: true, quadVal, kickerId: kickerId ?? -1 };
+}
+
+function straightHighId5(hand) {
+  // Henry compares straights/flushes using the "high" card id (max id works with his encoding)
+  let m = -Infinity;
+  for (const id of hand) if (id > m) m = id;
+  return m;
+}
+
+
 // card + handsAvailable (enough fields for enumerateOptions)
 class CardMeta {
   constructor(id, indexInHand) {
@@ -341,42 +377,64 @@ export function fourCardOptions(handOptions, prevHand = [], prevType = 0, action
 }
 
 export function fiveCardOptions(handOptions, prevHand = [], prevType = 0, actionIndices) {
-  // prevType: 0 any, 1 straight, 2 flush, 3 full house, 4 straight flush
+  // prevType:
+  // 0 any
+  // 1 straight
+  // 2 flush
+  // 3 full house
+  // 4 four of a kind (+ kicker)
+  // 5 straight flush
   const valid = [];
   const cardInds = new Array(5).fill(0);
 
-  // Straights
-  if (!(prevType === 2 || prevType === 3 || prevType === 4)) {
+  const prevSorted = (prevHand && prevHand.length) ? [...prevHand].sort((a, b) => a - b) : [];
+  const prevSFHigh = (prevType === 5) ? straightHighId5(prevSorted) : -1;
+
+  // ----------------------------
+  // 1) STRAIGHTS (only if prevType <= 1)
+  // ----------------------------
+  if (prevType <= 1) {
     if (handOptions.straights.length > 0) {
       for (const straight of handOptions.straights) {
         const nC = straight.length;
+
         for (let i1 = 0; i1 < nC - 4; i1++) {
           const val1 = handOptions.cards[straight[i1]].value;
           cardInds[0] = handOptions.cards[straight[i1]].indexInHand;
+
           for (let i2 = i1 + 1; i2 < nC - 3; i2++) {
             const val2 = handOptions.cards[straight[i2]].value;
             if (val1 === val2) continue;
             if (val2 > val1 + 1) break;
             cardInds[1] = handOptions.cards[straight[i2]].indexInHand;
+
             for (let i3 = i2 + 1; i3 < nC - 2; i3++) {
               const val3 = handOptions.cards[straight[i3]].value;
               if (val3 === val2) continue;
               if (val3 > val2 + 1) break;
               cardInds[2] = handOptions.cards[straight[i3]].indexInHand;
+
               for (let i4 = i3 + 1; i4 < nC - 1; i4++) {
                 const val4 = handOptions.cards[straight[i4]].value;
                 if (val4 === val3) continue;
                 if (val4 > val3 + 1) break;
                 cardInds[3] = handOptions.cards[straight[i4]].indexInHand;
+
                 for (let i5 = i4 + 1; i5 < nC; i5++) {
                   const val5 = handOptions.cards[straight[i5]].value;
                   if (val5 === val4) continue;
                   if (val5 > val4 + 1) break;
                   cardInds[4] = handOptions.cards[straight[i5]].indexInHand;
+
                   if (prevType === 1) {
-                    if (handOptions.cHand[cardInds[4]] < prevHand[4]) continue;
+                    // Henry-style straight compare uses the highest id
+                    const hb = cardInds.map((ii) => handOptions.cHand[ii]).sort((a,b)=>a-b);
+                    if (straightHighId5(hb) <= straightHighId5(prevSorted)) continue;
                   }
-                  valid.push(actionIndices.fiveCardIndices[cardInds[0]][cardInds[1]][cardInds[2]][cardInds[3]][cardInds[4]]);
+
+                  valid.push(
+                    actionIndices.fiveCardIndices[cardInds[0]][cardInds[1]][cardInds[2]][cardInds[3]][cardInds[4]]
+                  );
                 }
               }
             }
@@ -386,43 +444,59 @@ export function fiveCardOptions(handOptions, prevHand = [], prevType = 0, action
     }
   }
 
-  // Flushes
-  if (prevType !== 4) {
-    if (handOptions.flushes.length > 0) {
-      for (const flush of handOptions.flushes) {
-        const nC = flush.length;
-        for (let i1 = 0; i1 < nC - 4; i1++) {
-          cardInds[0] = handOptions.cards[flush[i1]].indexInHand;
-          for (let i2 = i1 + 1; i2 < nC - 3; i2++) {
-            cardInds[1] = handOptions.cards[flush[i2]].indexInHand;
-            for (let i3 = i2 + 1; i3 < nC - 2; i3++) {
-              cardInds[2] = handOptions.cards[flush[i3]].indexInHand;
-              for (let i4 = i3 + 1; i4 < nC - 1; i4++) {
-                cardInds[3] = handOptions.cards[flush[i4]].indexInHand;
-                for (let i5 = i4 + 1; i5 < nC; i5++) {
-                  cardInds[4] = handOptions.cards[flush[i5]].indexInHand;
+  // ----------------------------
+  // 2) FLUSHES + STRAIGHT FLUSHES
+  // We always enumerate flush-sets because straight flush lives here too.
+  // ----------------------------
+  if (handOptions.flushes.length > 0) {
+    for (const flush of handOptions.flushes) {
+      const nC = flush.length;
 
-                  if (prevType === 2) {
-                    if (prevHand[4] > handOptions.cHand[cardInds[4]]) {
-                      const hb = cardInds.map((ii) => handOptions.cHand[ii]);
-                      if (isStraight(hb)) {
-                        // straight flush beats
-                      } else {
-                        continue;
-                      }
-                    }
-                  }
-                  if (prevType === 3) {
-                    const hb = cardInds.map((ii) => handOptions.cHand[ii]);
-                    if (isStraight(hb)) {
-                      // straight flush beats
-                    } else {
-                      continue;
-                    }
-                  }
+      for (let i1 = 0; i1 < nC - 4; i1++) {
+        cardInds[0] = handOptions.cards[flush[i1]].indexInHand;
 
-                  valid.push(actionIndices.fiveCardIndices[cardInds[0]][cardInds[1]][cardInds[2]][cardInds[3]][cardInds[4]]);
+        for (let i2 = i1 + 1; i2 < nC - 3; i2++) {
+          cardInds[1] = handOptions.cards[flush[i2]].indexInHand;
+
+          for (let i3 = i2 + 1; i3 < nC - 2; i3++) {
+            cardInds[2] = handOptions.cards[flush[i3]].indexInHand;
+
+            for (let i4 = i3 + 1; i4 < nC - 1; i4++) {
+              cardInds[3] = handOptions.cards[flush[i4]].indexInHand;
+
+              for (let i5 = i4 + 1; i5 < nC; i5++) {
+                cardInds[4] = handOptions.cards[flush[i5]].indexInHand;
+
+                // indices must be increasing for the lookup
+                const inds = [...cardInds].sort((a, b) => a - b);
+                const hb = inds.map((ii) => handOptions.cHand[ii]).sort((a, b) => a - b);
+
+                const isSF = isStraight(hb); // in a flush-set, straight => straight flush
+                const isF  = true;
+
+                // If prev was straight flush: ONLY straight flush can respond, and must beat it.
+                if (prevType === 5) {
+                  if (!isSF) continue;
+                  if (straightHighId5(hb) <= prevSFHigh) continue;
                 }
+                // If prev was four-kind: ONLY straight flush can respond.
+                else if (prevType === 4) {
+                  if (!isSF) continue;
+                }
+                // If prev was full house: allow straight flush (and flushes DO NOT beat full house)
+                else if (prevType === 3) {
+                  if (!isSF) continue;
+                }
+                // If prev was flush: allow higher flush, or any straight flush
+                else if (prevType === 2) {
+                  if (!isSF) {
+                    // flush vs flush compare by high id
+                    if (straightHighId5(hb) <= straightHighId5(prevSorted)) continue;
+                  }
+                }
+                // If prev was straight or control/any: flush is ok (and SF is ok)
+
+                valid.push(actionIndices.fiveCardIndices[inds[0]][inds[1]][inds[2]][inds[3]][inds[4]]);
               }
             }
           }
@@ -431,37 +505,38 @@ export function fiveCardOptions(handOptions, prevHand = [], prevType = 0, action
     }
   }
 
-  // Full houses
-  if (prevType !== 4) {
-    const threeVal = (prevType === 3) ? cardValue(prevHand[2]) : null;
+  // ----------------------------
+  // 3) FULL HOUSES (only if prevType <= 3)
+  // ----------------------------
+  if (prevType <= 3) {
+    const prevFH = (prevType === 3) ? isFullHouse(prevSorted) : { ok: false, threeVal: null };
+    const prevThreeVal = prevFH.ok ? prevFH.threeVal : null;
+
     const nPairs = handOptions.nPairs;
     const nThree = handOptions.nThreeOfAKinds;
+
     if (nPairs > 0 && nThree > 0) {
       for (const pair of handOptions.pairs) {
         const pVal = handOptions.cards[pair[0]].value;
+
         for (const three of handOptions.threeOfAKinds) {
           const tVal = handOptions.cards[three[0]].value;
           if (tVal === pVal) continue;
 
-          if (pVal > tVal) {
-            cardInds[0] = handOptions.cards[three[0]].indexInHand;
-            cardInds[1] = handOptions.cards[three[1]].indexInHand;
-            cardInds[2] = handOptions.cards[three[2]].indexInHand;
-            cardInds[3] = handOptions.cards[pair[0]].indexInHand;
-            cardInds[4] = handOptions.cards[pair[1]].indexInHand;
-          } else {
-            cardInds[0] = handOptions.cards[pair[0]].indexInHand;
-            cardInds[1] = handOptions.cards[pair[1]].indexInHand;
-            cardInds[2] = handOptions.cards[three[0]].indexInHand;
-            cardInds[3] = handOptions.cards[three[1]].indexInHand;
-            cardInds[4] = handOptions.cards[three[2]].indexInHand;
+          // Build the 5 indices (order doesn’t matter for actionIndices lookup, but must be ascending)
+          const inds = [
+            handOptions.cards[three[0]].indexInHand,
+            handOptions.cards[three[1]].indexInHand,
+            handOptions.cards[three[2]].indexInHand,
+            handOptions.cards[pair[0]].indexInHand,
+            handOptions.cards[pair[1]].indexInHand,
+          ].sort((a, b) => a - b);
+
+          if (prevType === 3 && prevThreeVal != null) {
+            if (tVal <= prevThreeVal) continue; // compare by trip value
           }
 
-          if (prevType === 3) {
-            if (threeVal > tVal) continue;
-          }
-
-          valid.push(actionIndices.fiveCardIndices[cardInds[0]][cardInds[1]][cardInds[2]][cardInds[3]][cardInds[4]]);
+          valid.push(actionIndices.fiveCardIndices[inds[0]][inds[1]][inds[2]][inds[3]][inds[4]]);
         }
       }
     }
@@ -469,6 +544,7 @@ export function fiveCardOptions(handOptions, prevHand = [], prevType = 0, action
 
   return valid.length ? valid : -1;
 }
+
 
 // ----------------------------
 // Mask builder (returnAvailableActions)
@@ -508,13 +584,21 @@ export function returnAvailableActions({
       // 4-card hands disabled in rules, can only pass when required to beat 4 cards
       return available;
     } else {
-      if (isStraight(prevHand)) {
-        if (isFlush(prevHand)) options = fiveCardOptions(handOptions, prevHand, 4, actionIndices);
-        else options = fiveCardOptions(handOptions, prevHand, 1, actionIndices);
-      } else if (isFlush(prevHand)) {
-        options = fiveCardOptions(handOptions, prevHand, 2, actionIndices);
+      const prevSorted = [...prevHand].sort((a, b) => a - b);
+
+      if (isStraight(prevSorted) && isFlush(prevSorted)) {
+        // straight flush
+        options = fiveCardOptions(handOptions, prevSorted, 5, actionIndices);
+      } else if (fourKindInfo5(prevSorted).ok) {
+        // four of a kind + kicker
+        options = fiveCardOptions(handOptions, prevSorted, 4, actionIndices);
+      } else if (isFlush(prevSorted)) {
+        options = fiveCardOptions(handOptions, prevSorted, 2, actionIndices);
+      } else if (isFullHouse(prevSorted).ok) {
+        options = fiveCardOptions(handOptions, prevSorted, 3, actionIndices);
       } else {
-        options = fiveCardOptions(handOptions, prevHand, 3, actionIndices);
+        // straight (or fallback)
+        options = fiveCardOptions(handOptions, prevSorted, 1, actionIndices);
       }
     }
 

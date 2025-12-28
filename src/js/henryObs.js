@@ -2,10 +2,7 @@
 // 1:1 observation encoder + debug GUI modeled after Henry Charlesworth's big2_PPOalgorithm.
 //
 // IMPORTANT 1: This matches Henry's 412-length layout exactly.
-// IMPORTANT 2: It intentionally replicates Henry's "nCards bug":
-//              Next/Next^2/Next^3 nCards one-hot is based on *current player's* hand size,
-//              not the opponents' sizes. This is exactly what big2Game.py does.
-// IMPORTANT 3: The "Cards Played (Q K A 2)" block is persistent memory in Henry's code.
+// IMPORTANT 2: The "Cards Played (Q K A 2)" block is persistent memory in Henry's code.
 //              We replicate that with a module-level Set. Call resetHenryObsMemory() per new game.
 
 import { toHenryId, henryValue, henrySuit } from "./henryCardId.js";
@@ -13,9 +10,31 @@ import { toHenryId, henryValue, henrySuit } from "./henryCardId.js";
 /** Persistent memory for "Cards Played (Q K A 2)" (ids 37..52 only). */
 const _seenQKA2 = new Set();
 
+/** Per-opponent persistent memory (seat index 0..3) */
+const _oppCardsOfNote = Array.from({ length: 4 }, () => new Set()); // ids 45..52
+const _oppPlayedFlags = Array.from({ length: 4 }, () => ({
+  pair: false,
+  three: false,
+  twoPair: false,
+  straight: false,
+  flush: false,
+  fullHouse: false,
+}));
+
 /** Call this at the start of each new game. */
 export function resetHenryObsMemory() {
   _seenQKA2.clear();
+  for (let i = 0; i < 4; i++) {
+    _oppCardsOfNote[i].clear();
+    _oppPlayedFlags[i] = {
+      pair: false,
+      three: false,
+      twoPair: false,
+      straight: false,
+      flush: false,
+      fullHouse: false,
+    };
+  }
 }
 
 // ------------------------------------------------------------
@@ -86,6 +105,47 @@ function computeFlushFlags(ids) {
 }
 
 // ------------------------------------------------------------
+// Helpers for PREV hand classification (Henry rules, no wrap)
+// ------------------------------------------------------------
+function byValCount(ids) {
+  const m = new Map();
+  ids.forEach((id) => {
+    const v = henryValue(id);
+    m.set(v, (m.get(v) || 0) + 1);
+  });
+  return m;
+}
+
+function isStraight5(ids) {
+  if (ids.length !== 5) return false;
+
+  const vals = Array.from(new Set(ids.map((id) => henryValue(id))))
+    .sort((a, b) => a - b);
+
+  if (vals.length !== 5) return false;
+
+  for (let i = 1; i < 5; i++) {
+    if (vals[i] !== vals[0] + i) return false;
+  }
+  return true;
+}
+
+function isFlush5(ids) {
+  if (ids.length !== 5) return false;
+  const s0 = henrySuit(ids[0]);
+  for (let i = 1; i < 5; i++) {
+    if (henrySuit(ids[i]) !== s0) return false;
+  }
+  return true;
+}
+
+function isFullHouse5(ids) {
+  if (ids.length !== 5) return false;
+  const counts = Array.from(byValCount(ids).values()).sort((a, b) => a - b);
+  return counts.length === 2 && counts[0] === 2 && counts[1] === 3;
+}
+
+// ------------------------------------------------------------
 // Main encoder (412)
 // ------------------------------------------------------------
 export function buildHenryObs({
@@ -94,6 +154,7 @@ export function buildHenryObs({
   lastPlayedHand,  // array of card objects (your format) - [] if none
   passCount,       // 0,1,2 (Henry uses 3-pass => Control flag, passCount resets)
   control = false, // set true when current player has control (everyone else passed)
+  lastPlayedBy = null,
 } = {}) {
   const obs = new Int32Array(412);
 
@@ -151,95 +212,60 @@ export function buildHenryObs({
   const blocks = [N1, N2, N3];
 
   const prevIds = (lastPlayedHand || []).map(toHenryId);
-  const cardsOfNote = prevIds.filter((id) => id >= 45 && id <= 52); // 45..52 = AD..2S
 
-  // nCards (BUGGED ON PURPOSE): use *current player* size for all 3 blocks
-  const nCardsBug = myIds.length; // cPlayer current hand size in big2Game.py
+  // --- update per-opponent memory ---
+  if (lastPlayedBy !== null && prevIds.length > 0) {
+    const seat = lastPlayedBy;
 
-  // clear+set nCards one-hot
+    // cards of note: AD..AS,2D..2S (45..52)
+    prevIds.forEach((id) => {
+      if (id >= 45 && id <= 52) _oppCardsOfNote[seat].add(id);
+    });
+
+    const n = prevIds.length;
+    const flags = _oppPlayedFlags[seat];
+
+    if (n === 2) flags.pair = true;
+    else if (n === 3) flags.three = true;
+    else if (n === 4) flags.twoPair = true;
+    else if (n === 5) {
+      if (isStraight5(prevIds)) flags.straight = true;
+      if (isFlush5(prevIds)) flags.flush = true;
+      else if (isFullHouse5(prevIds)) flags.fullHouse = true;
+    }
+  }
+
+  const nPrev = prevIds.length;
+
+  // ------------------------------------------------------------
+  // Next / Next^2 / Next^3 blocks (each 27) — FIXED
+  // ------------------------------------------------------------
   for (let bi = 0; bi < 3; bi++) {
     const start = blocks[bi];
+    const seat = seats[bi];
 
-    // clear nCards one-hot (13)
+    // ---- nCards (REAL opponent hand size) ----
     for (let i = 0; i < 13; i++) obs[start + i] = 0;
+    const nCards = players?.[seat]?.cards?.length ?? 0;
+    if (nCards >= 1 && nCards <= 13) obs[start + (nCards - 1)] = 1;
 
-    // set nCards one-hot if 1..13
-    if (nCardsBug >= 1 && nCardsBug <= 13) obs[start + (nCardsBug - 1)] = 1;
-
-    // NOTE: Henry does NOT clear hasPlayed/cOfNote here each turn (it only sets bits).
-    // But since we rebuild obs fresh, we mimic the current *turn* state:
-    // - cardsOfNote are based on current prevHand
-    // - playedX are based on current prevHand
-    //
-    // cardsOfNote (8) at start+13..start+20
+    // ---- cards of note (8): AD..AS,2D..2S ----
     for (let i = 0; i < 8; i++) obs[start + 13 + i] = 0;
-    cardsOfNote.forEach((id) => {
+    for (const id of _oppCardsOfNote[seat]) {
       obs[start + 13 + (id - 45)] = 1;
-    });
+    }
 
-    // hasPlayed flags (6) at start+21..start+26
+    // ---- hasPlayed flags (6) ----
     for (let i = 0; i < 6; i++) obs[start + 21 + i] = 0;
+    const f = _oppPlayedFlags[seat];
+    if (f.pair)      obs[start + 21] = 1;
+    if (f.three)     obs[start + 22] = 1;
+    if (f.twoPair)   obs[start + 23] = 1;
+    if (f.straight)  obs[start + 24] = 1;
+    if (f.flush)     obs[start + 25] = 1;
+    if (f.fullHouse) obs[start + 26] = 1;
   }
 
-  // playedX flags derive from prevHand size/type:
-  // - pair => playedPair
-  // - triple => playedThree
-  // - 4-card => playedTwoPair (yes, even if it was actually 4oak; Henry has no playedFour flag here)
-  // - 5-card => playedStraight OR playedFlush OR playedFullHouse (according to big2Game.py)
-  const nPrev = prevIds.length;
-  const markPlayedFlagAllOpps = (offsetWithinBlock /*21..26*/) => {
-    blocks.forEach((start) => (obs[start + offsetWithinBlock] = 1));
-  };
-
-  // We need some lightweight type checks to mirror big2Game.py decisions.
-  // NOTE: big2Game.py uses gameLogic.isStraight/isFlush/isFullHouse/isTwoPair.
-  // We'll implement minimal versions on Henry card-ids (1..52) consistent enough for encoding flags.
-  const byValCount = () => {
-    const m = new Map();
-    prevIds.forEach((id) => {
-      const v = henryValue(id);
-      m.set(v, (m.get(v) || 0) + 1);
-    });
-    return m;
-  };
-
-  const isFlush5 = () => {
-    if (prevIds.length !== 5) return false;
-    const s0 = henrySuit(prevIds[0]);
-    for (let i = 1; i < 5; i++) if (henrySuit(prevIds[i]) !== s0) return false;
-    return true;
-  };
-
-  const isStraight5 = () => {
-    if (prevIds.length !== 5) return false;
-    // Henry uses cardValue() ordering with no wrap straights.
-    const values = Array.from(new Set(prevIds.map((id) => henryValue(id)))).sort((a, b) => a - b);
-    if (values.length !== 5) return false;
-    for (let i = 1; i < 5; i++) if (values[i] !== values[0] + i) return false;
-    return true;
-  };
-
-  const isFullHouse5 = () => {
-    if (prevIds.length !== 5) return false;
-    const counts = Array.from(byValCount().values()).sort((a, b) => a - b);
-    return counts.length === 2 && counts[0] === 2 && counts[1] === 3;
-  };
-
-  // Apply hasPlayed flags (these are written for nPlayer, nnPlayer, nnnPlayer in big2Game.py)
-  if (nPrev === 2) {
-    // playedPair at +21
-    markPlayedFlagAllOpps(21);
-  } else if (nPrev === 3) {
-    // playedThree at +22
-    markPlayedFlagAllOpps(22);
-  } else if (nPrev === 4) {
-    // playedTwoPair at +23 (even if 4oak)
-    markPlayedFlagAllOpps(23);
-  } else if (nPrev === 5) {
-    if (isStraight5()) markPlayedFlagAllOpps(24); // playedStraight
-    if (isFlush5()) markPlayedFlagAllOpps(25);    // playedFlush
-    else if (isFullHouse5()) markPlayedFlagAllOpps(26); // playedFullHouse
-  }
 
   // -----------------------------
   // GLOBAL: Cards Played (Q K A 2) (16)
@@ -311,22 +337,22 @@ export function buildHenryObs({
 
       // big2Game.py sets prev type TwoPair if isTwoPair else FourOfAKind
       // We'll implement a minimal isTwoPair for 4-card: counts {2,2} vs {4}.
-      const counts = Array.from(byValCount().values()).sort((a, b) => a - b);
+      const counts = Array.from(byValCount(sortedPrev).values()).sort((a, b) => a - b);
       const isTwoPair4 = (counts.length === 2 && counts[0] === 2 && counts[1] === 2);
       if (isTwoPair4) setPrevType(21); // TwoPair
       else setPrevType(22);            // FourOfAKind
     } else if (nPrev === 5) {
       // Straight / Flush / FullHouse per big2Game.py ordering
-      if (isStraight5()) {
+      if (isStraight5(sortedPrev)) {
         highId = sortedPrev[4];
         suit = highId % 4;
         setPrevType(23); // Straight
       }
-      if (isFlush5()) {
+      if (isFlush5(sortedPrev)) {
         highId = sortedPrev[4];
         suit = highId % 4;
         setPrevType(24); // Flush
-      } else if (isFullHouse5()) {
+      } else if (isFullHouse5(sortedPrev)) {
         // big2Game.py uses prevHand[2] for full house high value and suit=-1
         highId = sortedPrev[2];
         suit = -1;

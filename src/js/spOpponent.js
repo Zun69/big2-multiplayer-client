@@ -1,5 +1,6 @@
 import Player from "./player.js";
 import { buildHenryObs, debugObs } from "./henryObs.js";
+
 import {
   ACTION_DIM,
   passInd,
@@ -308,7 +309,7 @@ export default class Opponent extends Player {
 
     // Use positions[] to overwrite placeholders in self.cards,
     // flip them to front, animate to pile, then remove those indices.
-    async spPlayCard(gameDeck, lastPlayedHand, players, turn, isFirstMove) {
+    async spPlayCard(gameDeck, lastPlayedHand, players, turn, isFirstMove, lastPlayedBy) {
       const self = this;
       const passCount = self.derivePassCount(players, turn);
       const control = self.wonRound;
@@ -317,6 +318,7 @@ export default class Opponent extends Player {
         players,
         turnIndex: turn,
         lastPlayedHand,
+        lastPlayedBy,
         passCount,
         control
       });
@@ -325,6 +327,7 @@ export default class Opponent extends Player {
       const ai = await ensureActionIndicesLoaded();
 
       //log full obs in console
+      
       //debugObs(obs, 'SP OPPONENT TURN', { gui: true });
 
       // ------------------------------------------------------------

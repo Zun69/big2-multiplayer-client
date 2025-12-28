@@ -2,6 +2,7 @@ import Player from "./player.js"
 import Opponent from "./opponent.js"
 import spOpponent, { loadPolicyModel } from "./spOpponent.js";
 import PocketBase, { BaseAuthStore } from "https://cdn.jsdelivr.net/npm/pocketbase@0.21.1/dist/pocketbase.es.mjs";
+import { resetHenryObsMemory } from "./henryObs.js";
 
 // lookup table for printing actual rank in last played hand
 const rankLookup = {
@@ -1076,7 +1077,7 @@ async function finishDeckAnimation(socket, roomCode) {
     });
 }
 
-async function finishSpGameAnimation(gameDeck, losingPlayers) {
+async function finishSpGameAnimation(gameDeck, losingPlayer) {
   return new Promise(async function (resolve) {
 
     // anchor config: % within gameContainer
@@ -1124,46 +1125,49 @@ async function finishSpGameAnimation(gameDeck, losingPlayers) {
         }, 20);
       });
     }
-
     // --------------------------------------------------
-    // 2) Animate remaining cards from ALL losing players
+    // 2) Animate remaining cards from JUST the losing player
     // --------------------------------------------------
-    for (const lp of losingPlayers) {
-      const player = GameModule.players.find(p => p.clientId === lp.clientId);
-      if (!player || !player.cards || player.cards.length === 0) continue;
+    if (!losingPlayer) {
+      await sleep(200);
+      resolve();
+      return;
+    }
 
-      for (let i = 0; i < player.cards.length; i++) {
-        const losingCard = player.cards[i];
-        losingCard.setSide('back');
+    const player = GameModule.players.find(p => p.clientId === losingPlayer.clientId);
+    if (player && player.cards && player.cards.length > 0) {
+        for (let i = 0; i < player.cards.length; i++) {
+            const losingCard = player.cards[i];
+            losingCard.setSide('back');
 
-        const { cx, cy } = _cardCenterInGC(losingCard.$el, meta);
-        const dx = anchorX - cx;
-        const dy = anchorY - cy;
+            const { cx, cy } = _cardCenterInGC(losingCard.$el, meta);
+            const dx = anchorX - cx;
+            const dy = anchorY - cy;
 
-        const offX = -(GameModule.finishedDeck.length * STACK_DRIFT);
-        const offY =  (GameModule.finishedDeck.length * STACK_DRIFT);
+            const offX = -(GameModule.finishedDeck.length * STACK_DRIFT);
+            const offY =  (GameModule.finishedDeck.length * STACK_DRIFT);
 
-        await new Promise((cardResolve) => {
-          setTimeout(() => {
-            losingCard.animateTo({
-              delay: 0,
-              duration: 50,
-              ease: 'linear',
-              rot: 0,
-              x: Math.round(losingCard.x + dx + offX),
-              y: Math.round(losingCard.y + dy - offY),
-              onStart: () => {
-                GameModule.finishedDeck.push(losingCard);
-                losingCard.$el.style.zIndex = String(GameModule.finishedDeck.length + 1);
-              },
-              onComplete: () => {
-                dealNextFinishCardSounds();
-                cardResolve();
-              }
+            await new Promise((cardResolve) => {
+            setTimeout(() => {
+                losingCard.animateTo({
+                delay: 0,
+                duration: 50,
+                ease: 'linear',
+                rot: 0,
+                x: Math.round(losingCard.x + dx + offX),
+                y: Math.round(losingCard.y + dy - offY),
+                onStart: () => {
+                    GameModule.finishedDeck.push(losingCard);
+                    losingCard.$el.style.zIndex = String(GameModule.finishedDeck.length + 1);
+                },
+                onComplete: () => {
+                    dealNextFinishCardSounds();
+                    cardResolve();
+                }
+                });
+            }, 20);
             });
-          }, 20);
-        });
-      }
+        }
     }
 
     await sleep(200);
@@ -1468,7 +1472,10 @@ async function applySpTurnOutcome({ actorIndex, outcome, gameOver }) {
     GameModule.passTracker += 1;
   } 
   else {
-    actor.passed = false;
+    // clear all pass flags because a new "pass streak" starts after a play
+    for (const p of GameModule.players) {
+        p.passed = false;
+    }
     actor.wonRound = false;
     GameModule.playedHand = outcome;   // number of cards just played
     GameModule.isFirstMove = false;
@@ -1485,7 +1492,7 @@ async function applySpTurnOutcome({ actorIndex, outcome, gameOver }) {
         GameModule.passTracker = 0; // if someone plays a card, reset passTracker
         
         // if third player has finished, send signal that game is over
-        if(GameModule.playersFinished.length == 1){
+        if(GameModule.playersFinished.length == 3){
             gameOver = true;
         }
     }
@@ -1546,74 +1553,17 @@ function trickEnded() {
   return ended;
 }
 
-function getLosingPlayersWithCards() {
-  return GameModule.players
-    .filter(p => !p.finishedGame) // players who did NOT finish
-    .map(p => ({
-      clientId: p.clientId,
-      cardsRemaining: Array.isArray(p.cards) ? p.cards.length : 0,
-    }));
+function getLosingPlayerWithCards() {
+    // When 3 players have finished, exactly 1 player remains not-finished.
+    const loser = GameModule.players.find(p => !p.finishedGame);
+
+    if (!loser) return null;
+
+    return {
+        clientId: loser.clientId,
+        cardsRemaining: Array.isArray(loser.cards) ? loser.cards.length : 0,
+    };
 }
-
-function getResults(losingPlayers = []) {
-  // Build a map: clientId -> cardsRemaining (for losers we have it, for finishers assume 0)
-  const remainingMap = new Map();
-  for (const lp of losingPlayers) {
-    remainingMap.set(String(lp.clientId), Number(lp.cardsRemaining ?? 0));
-  }
-
-  // Everyone who finished has 0 remaining (safe default)
-  for (const cid of (GameModule.playersFinished || [])) {
-    const id = String(cid);
-    if (!remainingMap.has(id)) remainingMap.set(id, 0);
-  }
-
-  // Fallback: if somehow someone isn't in either list, fill from live GameModule.players
-  for (const p of (GameModule.players || [])) {
-    const id = String(p.clientId);
-    if (!remainingMap.has(id)) remainingMap.set(id, Array.isArray(p.cards) ? p.cards.length : 0);
-  }
-
-  // Winner = first finisher
-  const winnerId = String((GameModule.playersFinished || [])[0] ?? "");
-
-  // Winner score = sum of other players' remaining cards
-  let pot = 0;
-  for (const [id, left] of remainingMap.entries()) {
-    if (id === winnerId) continue;
-    pot += left;
-  }
-
-  // Build results rows
-  const results = [];
-  for (const [id, left] of remainingMap.entries()) {
-    const isWinner = id === winnerId;
-    results.push({
-      clientId: id,
-      cardsRemaining: left,
-      score: isWinner ? pot : -left,
-      isWinner
-    });
-  }
-
-  // Order all 4 players by cardsRemaining (winner(s) first)
-  // Tie-breakers:
-  // 1) winner first if tied on cardsRemaining
-  // 2) then by finishing order if available
-  const finishOrder = new Map();
-  (GameModule.playersFinished || []).forEach((cid, idx) => finishOrder.set(String(cid), idx));
-
-  results.sort((a, b) => {
-    if (a.cardsRemaining !== b.cardsRemaining) return a.cardsRemaining - b.cardsRemaining;
-    if (a.isWinner !== b.isWinner) return a.isWinner ? -1 : 1;
-    const ao = finishOrder.has(a.clientId) ? finishOrder.get(a.clientId) : 999;
-    const bo = finishOrder.has(b.clientId) ? finishOrder.get(b.clientId) : 999;
-    return ao - bo;
-  });
-
-  return results;
-}
-
 
 function nextActiveSeat(fromIndex) {
   const n = GameModule.players.length;
@@ -1703,7 +1653,8 @@ const spGameLoop = async (firstTurnClientId) => {
                     GameModule.lastHand,
                     GameModule.players,
                     GameModule.turn,
-                    GameModule.isFirstMove
+                    GameModule.isFirstMove,
+                    GameModule.lastPlayedBy
                 );
             }
 
@@ -1720,16 +1671,19 @@ const spGameLoop = async (firstTurnClientId) => {
                 // check if game ended this loop 
                 if (gameOver) {
                     // return other 3 player's clientIds and remaining cards
-                    const losingPlayers = getLosingPlayersWithCards();
+                    const losingPlayer = getLosingPlayerWithCards();
 
                     // see last card played for a bit
                     await sleep(100); 
 
                     // play finish game animation
-                    await finishSpGameAnimation(GameModule.gameDeck, losingPlayers);
+                    await finishSpGameAnimation(GameModule.gameDeck, losingPlayer);
 
-                    // return final finishing positions (client id + remaining cards)
-                    const resultsOut = getResults(losingPlayers)
+                    // return final finishing positions (array of clientIds in order)
+                    const resultsOut = [
+                        ...GameModule.playersFinished,
+                        losingPlayer.clientId
+                    ];
 
                     GameModule.reset();
                     return resultsOut;
@@ -2395,7 +2349,7 @@ function getAvgTier(avg) {
         return {
         label: '—',
         text: 'text-gray-400',
-        bg: 'bg-gray-100 dark:bg-gray-800',
+        bg: 'bg-gray-100',
         border: 'border-gray-400/30',
         ring: '',
         title: 'No data'
@@ -2643,7 +2597,7 @@ async function renderLeaderboardMenu(metric = 'avg') {
     table.className = 'min-w-full table-fixed text-sm text-left';
 
     const thead = document.createElement('thead');
-    thead.className = 'bg-emerald-600 dark:bg-gray-800 text-gray-800 dark:text-gray-100';
+    thead.className = 'bg-emerald-600 text-gray-800 dark:text-gray-100';
     thead.innerHTML = `
         <tr>
         <th class="px-4 py-3 font-semibold w-14">#</th>
@@ -2657,7 +2611,7 @@ async function renderLeaderboardMenu(metric = 'avg') {
 
     // footer pager
     const footer = document.createElement('div');
-    footer.className = 'flex items-center justify-between gap-3 px-4 py-3 bg-gray-100 dark:bg-gray-800 border-t border-gray-300 dark:border-gray-700';
+    footer.className = 'flex items-center justify-between gap-3 px-4 py-3 bg-gray-100 border-t border-gray-300 dark:border-gray-700';
     const info = document.createElement('span');
     info.className = 'text-xs text-gray-700 dark:text-gray-400';
 
@@ -2701,7 +2655,7 @@ async function renderLeaderboardMenu(metric = 'avg') {
         res.items.forEach((row, i) => {
             const tr = document.createElement('tr');
             tr.className =
-            (i % 2 === 0 ? 'bg-gray-200 dark:bg-gray-800/60' : 'bg-white dark:bg-gray-900') +
+            (i % 2 === 0 ? 'bg-gray-200' : 'bg-white dark:bg-gray-900') +
             ' hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors';
 
             // position
@@ -2846,7 +2800,7 @@ async function renderProfileHeader(name) {
     statsStrip.id = 'profileStatsStrip';
     statsStrip.className = `
         mt-5
-        bg-gray-50 dark:bg-gray-800
+        bg-gray-50
         border border-gray-200 dark:border-gray-700
         rounded-lg shadow-sm
         overflow-x-auto
@@ -2856,7 +2810,7 @@ async function renderProfileHeader(name) {
     statsPercentageStrip.id = 'profileStatsPercentageStrip';
     statsPercentageStrip.className = `
         mt-2
-        bg-gray-50 dark:bg-gray-800
+        bg-gray-50
         border border-gray-200 dark:border-gray-700
         rounded-lg shadow-sm
         overflow-x-auto
@@ -2998,7 +2952,7 @@ async function renderProfileTable(username) {
     // Footer / Pager
     const footer = document.createElement("div");
     footer.className =
-        "flex items-center justify-between gap-3 px-4 py-3 bg-gray-100 dark:bg-gray-800 border-t border-gray-300 dark:border-gray-700 rounded-b-xl";
+        "flex items-center justify-between gap-3 px-4 py-3 bg-gray-100 border-t border-gray-300 dark:border-gray-700 rounded-b-xl";
 
     const info = document.createElement("span");
     info.className = "text-xs text-gray-700 dark:text-gray-400";
@@ -3058,7 +3012,7 @@ async function renderProfileTable(username) {
             res.items.forEach((row, i) => {
                 const tr = document.createElement("tr");
                 tr.className =
-                (i % 2 === 0 ? "bg-gray-200 dark:bg-gray-800/60" : "bg-white dark:bg-gray-900") +
+                (i % 2 === 0 ? "bg-gray-200" : "bg-white dark:bg-gray-900") +
                 " hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors";
 
                 // helpers
@@ -3742,178 +3696,223 @@ async function joinRoomMenu(socket, username) {
     });
 }
 
-async function spEndMenu(spResults) {
+async function spEndMenu(results) {
     const endMenu     = document.getElementById("endMenu");
     const continueBtn = document.getElementById("continueButton");
     const backBtn     = document.getElementById("backToJoinRoomButton2");
 
     let resolver;
 
-    // --------------------
-    // Hide in-game UI
-    // --------------------
+    // --- hide in-game UI ---
     document.getElementById("play").style.display = "none";
     document.getElementById("clear").style.display = "none";
     document.getElementById("pass").style.display = "none";
     document.getElementById("gameInfo").style.display = "none";
 
-    for (const div of document.getElementsByClassName("playerInfo")) {
-        div.style.display = "none";
-    }
+    const playerInfoDivs = document.getElementsByClassName("playerInfo");
+    for (let div of playerInfoDivs) div.style.display = "none";
 
-    // --------------------
-    // Build container fresh
-    // --------------------
+    // always rebuild resultsContainer so single-player can never rely on stale DOM
     const resultsContainer = endMenu.querySelector("#resultsContainer");
-    resultsContainer.innerHTML = `
-        <div class="bg-gray-50 dark:bg-gray-900 shadow-md rounded-md p-4 mx-auto max-w-sm w-full mt-2 mb-6
-            border border-gray-100 dark:border-gray-700">
-            <h2 class="text-xl font-semibold mb-3 text-center">Single Player Results</h2>
-            <div id="endMenuSummary" class="text-center text-sm mb-3"></div>
-            <ul id="endMenuLeaderboard" class="divide-y"></ul>
+    if (!resultsContainer) {
+        console.warn("[spEndMenu] #resultsContainer not found inside #endMenu");
+    } else {
+        resultsContainer.innerHTML = `
+        <div class="bg-gray-50  shadow-md rounded-md p-4 mx-auto max-w-sm w-full mt-2 mb-6
+            border border-gray-100">
+            <h2 class="text-xl font-semibold mb-3 text-gray-900 text-center">Single Player Results</h2>
+            <div id="endMenuSummary" class="text-center text-sm text-gray-700 mb-3"></div>
+            <ul id="endMenuLeaderboard" class="divide-y divide-gray-200"></ul>
         </div>
-    `;
+        `;
+    }
 
     const ul = document.getElementById("endMenuLeaderboard");
     const summary = document.getElementById("endMenuSummary");
 
-    // --------------------
-    // Identify local player
-    // --------------------
+    if (!ul) {
+        console.warn("[spEndMenu] #endMenuLeaderboard not found (DOM rebuild failed?)");
+    } else {
+        ul.innerHTML = "";
+    }
+
+    const placeToPoints = (place) => (place === 1 ? 3 : place === 2 ? 2 : place === 3 ? 1 : 0);
+
+    // Identify "me"
     const me =
-        GameModule.players.find(p => p.isClient) ||
-        GameModule.players[0];
+        GameModule?.players?.find(p => p?.isClient) ||
+        GameModule?.players?.[0] ||
+        null;
 
-    // --------------------
-    // Apply round scores to totals
-    // --------------------
-    spResults.forEach(r => {
-        const player = GameModule.players.find(
-            p => String(p.clientId) === String(r.clientId)
-        );
-        if (!player) return;
+    const playerName =
+        currentProfileUsername ||
+        me?.username ||
+        me?.name ||
+        "Player";
 
-        if (typeof player.points !== "number") {
-            player.points = 0;
-        }
-        player.points += r.score;
+    // results = array of clientIds in finishing order
+    const finishOrderIds = Array.isArray(results) ? results : [];
+
+    // map clientId -> Player object (finishing order)
+    let finishOrderPlayers = finishOrderIds
+        .map(cid => GameModule.players.find(p => String(p.clientId) === String(cid)))
+        .filter(Boolean);
+
+    // if only top 3 are returned, append the missing last player
+    if (GameModule.players.length === 4 && finishOrderPlayers.length < 4) {
+        const seen = new Set(finishOrderPlayers.map(p => String(p.clientId)));
+        const missing = GameModule.players.find(p => !seen.has(String(p.clientId)));
+        if (missing) finishOrderPlayers.push(missing);
+    }
+
+    // Ensure points exists
+    for (const p of GameModule.players) {
+        if (typeof p.points !== "number") p.points = 0;
+    }
+
+    // 1) Earned THIS GAME (by finishing order) + add into player.points
+    const earnedByClientId = new Map(); // clientId -> earnedThisGame
+    for (let i = 0; i < finishOrderPlayers.length; i++) {
+        const p = finishOrderPlayers[i];
+        const earned = placeToPoints(i + 1);
+        earnedByClientId.set(String(p.clientId), earned);
+        p.points += earned;
+    }
+
+    // 2) Build rows sorted by TOTAL points (desc), show +earnedThisGame
+    const rows = GameModule.players.map(p => {
+        const name = (p?.username || p?.name || `Player ${p?.clientId ?? "?"}`).toString();
+        const earned = Number(earnedByClientId.get(String(p.clientId)) || 0);
+        return { player: p, name, total: p.points, earned };
     });
 
-    // --------------------
-    // Build rows + sort by TOTAL points
-    // --------------------
-    const rows = spResults.map(r => {
-        const player = GameModule.players.find(
-            p => String(p.clientId) === String(r.clientId)
-        );
-
-        return {
-            clientId: r.clientId,
-            cardsRemaining: r.cardsRemaining,
-            roundScore: r.score,
-            totalScore: player?.points ?? 0,
-            player
-        };
-    });
-
-    // Sort: total points DESC, tie-break by round score
     rows.sort((a, b) => {
-        if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
-        return b.roundScore - a.roundScore;
+        if (b.total !== a.total) return b.total - a.total;     // total desc
+        if (b.earned !== a.earned) return b.earned - a.earned; // tie-break: earned desc
+        return a.name.localeCompare(b.name);
     });
 
-    // --------------------
-    // Render leaderboard
-    // --------------------
-    rows.forEach((row, idx) => {
-        const { player, cardsRemaining, roundScore, totalScore } = row;
-        if (!player) return;
+    // ---- match rules
+    const TARGET_POINTS = 12;
+    const WIN_BY = 2;
+
+    // returns winner row or null
+    function getMatchWinner(sortedRows) {
+        if (!sortedRows || sortedRows.length === 0) return null;
+
+        const leader = sortedRows[0];
+        const runnerUp = sortedRows[1] || null;
+
+        if (leader.total < TARGET_POINTS) return null;
+
+        // if no runner up (shouldn't happen with 4 players), treat as win
+        if (!runnerUp) return leader;
+
+        const lead = leader.total - runnerUp.total;
+        return lead >= WIN_BY ? leader : null;
+    }
+
+    const matchWinner = getMatchWinner(rows);
+
+    // render
+    if (ul) {
+        for (let i = 0; i < rows.length; i++) {
+        const { player: p, name, total, earned } = rows[i];
 
         const li = document.createElement("li");
         li.className = "flex items-center justify-between py-2";
 
-        const roundStr = roundScore >= 0 ? `+${roundScore}` : `${roundScore}`;
-
         li.innerHTML = `
             <div class="flex items-center">
-                <span class="text-lg font-semibold w-6">${idx + 1}</span>
-                <img class="w-8 h-8 rounded-md border mr-3 object-cover player-avatar">
-                <div>
-                    <div class="font-semibold">
-                        ${player.username || player.name || "Player"}
-                    </div>
-                    <div class="text-xs opacity-70">
-                        ${cardsRemaining} cards left
-                    </div>
-                </div>
+            <span class="place text-lg font-semibold mr-4 text-gray-700"></span>
+            <img class="player-avatar w-8 h-8 rounded-md border border-gray-300 mr-4 object-cover" alt="avatar">
+            <span class="name text-gray-800 font-semibold"></span>
             </div>
-            <div class="font-semibold">
-                ${totalScore} (${roundStr})
-            </div>
+            <span class="player-avg text-gray-800 font-semibold"></span>
         `;
 
+        li.querySelector(".place").textContent = String(i + 1);
+        li.querySelector(".name").textContent = name;
+        li.querySelector(".player-avg").textContent = `${total} (+${earned})`;
+
         const img = li.querySelector(".player-avatar");
-        img.src = `/src/css/background/${player.avatar}`;
-        img.onerror = () => (img.src = "/src/css/background/player.png");
+        img.src = `/src/css/background/${p.avatar}`;
+        img.onerror = () => {
+            img.onerror = null;
+            img.src = "/src/css/background/player.png";
+        };
 
         ul.appendChild(li);
-    });
+        }
+    }
 
-    // --------------------
-    // Summary (local player)
-    // --------------------
-    const myRow = rows.find(r => String(r.clientId) === String(me.clientId));
-    const myPlace = spResults.findIndex(
-        r => String(r.clientId) === String(me.clientId)
-    ) + 1;
-    const myScore = myRow?.roundScore ?? 0;
-    const myTotal = myRow?.totalScore ?? 0;
+    // summary for the human player
+    let playerPlace = 0;
+    if (me?.clientId != null) {
+        playerPlace = finishOrderPlayers.findIndex(p => String(p.clientId) === String(me.clientId)) + 1;
+    }
+    if (playerPlace === 0) {
+        playerPlace = finishOrderPlayers.findIndex(p => (p?.username || p?.name) === playerName) + 1;
+    }
 
-    const myScoreStr = myScore >= 0 ? `+${myScore}` : `${myScore}`;
+    const myEarned = (me?.clientId != null) ? Number(earnedByClientId.get(String(me.clientId)) || 0) : 0;
+    const myTotal  = (typeof me?.points === "number") ? me.points : 0;
 
-    summary.textContent = myRow
-        ? `You placed: #${myPlace} : ${myScoreStr} points (Total: ${myTotal})`
-        : "";
+    if (summary) {
+       const base =
+        playerPlace > 0
+            ? `You placed #${playerPlace} — +${myEarned} pts (Total: ${myTotal})`
+            : `+${myEarned} pts (Total: ${myTotal})`;
 
-    // --------------------
-    // Buttons
-    // --------------------
-    continueBtn.textContent = "Continue";
+        if (matchWinner) {
+            const wName = matchWinner.name;
+            summary.textContent = `${base} • MATCH OVER: ${wName} wins!`;
+        } else {
+            // optional: show match target reminder
+            summary.textContent = `${base} • First to ${TARGET_POINTS} (win by ${WIN_BY})`;
+        }
+    }
+
+    // --- buttons
+    continueBtn.textContent = "Play Again";
     backBtn.textContent = "Back";
 
-    const cleanup = () => {
-        continueBtn.removeEventListener("click", onContinue);
-        backBtn.removeEventListener("click", onBack);
-    };
-
-    const onContinue = () => {
-        clickSounds?.[0]?.play?.();
-        cleanup();
-        endMenu.style.display = "none";
-        resolver({ action: "continue" });
-    };
-
-    const onBack = () => {
+    const handleContinue = () => {
         clickSounds?.[0]?.play?.();
         cleanup();
         endMenu.style.display = "none";
 
-        // reset SP points when leaving
-        for (const p of GameModule.players) {
-            p.points = 0;
+        if (matchWinner) {
+            // Reset points for a fresh match
+            for (const p of GameModule.players) p.points = 0;
+            resolver?.({ action: "newMatch", winnerClientId: matchWinner.player?.clientId });
+        } else {
+            resolver?.({ action: "continue" });
         }
-
-        resolver({ action: "back" });
     };
 
-    continueBtn.addEventListener("click", onContinue);
-    backBtn.addEventListener("click", onBack);
+
+    const handleBack = () => {
+        clickSounds?.[0]?.play?.();
+        cleanup();
+        endMenu.style.display = "none";
+
+        // reset SP points when leaving SP
+        for (const p of GameModule.players) p.points = 0;
+
+        resolver?.({ action: "back" });
+    };
+
+    function cleanup() {
+        continueBtn.removeEventListener("click", handleContinue);
+        backBtn.removeEventListener("click", handleBack);
+    }
+
+    continueBtn.addEventListener("click", handleContinue);
+    backBtn.addEventListener("click", handleBack);
 
     endMenu.style.display = "block";
-
-    return new Promise(resolve => {
-        resolver = resolve;
-    });
+    return new Promise((resolve) => { resolver = resolve; });
 }
 
 
@@ -3939,10 +3938,10 @@ async function endMenu(socket, roomCode, results) {
     // Create a clean leaderboard layout
     const resultsContainer = endMenu.querySelector("#resultsContainer");
     resultsContainer.innerHTML = `
-    <div class="bg-gray-50 dark:bg-gray-900 shadow-md rounded-md p-4 mx-auto max-w-sm w-full mt-2 mb-12
-        border border-gray-100 dark:border-gray-700">
-        <h2 class="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100 text-center">Game Results</h2>
-        <ul id="resultsList" class="divide-y divide-gray-200 dark:divide-gray-700"></ul>
+    <div class="bg-gray-50 shadow-md rounded-md p-4 mx-auto max-w-sm w-full mt-2 mb-12
+        border border-gray-100">
+        <h2 class="text-xl font-semibold mb-4 text-gray-900 text-center">Game Results</h2>
+        <ul id="resultsList" class="divide-y divide-gray-200"></ul>
     </div>
     `;
 
@@ -3988,14 +3987,14 @@ async function endMenu(socket, roomCode, results) {
         const li = document.createElement("li");
         li.className = "flex items-center justify-between py-2";
         if (i !== results.length - 1) {
-            li.classList.add("border-b", "border-gray-200", "dark:border-gray-700");
+            li.classList.add("border-b", "border-gray-200");
         }
 
         li.innerHTML = `
         <div class="flex items-center">
-            <span class="place text-lg font-semibold mr-4 text-gray-700 dark:text-gray-200"></span>
-            <img src="${avatar}" alt="" class="w-8 h-8 rounded-md border border-gray-300 dark:border-gray-600 mr-4 object-cover">
-            <span class="name text-gray-800 dark:text-gray-100 font-semibold"></span>
+            <span class="place text-lg font-semibold mr-4 text-gray-700"></span>
+            <img src="${avatar}" alt="" class="w-8 h-8 rounded-md border border-gray-300 mr-4 object-cover">
+            <span class="name text-gray-800 font-semibold"></span>
         </div>
         <span class="player-avg">${pointsHtml}</span> <!-- numeric HTML we generate -->
         `;
@@ -4147,7 +4146,7 @@ async function lobbyMenu(socket, roomCode){
             badge.className = [
             'text-[10px] px-2 py-[1px] rounded-full mt-0.5',
             c.isReady ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
-                        : 'bg-gray-200 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
+                        : 'bg-gray-200 text-gray-500 dark:text-gray-400'
             ].join(' ');
             badge.textContent = c.isReady ? '✅ Ready' : '💤 Waiting';
 
@@ -4486,12 +4485,15 @@ async function spLoop(spContinue) {
 
         await loadPolicyModel("./src/js/policy/model.json");
     }
+
     // if continuing new game, just continue with the loop
     // Update UI labels
     for (let i = 0; i < playerInfo.length; i++) {
         const p = GameModule.players[i];
         renderSinglePlayerInfo(playerInfo[i], p, i);
     }
+
+    resetHenryObsMemory();
 
     // create deck, shuffle, and deal animation, returns client id of player with 3 of diamonds when all animations are complete
     const firstTurnClientId = await dealSinglePlayerCards();
