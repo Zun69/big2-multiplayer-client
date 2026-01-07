@@ -70,6 +70,10 @@ export default class Opponent extends Player {
         card.rank = real.rank;
         card.suit = real.suit;
         card.setRankSuit(card.rank, card.suit);
+
+        // PRIME the front so the final flip doesn't hitch/flicker
+        card.setSide('front');
+        card.$el.offsetHeight;   // force layout/paint
         card.setSide('back');
 
         let rotationOffset = Math.random() * 5 + -5; // Calculate a new rotation offset for each card

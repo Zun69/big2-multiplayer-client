@@ -424,6 +424,11 @@ export default class Opponent extends Player {
         
         card.setSide('back');
 
+        // PRIME the front face so the final flip doesn't hitch/flicker
+        card.setSide('front');
+        card.$el.offsetHeight;   // force a layout/paint
+        card.setSide('back');
+
         let rotationOffset = Math.random() * 5 + -5; // Calculate a new rotation offset for each card
         console.log("ROTATIONAL OFFSET: " + rotationOffset)
         

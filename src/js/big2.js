@@ -84,6 +84,14 @@ function pbAvatarUrl(pbId, file, thumb='64x64') {
     return pb.files.getUrl({ collectionId: '_pb_users_auth_', id: pbId }, file, { thumb });
 }
 
+let _spModelPromise = null;
+
+function ensureSpPolicyLoaded() {
+  if (!_spModelPromise) {
+    _spModelPromise = loadPolicyModel("./src/js/policy/model.json");
+  }
+  return _spModelPromise;
+}
 
 //GameModule object encapsulate players, deck, gameDeck, finishedDeck (it represents the local gameState)
 const GameModule = (function() {
@@ -2444,7 +2452,7 @@ async function fetchLeaderboardPage(pb, { page = 1, perPage = 10, metric = 'avg'
     const name = u?.name || u?.username || '(unknown)';
     const avatar = (u?.id && u?.avatar)
       ? pbAvatarUrl(u.id, u.avatar, '100x100')
-      : '/src/css/background/avatar-placeholder.png';
+      : '/src/css/avatars/avatar-placeholder.png';
     const games = row.games_played ?? 0;
     const wins  = row.wins ?? 0;
     const fourths = row.fourths ?? null; // explicit “losses” if tracked
@@ -2736,7 +2744,7 @@ async function renderProfileHeader(name) {
         img.srcset = `${url1x} 1x, ${url2x} 2x`;
         img.sizes = '4rem';
     } else {
-        img.src = '/src/css/background/avatar-placeholder.png';
+        img.src = '/src/css/avatars/avatar-placeholder.png';
         img.removeAttribute('srcset');
         img.removeAttribute('sizes');
     }
@@ -3117,7 +3125,7 @@ document.body.addEventListener("click", async (e) => {
 
 // helper: safe avatar url (uses your pbAvatarUrl if present)
 function getAvatarUrl(user) {
-    if (!user) return "/src/css/background/avatar-placeholder.png";
+    if (!user) return "/src/css/avatars/avatar-placeholder.png";
     try {
         if (typeof pbAvatarUrl === "function") {
         return pbAvatarUrl(user.id, user.avatar, "100x100");
@@ -3127,7 +3135,7 @@ function getAvatarUrl(user) {
     if (user?.collectionId && user?.avatar) {
         return `${pb.baseUrl}/api/files/${user.collectionId}/${user.id}/${user.avatar}?thumb=100x100`;
     }
-    return "/src/css/background/avatar-placeholder.png";
+    return "/src/css/avatars/avatar-placeholder.png";
 }
 
 // tiny badge style for places
@@ -3469,7 +3477,7 @@ async function joinRoomMenu(socket, username) {
                 img.srcset = `${url1x} 1x, ${url2x} 2x`;
                 img.sizes = '4.5rem'; // crisp at ~32px like playerInfo
             } else {
-                img.src = '/src/css/background/avatar-placeholder.png';
+                img.src = '/src/css/avatars/avatar-placeholder.png';
                 img.removeAttribute('srcset');
                 img.removeAttribute('sizes');
             }
@@ -3836,10 +3844,10 @@ async function spEndMenu(results) {
         li.querySelector(".player-avg").textContent = `${total} (+${earned})`;
 
         const img = li.querySelector(".player-avatar");
-        img.src = `/src/css/background/${p.avatar}`;
+        img.src = `/src/css/avatars/${p.avatar}`;
         img.onerror = () => {
             img.onerror = null;
-            img.src = "/src/css/background/player.png";
+            img.src = "/src/css/avatars/player.png";
         };
 
         ul.appendChild(li);
@@ -3859,17 +3867,21 @@ async function spEndMenu(results) {
     const myTotal  = (typeof me?.points === "number") ? me.points : 0;
 
     if (summary) {
-       const base =
-        playerPlace > 0
-            ? `You placed #${playerPlace} — +${myEarned} pts (Total: ${myTotal})`
+        const base =
+            playerPlace > 0
+            ? `You placed #${playerPlace} - ${myEarned} pts (Total: ${myTotal})`
             : `+${myEarned} pts (Total: ${myTotal})`;
 
         if (matchWinner) {
             const wName = matchWinner.name;
             summary.textContent = `${base} • MATCH OVER: ${wName} wins!`;
         } else {
-            // optional: show match target reminder
-            summary.textContent = `${base} • First to ${TARGET_POINTS} (win by ${WIN_BY})`;
+            summary.innerHTML = `
+            <div>${base}</div>
+            <div class="mt-1 text-gray-600">
+                First to ${TARGET_POINTS} (win by ${WIN_BY})
+            </div>
+            `;
         }
     }
 
@@ -3954,7 +3966,7 @@ async function endMenu(socket, roomCode, results) {
         const place = i + 1;
 
         // try PB avatar, and also capture pbId for stats
-        let avatar = "/src/css/background/avatar-placeholder.png";
+        let avatar = "/src/css/avatars/avatar-placeholder.png";
         let pbId = null;
         try {
         const user = await getUserByName(name);
@@ -4127,7 +4139,7 @@ async function lobbyMenu(socket, roomCode){
                 img.srcset = `${url1x} 1x, ${url2x} 2x`;
                 img.sizes = '48px';
             } else {
-                img.src = '/src/css/background/avatar-placeholder.png';
+                img.src = '/src/css/avatars/avatar-placeholder.png';
             }
             img.className = [
             'w-12 h-12 object-cover rounded-md border shadow-sm',
@@ -4326,7 +4338,7 @@ function renderSinglePlayerInfo(el, player, i) {
     const fallback = `/avatars/default${i + 1}.png`;
 
     const localAvatarPath = player?.avatar
-        ? `./src/css/background/${player.avatar}`
+        ? `./src/css/avatars/${player.avatar}`
         : fallback;
 
     img.src = localAvatarPath;
@@ -4490,7 +4502,7 @@ async function spLoop(spContinue) {
         // replace GameModule opponents with singlePlayerOpponents
         GameModule.players.splice(1, 3, ...bots);
 
-        await loadPolicyModel("./src/js/policy/model.json");
+        await ensureSpPolicyLoaded(); // make sure that tensorflow ppo policy has been loaded
     }
 
     // if continuing new game, just continue with the loop
@@ -4510,8 +4522,6 @@ async function spLoop(spContinue) {
     
     console.log(results);
     return results;
-
-    //implement continue menu copying the multiplayer one
 }
 
 
@@ -5206,6 +5216,10 @@ window.onload = async function() {
             {
                 spResults = await spLoop(spContinue);
                 spEndMenuResolve = await spEndMenu(spResults);
+
+                if(spEndMenuResolve.action === 'newMatch') {
+                    spContinue = false; // let spLoop know to start new game with new opponents (spLoop alredy reset player points)
+                }
 
                 if(spEndMenuResolve.action === 'continue') {
                     spContinue = true; //let spLoop know that its a continued game

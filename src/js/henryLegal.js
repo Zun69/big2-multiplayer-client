@@ -117,6 +117,12 @@ function straightHighId5(hand) {
   return m;
 }
 
+function flushSuitRank5(hand) {
+  // Henry suit encoding: id % 4 => 1:D, 2:C, 3:H, 0:S
+  const s = hand[0] % 4;
+  return (s === 0) ? 4 : s; // D=1, C=2, H=3, S=4
+}
+
 
 // card + handsAvailable (enough fields for enumerateOptions)
 class CardMeta {
@@ -490,8 +496,16 @@ export function fiveCardOptions(handOptions, prevHand = [], prevType = 0, action
                 // If prev was flush: allow higher flush, or any straight flush
                 else if (prevType === 2) {
                   if (!isSF) {
-                    // flush vs flush compare by high id
-                    if (straightHighId5(hb) <= straightHighId5(prevSorted)) continue;
+                    // flush vs flush: suit first
+                    const mySuit = flushSuitRank5(hb);
+                    const prevSuit = flushSuitRank5(prevSorted);
+
+                    if (mySuit < prevSuit) continue;
+
+                    // if same suit, use highest id as tiebreak
+                    if (mySuit === prevSuit) {
+                      if (straightHighId5(hb) <= straightHighId5(prevSorted)) continue;
+                    }
                   }
                 }
                 // If prev was straight or control/any: flush is ok (and SF is ok)

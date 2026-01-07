@@ -9,8 +9,12 @@
     
     body {
         font-family: Arial, Helvetica, sans-serif;
-        /*background-color: rgb(11, 173, 11);*/
-        background-image: url('background/Sky-Background.jpg');
+         background:
+            radial-gradient(circle at 20% 20%, #1f2937, transparent 50%),
+            radial-gradient(circle at 80% 20%, #0f172a, transparent 55%),
+            radial-gradient(circle at 50% 80%, #020617, transparent 60%),
+            #000;
+        /*background-image: url('background/Sky-Background.jpg');*/
         margin: 0;
         padding: 0;
     }
@@ -178,7 +182,7 @@
     #container {
         background-color: white;
         width: 1300px;
-        min-height: 1000px; /* Set a minimum height as a fallback */
+        min-height: 1440px; /* Set a minimum height as a fallback */
         margin: 0 auto; /* Center game container horizontally */
     }
     
