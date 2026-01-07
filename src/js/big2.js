@@ -88,7 +88,7 @@ let _spModelPromise = null;
 
 function ensureSpPolicyLoaded() {
   if (!_spModelPromise) {
-    _spModelPromise = loadPolicyModel("./src/js/policy/model.json");
+    _spModelPromise = loadPolicyModel("src/js/policy/model.json");
   }
   return _spModelPromise;
 }
@@ -2467,7 +2467,7 @@ async function fetchLeaderboardPage(pb, { page = 1, perPage = 10, metric = 'avg'
     const name = u?.name || u?.username || '(unknown)';
     const avatar = (u?.id && u?.avatar)
       ? pbAvatarUrl(u.id, u.avatar, '100x100')
-      : '/src/css/avatars/avatar-placeholder.png';
+      : 'src/css/avatars/avatar-placeholder.png';
     const games = row.games_played ?? 0;
     const wins  = row.wins ?? 0;
     const fourths = row.fourths ?? null; // explicit “losses” if tracked
@@ -2759,7 +2759,7 @@ async function renderProfileHeader(name) {
         img.srcset = `${url1x} 1x, ${url2x} 2x`;
         img.sizes = '4rem';
     } else {
-        img.src = '/src/css/avatars/avatar-placeholder.png';
+        img.src = 'src/css/avatars/avatar-placeholder.png';
         img.removeAttribute('srcset');
         img.removeAttribute('sizes');
     }
@@ -3140,7 +3140,7 @@ document.body.addEventListener("click", async (e) => {
 
 // helper: safe avatar url (uses your pbAvatarUrl if present)
 function getAvatarUrl(user) {
-    if (!user) return "/src/css/avatars/avatar-placeholder.png";
+    if (!user) return "src/css/avatars/avatar-placeholder.png";
     try {
         if (typeof pbAvatarUrl === "function") {
         return pbAvatarUrl(user.id, user.avatar, "100x100");
@@ -3150,7 +3150,7 @@ function getAvatarUrl(user) {
     if (user?.collectionId && user?.avatar) {
         return `${pb.baseUrl}/api/files/${user.collectionId}/${user.id}/${user.avatar}?thumb=100x100`;
     }
-    return "/src/css/avatars/avatar-placeholder.png";
+    return "src/css/avatars/avatar-placeholder.png";
 }
 
 // tiny badge style for places
@@ -3492,7 +3492,7 @@ async function joinRoomMenu(socket, username) {
                 img.srcset = `${url1x} 1x, ${url2x} 2x`;
                 img.sizes = '4.5rem'; // crisp at ~32px like playerInfo
             } else {
-                img.src = '/src/css/avatars/avatar-placeholder.png';
+                img.src = 'src/css/avatars/avatar-placeholder.png';
                 img.removeAttribute('srcset');
                 img.removeAttribute('sizes');
             }
@@ -3860,10 +3860,10 @@ async function spEndMenu(results) {
         li.querySelector(".player-avg").textContent = `${total} (+${earned})`;
 
         const img = li.querySelector(".player-avatar");
-        img.src = `/src/css/avatars/${p.avatar}`;
+        img.src = `src/css/avatars/${p.avatar}`;
         img.onerror = () => {
             img.onerror = null;
-            img.src = "/src/css/avatars/player.png";
+            img.src = "src/css/avatars/player.png";
         };
 
         ul.appendChild(li);
@@ -3981,7 +3981,7 @@ async function endMenu(socket, roomCode, results) {
         const place = i + 1;
 
         // try PB avatar, and also capture pbId for stats
-        let avatar = "/src/css/avatars/avatar-placeholder.png";
+        let avatar = "src/css/avatars/avatar-placeholder.png";
         let pbId = null;
         try {
         const user = await getUserByName(name);
@@ -4154,7 +4154,7 @@ async function lobbyMenu(socket, roomCode){
                 img.srcset = `${url1x} 1x, ${url2x} 2x`;
                 img.sizes = '48px';
             } else {
-                img.src = '/src/css/avatars/avatar-placeholder.png';
+                img.src = 'src/css/avatars/avatar-placeholder.png';
             }
             img.className = [
             'w-12 h-12 object-cover rounded-md border shadow-sm',
@@ -4350,10 +4350,10 @@ function renderSinglePlayerInfo(el, player, i) {
     // avatar
     const img = document.createElement('img');
 
-    const fallback = `/avatars/default${i + 1}.png`;
+    const fallback = `avatars/avatar-placeholder.png`;
 
     const localAvatarPath = player?.avatar
-        ? `./src/css/avatars/${player.avatar}`
+        ? `src/css/avatars/${player.avatar}`
         : fallback;
 
     img.src = localAvatarPath;
