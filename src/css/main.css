@@ -159,7 +159,6 @@
     /* style for input box validation message */
     #errorMessage2, #errorMessage3{
         font-size: 12px;
-        display: none;
         text-align: center;
         font-weight: bold;
     }
@@ -209,7 +208,6 @@
     
     #gameInfo {
         position: absolute;
-        display: none;
         top: 95%; /*67.8*/
         left: 82%;
         transform: translate(-50%, -50%); /* Center the element precisely */
@@ -223,7 +221,6 @@
     }
 
     .playerInfo {
-        display: none;
         transition: background-color 0.3s ease, color 0.3s ease;
         font-family: 'Poppins', sans-serif;
         color: #1f2937;
@@ -274,21 +271,24 @@
 
     /* Pause / Disconnect overlay (global) */
     .pause-overlay{
-    position: fixed; inset: 0;
-    display: grid; place-items: center;
-    background: rgba(0,0,0,.65);
-    z-index: 99999;
+        position: fixed; inset: 0;
+        display: grid; place-items: center;
+        background: rgba(0,0,0,.65);
+        z-index: 99999;
     }
-    .pause-hidden{ display:none; }
+
+    .pause-hidden{ 
+        display:none; 
+    }
 
     .pause-card{
-    background:#111; color:#fff;
-    width: min(520px, 92%);
-    padding: 18px 20px;
-    border-radius: 14px;
-    text-align:center;
-    box-shadow: 0 10px 30px rgba(0,0,0,.4);
-    font-family: 'Poppins', sans-serif;
+        background:#111; color:#fff;
+        width: min(520px, 92%);
+        padding: 18px 20px;
+        border-radius: 14px;
+        text-align:center;
+        box-shadow: 0 10px 30px rgba(0,0,0,.4);
+        font-family: 'Poppins', sans-serif;
     }
     .pause-title{ font-size:1.25rem; margin:0 0 4px; }
     .pause-sub{ opacity:.95; margin:0 0 10px; }

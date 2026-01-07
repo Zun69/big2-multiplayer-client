@@ -19,56 +19,41 @@
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
         <link rel="stylesheet" href="src/css/cards.css">
         <link rel="stylesheet" href="src/css/main.css">
-        <link rel="stylesheet" href="src/css/player.css">
         <script type="module" src="src/js/big2.js"></script>
         <script src="src/js/deck.js"></script>
         <script src="https://cdn.socket.io/4.4.1/socket.io.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/howler@2.2.4/dist/howler.min.js"></script>
-        <script src="https://cdn.tailwindcss.com"></script>
-        <script>
-            tailwind.config = {
-                corePlugins: { preflight: false },   // don't reset your global CSS
-                theme: {
-                extend: {
-                    colors: {
-                    primary: '#e11d48',            // your red
-                    },
-                    fontFamily: { sans: ['Poppins','system-ui','sans-serif'] },
-                    borderRadius: { xl: '0.75rem' }
-                }
-                }
-            }
-        </script>
+        <link rel="stylesheet" href="src/css/tailwind.build.css">
         <script src="https://cdn.jsdelivr.net/npm/flowbite@3.1.2/dist/flowbite.min.js"></script>
     </head>
     <body>
         <div id ="container">
             <div id="gameContainer">
                 <div id="gameDeck"></div>
-                <div id="gameInfo"></div>
-                <div class = "playerInfo" id="p0Info"></div>
-                <div class = "playerInfo" id="p1Info"></div>
-                <div class = "playerInfo" id="p2Info"></div>
-                <div class = "playerInfo" id="p3Info"></div>
-                <button id="clear"
-                    class="button hidden 
-                    inline-flex items-center gap-2 rounded-xl px-4 py-2
+                <div id="gameInfo" hidden></div>
+                <div class = "playerInfo" id="p0Info" hidden></div>
+                <div class = "playerInfo" id="p1Info" hidden></div>
+                <div class = "playerInfo" id="p2Info" hidden></div>
+                <div class = "playerInfo" id="p3Info" hidden></div>
+                <button id="clear" hidden 
+                    class="button
+                    items-center gap-2 rounded-xl px-4 py-2
                     font-semibold text-gray-900 bg-gray-200 shadow-md
                     hover:brightness-110 active:scale-95
                     disabled:opacity-50 disabled:pointer-events-none">
                     Clear
                 </button>
-                <button id="pass"
-                    class="button hidden 
-                    inline-flex items-center gap-2 rounded-xl px-4 py-2
+                <button id="pass" hidden 
+                    class="button
+                    items-center gap-2 rounded-xl px-4 py-2
                     font-semibold text-white bg-rose-600 shadow-md
                     hover:brightness-110 active:scale-95
                     disabled:opacity-50 disabled:pointer-events-none">
                     Pass
                 </button>
-                <button id="play"
-                    class="button hidden 
-                    inline-flex items-center gap-2 rounded-xl px-4 py-2
+                <button id="play" hidden 
+                    class="button 
+                    items-center gap-2 rounded-xl px-4 py-2
                     font-semibold text-white bg-emerald-600 shadow-md
                     hover:brightness-110 active:scale-95
                     disabled:opacity-50 disabled:pointer-events-none">
@@ -131,7 +116,7 @@
                             </div>
                     </form>
                 </div>
-                <div id="createAccountMenu" class="hidden w-full max-w-sm p-4 bg-white border border-gray-200 rounded-lg shadow-sm sm:p-6 md:p-8 dark:bg-gray-800 dark:border-gray-700">
+                <div id="createAccountMenu" hidden class="w-full max-w-sm p-4 bg-white border border-gray-200 rounded-lg shadow-sm sm:p-6 md:p-8 dark:bg-gray-800 dark:border-gray-700">
                     <form class="max-w-sm mx-auto">
                     <div class="mb-5">
                         <label for="email" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Your email</label>
@@ -201,7 +186,7 @@
                     </form>
                 </div>
                 <!-- Lost password: request email -->
-                <div id="lostPasswordMenu" class="hidden w-full max-w-sm p-4 bg-white border border-gray-200 rounded-lg shadow-sm sm:p-6 md:p-8 dark:bg-gray-800 dark:border-gray-700">
+                <div id="lostPasswordMenu" hidden class="w-full max-w-sm p-4 bg-white border border-gray-200 rounded-lg shadow-sm sm:p-6 md:p-8 dark:bg-gray-800 dark:border-gray-700">
                 <form class="space-y-4" onsubmit="return false;">
                     <h3 class="text-lg font-medium text-gray-900 dark:text-white">Reset your password</h3>
                     <p class="text-sm text-gray-600 dark:text-gray-300">
@@ -234,7 +219,7 @@
                 </div>
 
                 <!-- Lost password: set new password (shown after clicking email link) -->
-                <div id="resetPasswordMenu" class="hidden w-full max-w-sm p-4 bg-white border border-gray-200 rounded-lg shadow-sm sm:p-6 md:p-8 dark:bg-gray-800 dark:border-gray-700">
+                <div id="resetPasswordMenu" hidden class="w-full max-w-sm p-4 bg-white border border-gray-200 rounded-lg shadow-sm sm:p-6 md:p-8 dark:bg-gray-800 dark:border-gray-700">
                 <form class="space-y-4" onsubmit="return false;">
                     <h3 class="text-lg font-medium text-gray-900 dark:text-white">Choose a new password</h3>
 
@@ -273,8 +258,8 @@
                 </div>
 
                 <div
-                    id="joinRoomMenu"
-                    class="hidden flex flex-col w-[90%] h-[80%] 
+                    id="joinRoomMenu" hidden
+                    class="flex-col w-[90%] h-[80%] 
                         bg-white/90 dark:bg-gray-900/90 rounded-xl shadow-xl
                         overflow-hidden min-h-0">
                     <!-- Top bar -->
@@ -293,7 +278,7 @@
                         >
                         <img
                             id="jrAvatarImg"
-                            src="/src/css/background/avatar-placeholder.png"
+                            src="/src/css/avatars/avatar-placeholder.png"
                             alt="Avatar"
                             class="w-full h-full object-cover border border-gray-300 rounded-md box-border"
                             style="aspect-ratio: 1 / 1;"
@@ -319,13 +304,13 @@
                     <!-- Error row -->
                     <div
                         id="errorMessage2"
-                        class="px-3 py-2 min-h-[24px] text-red-600 border-t border-gray-200 bg-white dark:bg-gray-900"
+                        class="px-3 py-2 min-h-6 text-red-600 border-t border-gray-200 bg-white dark:bg-gray-900"
                     ></div>
                 </div>
 
-               <div id="profileMenu"
-                    class="hidden w-[95%] h-[95%] p-4 bg-white border border-gray-200 rounded-xl shadow-2xl
-                        dark:bg-gray-800 dark:border-gray-700 flex flex-col z-[9998]">
+               <div id="profileMenu" hidden
+                    class="w-[95%] h-[95%] p-4 bg-white border border-gray-200 rounded-xl shadow-2xl
+                        dark:bg-gray-800 dark:border-gray-700 flex-col z-9998">
 
                     <!-- Close (X) Button -->
                     <button id="closeProfileButton"
@@ -347,9 +332,9 @@
                     </div>
                 </div>
 
-                <div id="gameProfileMenu"
-                    class="hidden w-[85%] h-[95%] p-4 bg-white border border-gray-200 rounded-xl shadow-2xl
-                        dark:bg-gray-800 dark:border-gray-700 flex flex-col z-[9999]">
+                <div id="gameProfileMenu" hidden
+                    class="w-[85%] h-[98%] p-4 bg-white border border-gray-200 rounded-xl shadow-2xl
+                        dark:bg-gray-800 dark:border-gray-700 flex-col z-9999">
 
                     <!-- Close (X) Button -->
                     <button id="closeGameProfileButton"
@@ -365,9 +350,9 @@
                     </div>
                 </div>
 
-                <div id="leaderboardMenu"
-                    class="hidden w-[70%] h-[90%] p-4 bg-white border border-gray-200 rounded-xl shadow-2xl
-                        dark:bg-gray-800 dark:border-gray-700 flex flex-col z-[9999]">
+                <div id="leaderboardMenu" hidden
+                    class="w-[70%] h-[90%] p-4 bg-white border border-gray-200 rounded-xl shadow-2xl
+                        dark:bg-gray-800 dark:border-gray-700 flex-col z-9999">
 
                     <!-- Close (X) Button -->
                     <button id="closeLeaderboardButton"
@@ -381,7 +366,7 @@
                     <div id="leaderboardMenuBody" class="mt-0 flex-1 overflow-y-auto text-gray-800 dark:text-gray-200">
                         
                     <button id="dropdownDefaultButton" data-dropdown-toggle="dropdown" 
-                    class="mt-2 text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium 
+                    class="mt-2 text-white bg-linear-to-r from-purple-500 via-purple-600 to-purple-700 hover:bg-linear-to-br focus:ring-4 focus:outline-none focus:ring-purple-300 font-medium 
                     rounded-lg text-sm px-5 py-2.5 text-center inline-flex items-center dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800" 
                     type="button">Dropdown Button<svg class="w-2.5 h-2.5 ms-3" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 10 6">
                     <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m1 1 4 4 4-4"/>
@@ -389,7 +374,13 @@
                     </button>
 
                     <!-- Dropdown menu -->
-                    <div id="dropdown" class="z-10 hidden bg-gray-500 divide-y divide-gray-100 rounded-lg shadow-sm w-44 dark:bg-gray-700">
+                    <div id="dropdown"
+                        class="z-10 hidden
+                            bg-slate-900/95
+                            border border-purple-500/20
+                            rounded-lg shadow-xl w-44
+                            backdrop-blur-sm
+                        ">
                         <ul class="py-2 text-sm text-white dark:text-gray-200" aria-labelledby="dropdownDefaultButton">
                             <li><a href="#" id="lbAvgOption"   class="block px-4 py-2 hover:bg-gray-600 dark:hover:bg-gray-600 dark:hover:text-white">Average</a></li>
                             <li><a href="#" id="lbWinsOption"  class="block px-4 py-2 hover:bg-gray-600 dark:hover:bg-gray-600 dark:hover:text-white">Wins</a></li>
@@ -397,14 +388,13 @@
                             <li><a href="#" id="lbThirdsOption"  class="block px-4 py-2 hover:bg-gray-600 dark:hover:bg-gray-600 dark:hover:text-white">Thirds</a></li>
                             <li><a href="#" id="lbLossOption"  class="block px-4 py-2 hover:bg-gray-600 dark:hover:bg-gray-600 dark:hover:text-white">Losses</a></li>
                             <li><a href="#" id="lbGamesOption" class="block px-4 py-2 hover:bg-gray-600 dark:hover:bg-gray-600 dark:hover:text-white">Games Played</a></li>
-                            
                         </ul>
                     </div>
 
                     </div>
                 </div>
 
-                <div id="lobbyMenu" class="hidden w-[85%] h-[80%] p-4 bg-white border border-gray-200 rounded-xl shadow-lg dark:bg-gray-800 dark:border-gray-700 flex flex-col">
+                <div id="lobbyMenu" hidden class="w-[85%] h-[80%] p-4 bg-white border border-gray-200 rounded-xl shadow-lg dark:bg-gray-800 dark:border-gray-700 flex-col">
                     <h2 id="lobbyHeading" class="text-2xl font-semibold text-gray-900 dark:text-white text-center mb-1">Lobby</h2>
 
                     <!-- Player List -->
@@ -445,11 +435,11 @@
                     </div>
                 </div>
 
-                <div id="endMenu" 
-                    class="hidden w-[50%] h-[70%] p-4
+                <div id="endMenu" hidden
+                    class="w-[50%] h-[70%] p-4
                     bg-white border border-gray-200 rounded-xl shadow-lg
                     dark:border-gray-700
-                    flex flex-col items-center justify-center space-y-4">
+                    flex-col items-center justify-center space-y-4">
 
                 <div id="resultsContainer" class="w-full max-w-sm mx-auto text-center">
                     <!-- JS will populate this -->

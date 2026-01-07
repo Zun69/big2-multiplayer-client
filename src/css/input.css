@@ -1,0 +1,4 @@
+@import "tailwindcss";
+
+/* Make `dark:` only work when .dark is present (not system setting) */
+@custom-variant dark (&:where(.dark, .dark *));

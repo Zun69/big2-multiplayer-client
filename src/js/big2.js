@@ -1850,7 +1850,7 @@ async function loginMenu() {
     // reset & rebind references
     [loginButton, createAccountButton, lostPasswordButton] = resetButtonListeners(loginButton, createAccountButton, lostPasswordButton);
 
-    loginMenu.style.display = "block";
+    setHiddenSafe(loginMenu, false);
     clearLoginErrors(); 
     
     // disable button when fields empty
@@ -1862,7 +1862,6 @@ async function loginMenu() {
 
     function clearLoginErrors() {
         errorMessage1.textContent = '';
-        errorMessage1.style.display = 'none';
         userNameInput.setCustomValidity('');
     }
     
@@ -1899,7 +1898,6 @@ async function loginMenu() {
                     Your email isn’t verified yet.
                     <button type="button" id="resendVerifyBtn" class="underline">Resend verification email</button>
                 `;
-                errorMessage1.style.display = 'block';
 
                 // wire "Resend"
                 const resendBtn = document.getElementById('resendVerifyBtn');
@@ -1938,7 +1936,7 @@ async function loginMenu() {
                 authed = true;
                 socket.off('authenticated', onAuthed);
                 clearLoginErrors(); 
-                loginMenu.style.display = "none";
+                setHiddenSafe(loginMenu, true);
                 settle({ type: 'login', socket, username: displayName });
             };
             socket.on('authenticated', onAuthed);
@@ -1965,8 +1963,7 @@ async function loginMenu() {
                     : msg;
                 }
 
-                errorMessage1.style.display = 'block';
-                loginMenu.style.display = 'block';
+                setHiddenSafe(loginMenu, false);
                 updateLoginButtonState();
                 userNameInput.setCustomValidity(msg);
                 userNameInput.reportValidity();
@@ -1977,7 +1974,6 @@ async function loginMenu() {
             const identityMsg = e?.data?.data?.identity?.message;
             const passwordMsg = e?.data?.data?.password?.message;
             errorMessage1.innerText = identityMsg || passwordMsg || msg;
-            errorMessage1.style.display = 'block';
             loginButton.disabled = false;
         }
         }
@@ -1991,7 +1987,6 @@ async function loginMenu() {
                 errorMessage1.innerText = !u && !p
                 ? "Both username and password are required."
                 : (!u ? "Username is required." : "Password is required.");
-                errorMessage1.style.display = "block";
                 return;
             }
             handleClick();
@@ -1999,7 +1994,7 @@ async function loginMenu() {
 
         spButton.addEventListener("click", () => {
             clickSounds[0].play();
-            loginMenu.style.display = "none";
+            setHiddenSafe(loginMenu, true);
             settle({ type: "singlePlayer" });
             },
             { once: true }
@@ -2010,7 +2005,7 @@ async function loginMenu() {
             () => {
                 clickSounds[0].play();
                 clearLoginErrors(); 
-                loginMenu.style.display = "none";
+                setHiddenSafe(loginMenu, true);
                 settle({ type: "createAccount" });
             },
             { once: true }
@@ -2127,7 +2122,7 @@ async function createAccountMenu() {
             resetCAForm();
             // back to login
             caMenu.classList.add("hidden");
-            loginMenu.style.display = "block";
+            setHiddenSafe(loginMenu, false);
             resolve("back");
         }, { once: true });
 
@@ -2163,7 +2158,7 @@ async function createAccountMenu() {
 
                 // bounce to login with prefill + message
                 caMenu.classList.add("hidden");
-                loginMenu.style.display = "block";
+                setHiddenSafe(loginMenu, false);
                 const loginEmail = document.getElementById("username");
                 const loginErr   = document.getElementById("errorMessage1");
                 if (loginEmail) loginEmail.value = emailInput.value.trim();
@@ -2193,11 +2188,21 @@ async function lostPasswordMenu() {
     const sendBtn = document.getElementById("sendResetBtn");
     const backBtn = document.getElementById("fpBackButton");
 
-    const show = () => { fpMenu.classList.remove("hidden"); fpMenu.style.display = "block"; };
-    const hide = () => { fpMenu.style.display = "none"; fpMenu.classList.add("hidden"); };
+    const show = () => {
+        setHiddenSafe(fpMenu, false);
+    };
 
-    show(); loginMenu.style.display = "none";
-    err.textContent = ""; info.textContent = "";
+    const hide = () => {
+        setHiddenSafe(fpMenu, true);
+    };
+
+    // Show forgot-password menu, hide login menu
+    show();
+    setHiddenSafe(loginMenu, true);
+
+    // Clear messages
+    err.textContent = "";
+    info.textContent = "";
 
     return new Promise((resolve) => {
         const onSubmit = async () => {
@@ -2217,7 +2222,7 @@ async function lostPasswordMenu() {
         sendBtn.addEventListener("click", onSubmit);
         backBtn.addEventListener("click", () => {
         hide();
-        loginMenu.style.display = "block";
+        setHiddenSafe(loginMenu, false);
         resolve("back");
         }, { once: true });
     });
@@ -2234,11 +2239,21 @@ async function resetPasswordMenu(token) {
     const setBtn = document.getElementById("setNewPasswordBtn");
     const backBtn = document.getElementById("rpBackButton");
 
-    const show = () => { rpMenu.classList.remove("hidden"); rpMenu.style.display = "block"; };
-    const hide = () => { rpMenu.style.display = "none"; rpMenu.classList.add("hidden"); };
+    const show = () => {
+        setHiddenSafe(rpMenu, false);
+    };
 
-    show(); loginMenu.style.display = "none";
-    err.textContent = ""; info.textContent = "";
+    const hide = () => {
+        setHiddenSafe(rpMenu, true);
+    };
+
+    // Show reset-password menu, hide login menu
+    show();
+    setHiddenSafe(loginMenu, true);
+
+    // Clear messages
+    err.textContent = "";
+    info.textContent = "";
 
     return new Promise((resolve) => {
         const onSubmit = async () => {
@@ -2260,7 +2275,7 @@ async function resetPasswordMenu(token) {
         setBtn.addEventListener("click", onSubmit);
         backBtn.addEventListener("click", () => {
         hide();
-        loginMenu.style.display = "block";
+        setHiddenSafe(loginMenu, false);
         resolve("back");
         }, { once: true });
     });
@@ -2605,7 +2620,7 @@ async function renderLeaderboardMenu(metric = 'avg') {
     table.className = 'min-w-full table-fixed text-sm text-left';
 
     const thead = document.createElement('thead');
-    thead.className = 'bg-emerald-600 text-gray-800 dark:text-gray-100';
+    thead.className = 'bg-gradient-to-r from-green-400 via-green-500 to-green-600 text-gray-800 dark:text-gray-100';
     thead.innerHTML = `
         <tr>
         <th class="px-4 py-3 font-semibold w-14">#</th>
@@ -2808,7 +2823,7 @@ async function renderProfileHeader(name) {
     statsStrip.id = 'profileStatsStrip';
     statsStrip.className = `
         mt-5
-        bg-gray-50
+        bg-violet-50
         border border-gray-200 dark:border-gray-700
         rounded-lg shadow-sm
         overflow-x-auto
@@ -2818,7 +2833,7 @@ async function renderProfileHeader(name) {
     statsPercentageStrip.id = 'profileStatsPercentageStrip';
     statsPercentageStrip.className = `
         mt-2
-        bg-gray-50
+        bg-violet-50
         border border-gray-200 dark:border-gray-700
         rounded-lg shadow-sm
         overflow-x-auto
@@ -2940,7 +2955,7 @@ async function renderProfileTable(username) {
     // Header
     const thead = document.createElement("thead");
     thead.className =
-        "bg-emerald-600 dark:bg-emerald-700 text-white dark:text-gray-100 uppercase text-xs tracking-wider";
+        "bg-gradient-to-r from-green-400 via-green-500 to-green-600 text-grey-900 dark:text-gray-100 uppercase text-xs tracking-wider";
     thead.innerHTML = `
         <tr>
             <th class="px-4 py-3 font-semibold">Game ID</th>
@@ -3114,7 +3129,7 @@ document.body.addEventListener("click", async (e) => {
         const gameId = gameLink.dataset.gameId;
         const gameProfileMenu = document.getElementById("gameProfileMenu");
         if (gameProfileMenu) {
-            gameProfileMenu.classList.remove("hidden");
+            setHiddenSafe(gameProfileMenu, false);
             // (we’ll populate its content next step)
             clickSounds[2].play();
             //await renderGameProfileBody
@@ -3261,7 +3276,7 @@ function renderHistoryAsCards(playedHistory, cap = 200) {
     const more = total > cap ? `<div class="px-2 py-1 text-[11px] opacity-70">…and ${total - cap} more</div>` : '';
     return `
         <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
-            <div class="max-h-[21rem] overscroll-contain overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
+            <div class="max-h-84 overscroll-contain overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
             ${rows || `<div class="px-3 py-2 text-xs opacity-70">No turns recorded</div>`}
             ${more}
             </div>
@@ -3276,7 +3291,7 @@ async function openGameProfile(gameId, container = document.getElementById("game
     if (!body) return;
 
     // Unhide + loading state (only the body, keep header/close button intact)
-    container.classList.remove("hidden");
+    setHiddenSafe(container, false);
     body.innerHTML = `
         <div class="p-4 text-sm text-gray-600 dark:text-gray-300">Loading game ${gameId}…</div>
     `;
@@ -3379,30 +3394,30 @@ async function joinRoomMenu(socket, username) {
         async function openProfile() {
             // show popup above everything
             clickSounds[2].play();
-            profileMenu.classList.remove('hidden');
+            setHiddenSafe(profileMenu, false);
             await renderProfileHeader(username); // populate header from PB, will update to get profile via username
             await renderProfileTable(username);
         }
 
         async function openLeaderboard() {
             clickSounds[2].play();
-            leaderboardMenu.classList.remove('hidden');
+            setHiddenSafe(leaderboardMenu, false);
             await renderLeaderboardMenu('avg');
         }
 
         function closeProfile() {
             clickSounds[0].play();
-            profileMenu.classList.add('hidden');
+            setHiddenSafe(profileMenu, true);
         }
 
         function closeGameProfile() {
             clickSounds[0].play();
-            gameProfileMenu.classList.add('hidden');
+            setHiddenSafe(gameProfileMenu, true);
         }
 
         function closeLeaderboard() {
             clickSounds[0].play();
-            leaderboardMenu.classList.add('hidden');
+            setHiddenSafe(leaderboardMenu, true);
         }
 
         // delegated handler on the TOP BAR container (no buildup)
@@ -3457,7 +3472,7 @@ async function joinRoomMenu(socket, username) {
         }
 
         // Display joinRoomMenu
-        joinRoomMenu.style.display = "block";
+        setHiddenSafe(joinRoomMenu, false);
 
         // bind once to the FRESHLY-CLONED nodes
         newProfileBtn.addEventListener('click', onProfileButtonClick);
@@ -3499,7 +3514,7 @@ async function joinRoomMenu(socket, username) {
                     input.accept = 'image/*';
                     // hint camera on mobile; browsers may ignore
                     input.capture = 'environment';
-                    input.style.display = 'none';
+                    setHiddenSafe(input, true);
                     document.body.appendChild(input);
                     input.addEventListener('change', () => {
                         const f = input.files && input.files[0] ? input.files[0] : null;
@@ -3669,7 +3684,7 @@ async function joinRoomMenu(socket, username) {
                 cleanup();
 
                 // Hide the join menu exactly once
-                joinRoomMenu.style.display = "none";
+                setHiddenSafe(joinRoomMenu, true);
 
                 resolve(result);
             };
@@ -3681,7 +3696,7 @@ async function joinRoomMenu(socket, username) {
                 // Show the error but keep menu visible so user can try again
                 errorMessage2.innerText = message;
                 errorMessage2.style.display = 'block';
-                joinRoomMenu.style.display = 'block';
+                setHiddenSafe(joinRoomMenu, false);
             };
 
             const onRejoin = () => {
@@ -3712,13 +3727,14 @@ async function spEndMenu(results) {
     let resolver;
 
     // --- hide in-game UI ---
-    document.getElementById("play").style.display = "none";
-    document.getElementById("clear").style.display = "none";
-    document.getElementById("pass").style.display = "none";
-    document.getElementById("gameInfo").style.display = "none";
+    hideButton("play");
+    hideButton("pass");
+    hideButton("clear");
+    setHiddenSafe(gameInfo, true);
 
-    const playerInfoDivs = document.getElementsByClassName("playerInfo");
-    for (let div of playerInfoDivs) div.style.display = "none";
+    for (let div of document.getElementsByClassName("playerInfo")) {
+        setHiddenSafe(div, true);
+    }
 
     // always rebuild resultsContainer so single-player can never rely on stale DOM
     const resultsContainer = endMenu.querySelector("#resultsContainer");
@@ -3892,7 +3908,7 @@ async function spEndMenu(results) {
     const handleContinue = () => {
         clickSounds?.[0]?.play?.();
         cleanup();
-        endMenu.style.display = "none";
+        setHiddenSafe(endMenu, true);
 
         if (matchWinner) {
             // Reset points for a fresh match
@@ -3907,7 +3923,7 @@ async function spEndMenu(results) {
     const handleBack = () => {
         clickSounds?.[0]?.play?.();
         cleanup();
-        endMenu.style.display = "none";
+        setHiddenSafe(endMenu, true);
 
         // reset SP points when leaving SP
         for (const p of GameModule.players) p.points = 0;
@@ -3923,7 +3939,7 @@ async function spEndMenu(results) {
     continueBtn.addEventListener("click", handleContinue);
     backBtn.addEventListener("click", handleBack);
 
-    endMenu.style.display = "block";
+    setHiddenSafe(endMenu, false);
     return new Promise((resolve) => { resolver = resolve; });
 }
 
@@ -3937,14 +3953,13 @@ async function endMenu(socket, roomCode, results) {
     let resolver;
 
     // hide play/pass/gameInfo/playerInfo
-    document.getElementById("play").style.display = "none";
-    document.getElementById('clear').style.display = "none";
-    document.getElementById("pass").style.display = "none";
-    document.getElementById("gameInfo").style.display = "none";
+    hideButton("play");
+    hideButton("pass");
+    hideButton("clear");
+    setHiddenSafe(gameInfo, false);
 
-    const playerInfoDivs = document.getElementsByClassName("playerInfo");
-    for (let div of playerInfoDivs) {
-        div.style.display = "none";
+    for (let div of document.getElementsByClassName("playerInfo")) {
+        setHiddenSafe(div, true);
     }
 
     // Create a clean leaderboard layout
@@ -4018,7 +4033,7 @@ async function endMenu(socket, roomCode, results) {
         ul.appendChild(li);
     }
 
-    endMenu.style.display = "block";
+    setHiddenSafe(endMenu, false);
 
     // label helper
     const setContinueLabel = (count) => {
@@ -4038,7 +4053,7 @@ async function endMenu(socket, roomCode, results) {
         clickSounds[0].play();
         socket.emit('leaveRoom', roomCode);
         cleanup();
-        endMenu.style.display = "none";
+        setHiddenSafe(endMenu, true);
         resolver && resolver('goBackToJoinRoomMenu');
     };
 
@@ -4061,7 +4076,7 @@ async function endMenu(socket, roomCode, results) {
     // game started → clean up and resolve
     const onGameStarted = () => {
         cleanup();
-        endMenu.style.display = "none";
+        setHiddenSafe(endMenu, true);
         resolver && resolver("continue");
     };
 
@@ -4103,7 +4118,7 @@ async function lobbyMenu(socket, roomCode){
     lobbyHeadingEl.textContent = 'Room ' + roomCode;
 
     // Display lobbyMenu
-    lobbyMenu.style.display = "block";
+    setHiddenSafe(lobbyMenu, false);
     
     function updateClientList(clientList = []) {
         // 1) reset the container each render
@@ -4271,7 +4286,7 @@ async function lobbyMenu(socket, roomCode){
             socket.off('gameStarted');
         
             // Hide the lobby menu and clear the interval
-            lobbyMenu.style.display = "none";
+            setHiddenSafe(lobbyMenu, true);
 
             resolve(socket);
         });
@@ -4296,7 +4311,7 @@ async function lobbyMenu(socket, roomCode){
             socket.off('gameStarted');
 
             // Hide the lobby menu and clear the interval
-            lobbyMenu.style.display = "none";
+            setHiddenSafe(lobbyMenu, true);
 
             resolve('goBackToJoinRoomMenu');
         }
@@ -4308,7 +4323,7 @@ function renderSinglePlayerInfo(el, player, i) {
 
     // container
     el.style.display = 'flex';
-    el.style.flexDirection = 'column'; // 👈 stack vertically
+    el.style.flexDirection = 'column'; // stack vertically
     el.style.alignItems = 'center';
     el.style.gap = '0.2rem';
     el.style.borderRadius = '0.5rem';
@@ -4448,9 +4463,6 @@ function getPreGameAvgMap() {
 
 async function spLoop(spContinue) {
     // unhide buttons and gameInfo divs
-    const playButton = document.getElementById("play");
-    const passButton = document.getElementById("pass");
-    const clearButton = document.getElementById("clear");
     const gameInfo = document.getElementById("gameInfo");
     const playerInfo = document.getElementsByClassName("playerInfo");
 
@@ -4459,14 +4471,14 @@ async function spLoop(spContinue) {
         gameInfo.textContent = '—';
     }
 
-    playButton.style.display = "block";
-    passButton.style.display = "block";
-    clearButton.style.display = "block";
-    gameInfo.style.display = "block";
+    showButton("play");
+    showButton("pass");
+    showButton("clear");
+    setHiddenSafe(gameInfo, false);
 
     // show names here 
     for (let i = 0; i < playerInfo.length; i++) {
-        playerInfo[i].style.display = 'block';
+        setHiddenSafe(playerInfo[i], false);
     }
 
     // single-player opponent ai name pool
@@ -4540,10 +4552,10 @@ async function startGame(socket, roomCode){
         gameInfo.textContent = '—';
     }
     
-    playButton.style.display = "block";
-    passButton.style.display = "block";
-    clearButton.style.display = "block";
-    gameInfo.style.display = "block";
+    showButton("play");
+    showButton("pass");
+    showButton("clear");
+    showButton("gameInfo");
 
     // Remove any existing event listeners for these events to avoid multiple listeners
     socket.off('clientSocketId');      //  not used by server, but safe to clear
@@ -4564,7 +4576,7 @@ async function startGame(socket, roomCode){
 
         // show names here from prior lobby state
         for (let i = 0; i < playerInfo.length; i++) {
-            playerInfo[i].style.display = 'block';
+            setHiddenSafe(playerInfo[i], false);
         }
 
         // wait for playersSnapshot (replacement for initialGameState)
@@ -4727,11 +4739,31 @@ function unmountAllCards() {
     unmountAllCardsDOM();
 }
 
+function setMessage(el, msg = '') {
+    if (!el) return;
+    const text = (msg ?? '').toString();
+    el.textContent = text;
+    setHiddenSafe(el, !text); // hide when empty
+}
+
+function setHiddenSafe(el, hidden) {
+    if (!el) return;
+
+    // If we're hiding and focus is inside, clear it first
+    const active = document.activeElement;
+    if (hidden && active && (el === active || el.contains(active))) {
+        active.blur();
+    }
+
+    el.hidden = hidden;
+}
 
 function hideButton(id) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.style.display = 'none';
+    setHiddenSafe(document.getElementById(id), true);
+}
+
+function showButton(id) {
+    setHiddenSafe(document.getElementById(id), false);
 }
 
 function removeAllGameElements() {
@@ -4742,18 +4774,18 @@ function removeAllGameElements() {
     hideButton('play');
     hideButton('pass');
     hideButton('clear');
+    setHiddenSafe(gameInfo, false);
 
     // 2) Game info HUD → hide + CLEAR TEXT
     const gi = document.getElementById('gameInfo');
     if (gi) { 
-        gi.style.display = 'none';
         gi.textContent = '';        // ensure no stale text
     }
 
     // 3) Player panels → hide & clear any turn styling
     const panels = document.getElementsByClassName('playerInfo');
     for (let i = 0; i < panels.length; i++) {
-        panels[i].style.display = 'none';
+        setHiddenSafe(panels[i], true);
         panels[i].style.border = 'none';
         // panels[i].textContent = ''; // optional: if you also want to clear labels
     }
@@ -4943,10 +4975,10 @@ function setupPauseModal(socket, roomCode){
             gameInfo.textContent = '—';
         }
     
-        playButton.style.display = "block";
-        passButton.style.display = "block";
-        clearButton.style.display = "block";
-        gameInfo.style.display = "block";
+        showButton("play");
+        showButton("pass");
+        showButton("clear");
+        setHiddenSafe(gameInfo, false);
 
         GameModule.isFirstMove = isFirstMove;
         GameModule.lastValidHand = lastValidHand;
