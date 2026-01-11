@@ -4,6 +4,48 @@ import spOpponent, { loadPolicyModel } from "./spOpponent.js";
 import PocketBase, { BaseAuthStore } from "https://cdn.jsdelivr.net/npm/pocketbase@0.21.1/dist/pocketbase.es.mjs";
 import { resetHenryObsMemory } from "./henryObs.js";
 
+// preload 52 SVG card faces (0_1.svg .. 3_13.svg)
+const CARD_FACE_DIR = "src/css/faces"; // no leading slash for GitHub Pages
+
+function buildAllFaceUrls() {
+  const urls = [];
+  for (let suit = 0; suit <= 3; suit++) {
+    for (let rank = 1; rank <= 13; rank++) {
+      urls.push(`${CARD_FACE_DIR}/${suit}_${rank}.svg`);
+    }
+  }
+  return urls;
+}
+
+// Fire-and-forget warm-cache (doesn't block your initial render)
+function warmSvgCache(urls, { concurrency = 8 } = {}) {
+  const q = [...new Set(urls)].filter(Boolean);
+  let i = 0;
+
+  const worker = async () => {
+    while (i < q.length) {
+      const url = q[i++];
+      try {
+        await fetch(url, { cache: "force-cache" });
+      } catch (_) {}
+    }
+  };
+
+  for (let w = 0; w < concurrency; w++) worker();
+}
+
+function preloadCardsSoonAfterLoad() {
+  const urls = buildAllFaceUrls();
+
+  const run = () => warmSvgCache(urls, { concurrency: 8 });
+
+  // Prefer idle time so you don't slow first paint
+  if ("requestIdleCallback" in window) requestIdleCallback(run, { timeout: 1500 });
+  else setTimeout(run, 400);
+}
+
+window.addEventListener("load", preloadCardsSoonAfterLoad);
+
 // lookup table for printing actual rank in last played hand
 const rankLookup = {
     1: 'A',
@@ -438,19 +480,27 @@ const finishCardSounds = [
 
 let finishSoundIndex = 0;
 
+let lastDealSoundIndex = -1;
+
 function dealNextCardSounds() {
-    // Pick a random index from 0 → dealCardSounds.length - 1
-  const randomIndex = Math.floor(Math.random() * dealCardSounds.length);
-  dealCardSounds[randomIndex].play();  // play current sound
-   console.log("Random sound index: " + randomIndex);
-  //console.log("Sound index" + soundIndex);
-  //soundIndex = (soundIndex + 1) % dealCardSounds.length; // move to next (wrap around)
+    if (!dealCardSounds.length) return;
+
+    let idx;
+    do {
+        idx = Math.floor(Math.random() * dealCardSounds.length);
+    } while (idx === lastDealSoundIndex);
+
+    lastDealSoundIndex = idx;
+
+    dealCardSounds[idx].play();
+
+    //console.log("Random sound index:", idx);
 }
 
 function dealNextFinishCardSounds() {
-  finishCardSounds[finishSoundIndex].play();  // play current sound
-  console.log("Sound index" + finishSoundIndex);
-  finishSoundIndex = (finishSoundIndex + 1) % finishCardSounds.length; // move to next (wrap around)
+    finishCardSounds[finishSoundIndex].play();  // play current sound
+    console.log("Sound index" + finishSoundIndex);
+    finishSoundIndex = (finishSoundIndex + 1) % finishCardSounds.length; // move to next (wrap around)
 }
 
 function gcToLocal(xGC, yGC, parentEl) {
@@ -819,7 +869,7 @@ async function localPlayerHand(socket, roomCode) {
   }
 }
 
-const passSound = new Howl({ src: ["src/audio/passcard.wav"], volume: 0.6 });
+const passSound = new Howl({ src: ["src/audio/pass.wav"], volume: 0.9 });
 
 function receivePlayerHand(socket, roomCode) {
   return new Promise((resolve) => {
@@ -2032,7 +2082,7 @@ async function createAccountMenu() {
     const backBtn = document.getElementById("caBackButton");
     const registerBtn = form.querySelector('button[type="submit"]');
 
-    caMenu.classList.remove("hidden"); // also remove Tailwind's .hidden
+    setHiddenSafe(caMenu, false); //show create account menu
     
     const showError = (msg) => { if (err) err.textContent = msg || ''; };
 
@@ -2121,7 +2171,8 @@ async function createAccountMenu() {
         backBtn?.addEventListener("click", () => {
             resetCAForm();
             // back to login
-            caMenu.classList.add("hidden");
+            setHiddenSafe(caMenu, true);
+
             setHiddenSafe(loginMenu, false);
             resolve("back");
         }, { once: true });
@@ -4321,6 +4372,8 @@ async function lobbyMenu(socket, roomCode){
 function renderSinglePlayerInfo(el, player, i) {
     if (!el) return;
 
+    setHiddenSafe(el, false);
+
     // container
     el.style.display = 'flex';
     el.style.flexDirection = 'column'; // stack vertically
@@ -4388,21 +4441,30 @@ function renderSinglePlayerInfo(el, player, i) {
 function renderPlayerInfo(el, player, i) {
     if (!el) return;
 
+    setHiddenSafe(el, false); // ✅ IMPORTANT: undo removeAllGameElements() hiding
+
     // container
     el.style.display = 'flex';
+    el.style.flexDirection = 'column'; // stack vertically
     el.style.alignItems = 'center';
-    el.style.gap = '0.25rem';
+    el.style.gap = '0.2rem';
     el.style.borderRadius = '0.5rem';
-    el.style.padding = '0.2rem 0.3rem';
-    el.style.backgroundColor = 'rgba(255,255,255,0.9)';
-    el.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+    el.style.padding = '0.25rem 0.35rem';
+    
+    // glass effect — white, still transparent
+    el.style.background = 'rgba(255,255,255,0.6)'; // white but translucent
+    el.style.backdropFilter = 'blur(10px)';
+    el.style.webkitBackdropFilter = 'blur(10px)';
+
+    // subtle definition
+    el.style.border = '1px solid rgba(255,255,255,0.45)';
+    el.style.boxShadow =
+        '0 4px 10px rgba(0,0,0,0.08), ' +
+        'inset 0 1px 0 rgba(255,255,255,0.65)';
+
     el.style.width = 'fit-content';
     el.style.minWidth = '0';
     el.style.justifyContent = 'center';
-
-    // mirror p3 (right side)
-    const mirrored = i === 3;
-    el.style.flexDirection = mirrored ? 'row-reverse' : 'row';
 
     // reset content
     el.textContent = '';
@@ -4419,19 +4481,21 @@ function renderPlayerInfo(el, player, i) {
     } else {
         img.src = fallback;
     }
-    img.className = 'w-8 h-8 object-cover border border-gray-300 rounded-md box-border';
+    img.className = 'w-12 h-12 object-cover border border-gray-300 rounded-md box-border';
     img.style.aspectRatio = '1 / 1';
     img.style.flexShrink = '0';
     img.alt = player.username || `Player ${i + 1}`;
     img.loading = 'lazy';
     img.decoding = 'async';
 
-    // name
+    // name (under avatar)
     const name = document.createElement('div');
-    name.className = 'font-medium text-gray-800 dark:text-gray-800';
+    name.className = 'font-medium text-gray-800';
     name.textContent = player.username || `Player ${i + 1}`;
     name.style.whiteSpace = 'nowrap';
-    name.style.textAlign = mirrored ? 'right' : 'left';
+    name.style.fontSize = '0.5rem';
+    name.style.lineHeight = '1';
+    name.style.textAlign = 'center';
 
     // assemble
     el.append(img, name);
@@ -4506,7 +4570,7 @@ async function spLoop(spContinue) {
             return bot;
         });
 
-        GameModule.players[0].username = 'player';
+        GameModule.players[0].username = 'Player';
         GameModule.players[0].clientId = 'sp-0';
         GameModule.players[0].socketId = 'sp-0';
         GameModule.players[0].avatar   = 'player.png';
@@ -4912,9 +4976,6 @@ function setupPauseModal(socket, roomCode){
         clearInterval(tick);
         socket.off?.('clientList', onClientListOnceOrStream);
         socket.off?.('updateReadyState', onUpdateReadyStatePause);
-        socket.off?.('room:paused', onRoomPaused);
-        socket.off?.('room:resumed', onRoomResumed);
-        socket.off?.('room:forceReset', onRoomForceReset);
     };
 
     const onClientListOnceOrStream = (clients=[]) => {
@@ -4964,9 +5025,6 @@ function setupPauseModal(socket, roomCode){
         cleanupPauseBindings(); // clears tick + listeners
 
         //unhide buttons and gameInfo divs
-        const playButton = document.getElementById("play");
-        const passButton = document.getElementById("pass");
-        const clearButton = document.getElementById("clear");
         const gameInfo = document.getElementById("gameInfo");
         const playerInfo = document.getElementsByClassName("playerInfo");
 

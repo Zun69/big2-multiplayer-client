@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   height="350"
+   version="1.1"
+   width="250"
+   id="svg4"
+   sodipodi:docname="player_card_back_design_1_black.svg"
+   inkscape:export-filename="player_card_back_design_1_black.png"
+   inkscape:export-xdpi="70"
+   inkscape:export-ydpi="70"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview4"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="2.3057143"
+     inkscape:cx="124.90706"
+     inkscape:cy="175"
+     inkscape:window-width="1920"
+     inkscape:window-height="1009"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg4" />
+  <defs
+     id="defs2">
+    <pattern
+       height="20.0"
+       id="dotted_hatch"
+       patternUnits="userSpaceOnUse"
+       width="10.0">
+      <line
+         stroke="#000000"
+         stroke-width="1.5"
+         x1="0"
+         x2="10.0"
+         y1="0"
+         y2="20.0"
+         id="line1" />
+      <line
+         stroke="#000000"
+         stroke-width="1.5"
+         x1="10.0"
+         x2="0"
+         y1="0"
+         y2="20.0"
+         id="line2" />
+    </pattern>
+  </defs>
+  <rect
+     fill="url(#dotted_hatch)"
+     height="310"
+     stroke="#000000"
+     stroke-width="1"
+     width="210"
+     x="20"
+     y="20"
+     id="rect4" />
+</svg>

@@ -11,7 +11,13 @@ const playCardSounds = [
     new Howl({ src: ["src/audio/playcard_07.wav"], volume: 0.9 }),
     new Howl({ src: ["src/audio/playcard_08.wav"], volume: 0.9 }),
     new Howl({ src: ["src/audio/playcard_09.wav"], volume: 0.9 }),
-    new Howl({ src: ["src/audio/playcard_10.wav"], volume: 0.9 })
+    new Howl({ src: ["src/audio/playcard_10.wav"], volume: 0.9 }),
+    new Howl({ src: ["src/audio/playcard_11.wav"], volume: 0.9 }),
+    new Howl({ src: ["src/audio/playcard_12.wav"], volume: 0.9 }),
+    new Howl({ src: ["src/audio/playcard_13.wav"], volume: 0.9 }),
+    new Howl({ src: ["src/audio/playcard_14.wav"], volume: 0.9 }),
+    new Howl({ src: ["src/audio/playcard_15.wav"], volume: 0.9 }),
+    new Howl({ src: ["src/audio/playcard_16.wav"], volume: 0.9 })
 ];
 
 const passSound = new Howl({ src: ["src/audio/pass.wav"], volume: 0.9 });

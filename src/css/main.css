@@ -74,8 +74,10 @@
         transform: scale(0.98);
     }
 
-    button {
-        transition: opacity 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
+    button:not([class*="bg-"]) {
+        transition: opacity 0.2s ease,
+                    background-color 0.2s ease,
+                    transform 0.2s ease;
     }
 
     /* Make both close buttons hug the top-right corner */
