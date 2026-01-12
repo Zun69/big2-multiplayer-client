@@ -95,6 +95,74 @@ export default class Player{
         });
     }
 
+    // Sort this player's cards in-place (Big 2 descending)
+    sortHandDesc() {
+        const deck = new Deck();
+        deck.sort();
+        const cardMap = deck.cardHash();
+
+        const keyOf = (c) => `${c.suit} ${c.rank}`;
+
+        this.cards.sort((a, b) => {
+            const va = cardMap.get(keyOf(a));
+            const vb = cardMap.get(keyOf(b));
+            return vb - va; // descending
+        });
+    }
+
+    // Sort this player's cards by suit, then Big 2 rank
+    sortHandSuit() {
+        const deck = new Deck();
+        deck.sort();
+        const cardMap = deck.cardHash();
+
+        const keyOf = (c) => `${c.suit} ${c.rank}`;
+
+        this.cards.sort((a, b) => {
+            // suit first
+            if (a.suit !== b.suit) {
+                return a.suit - b.suit;
+            }
+
+            // same suit → Big 2 rank
+            const va = cardMap.get(keyOf(a));
+            const vb = cardMap.get(keyOf(b));
+            return va - vb;
+        });
+    }
+
+    // Sort this player's cards to make combos obvious:
+    // 4-kind / triples / pairs grouped together, then singles.
+    // Within each group, uses Big 2 order (Deck.cardHash()).
+    sortHandCombo() {
+        const deck = new Deck();
+        deck.sort();
+        const cardMap = deck.cardHash();
+
+        const keyOf = (c) => `${c.suit} ${c.rank}`;
+
+        // count how many of each rank you have
+        const counts = new Map();
+        for (const c of this.cards) {
+            counts.set(c.rank, (counts.get(c.rank) || 0) + 1);
+        }
+
+        this.cards.sort((a, b) => {
+            const ca = counts.get(a.rank) || 1;
+            const cb = counts.get(b.rank) || 1;
+
+            // bigger groups first (4 > 3 > 2 > 1)
+            if (ca !== cb) return cb - ca;
+
+            // same group size:
+            // sort by Big 2 order (so inside pairs/triples it still feels “normal”)
+            const va = cardMap.get(keyOf(a));
+            const vb = cardMap.get(keyOf(b));
+            return va - vb;
+        });
+    }
+
+
     // Sort an array of selected hand keys in-place (keys are already "suit rank" strings)
     sortHandArray(hand) {
         const deck = new Deck();
@@ -650,6 +718,7 @@ export default class Player{
         var playButton = document.getElementById("play"); //set player class to active if its their turn
         var passButton = document.getElementById("pass");
         var clearButton = document.getElementById("clear");
+        const sortSelect = document.getElementById("sortSelect");
         var self = this; //assign player to self
         var hand = []; //hand array holds selected cards
         var cardValidate;
@@ -666,14 +735,21 @@ export default class Player{
         // clean up any old handlers before arming again ---
         if (this._playHandler) playButton.removeEventListener("click", this._playHandler);
         if (this._passHandler) passButton.removeEventListener("click", this._passHandler);
-        if (this._clearHandler) passButton.removeEventListener("click", this._clearHandler);
+        if (this._clearHandler) clearButton.removeEventListener("click", this._clearHandler);
+        if (this._sortHandler) sortSelect?.removeEventListener("change", this._sortHandler);
         this._playHandler = null;
         this._passHandler = null;
         this._clearHandler = null;
+        this._sortHandler = null;
+
+        if (sortSelect) {
+            sortSelect.disabled = false;
+        }
 
         //function when player clicks on card
         var cardClickListener = function(card) {
             console.log('Card clicked:', card.$el);
+            sortSelect.disabled = true;
 
             //id the clicked card
             let cardId = card.suit + " " + card.rank;
@@ -723,6 +799,7 @@ export default class Player{
                 clearButton.disabled = false;
             } else {
                 clearButton.disabled = true;
+                sortSelect.disabled = false;
             }
         };
 
@@ -740,6 +817,26 @@ export default class Player{
             card.clickListener = clickListener;
         });
 
+        this._sortHandler = async () => {
+            if (!self.cards.length) return;
+            if (!sortSelect || sortSelect.disabled) return;
+
+            // lock while animating
+            sortSelect.disabled = true;
+
+            switch (sortSelect.value) {
+                case "desc": self.sortHandDesc(); break;
+                case "suit": self.sortHandSuit(); break;
+                case "combo": self.sortHandCombo(); break;
+                default:     self.sortHand();     break;
+            }
+
+            await self.sortingAnimation(0, { duration: 150, stagger: 0 });
+
+            // only re-enable if turn still active (you null _sortHandler on play/pass)
+            if (self._sortHandler && sortSelect) sortSelect.disabled = false;
+        };
+
         //resolve promise when player clicks on play button or pass button
         var myPromise = new Promise((resolve) => {
             let animationPromises = []; //holds all animation promises
@@ -751,7 +848,10 @@ export default class Player{
                 playButton.removeEventListener("click", self._playHandler);
                 passButton.removeEventListener("click", self._passHandler);
                 clearButton.removeEventListener("click", self._clearHandler);
-                self._playHandler = self._passHandler = self._clearHandler = null;
+                sortSelect?.removeEventListener("change", self._sortHandler);
+                self._playHandler = self._passHandler = self._clearHandler = self._sortHandler =  null;
+
+                if (sortSelect) sortSelect.disabled = true;
 
                 const resolveHandLength = hand.length;
                 
@@ -822,8 +922,13 @@ export default class Player{
 
                         hand.length = 0; // clear selected hand
 
-                        // sort remaining cards in data
-                        self.sortHand();
+                        // sort hand after turn depending on sortSelect value
+                        switch (sortSelect.value) {
+                            case "desc": self.sortHandDesc(); break;
+                            case "suit": self.sortHandSuit(); break;
+                            case "combo": self.sortHandCombo(); break;
+                            default:     self.sortHand();     break;
+                        }
 
                         // return the sort animation promise so the chain waits for it
                         return self.sortingAnimation(0, { duration: 200, stagger: 10 });
@@ -850,7 +955,10 @@ export default class Player{
                 playButton.removeEventListener("click", self._playHandler);
                 passButton.removeEventListener("click", self._passHandler);
                 clearButton.removeEventListener("click", self._clearHandler);
-                self._playHandler = self._passHandler = self._clearHandler = null;
+                sortSelect?.removeEventListener("change", self._sortHandler);
+                self._playHandler = self._passHandler = self._clearHandler = self._sortHandler =  null;
+
+                if (sortSelect) sortSelect.disabled = true;
                 
                 //remove click listeners on all cards 
                 self.cards.forEach(function(card) {
@@ -887,6 +995,7 @@ export default class Player{
             var clearClickListener = async function() {
                 clearButton.disabled = true; // lock immediately
                 playButton.disabled = true; // disable play button as it stays active if cleared hand was valid
+                if (sortSelect) sortSelect.disabled = false;
 
                 //animate cards in selected hand back to original position
                 hand.forEach(function (cardId) {
@@ -917,6 +1026,7 @@ export default class Player{
             //call passClickListener function when passButton is clicked, the function will remove event listener after its called
             passButton.addEventListener("click", this._passHandler, { once: true });
             clearButton.addEventListener("click", this._clearHandler);
+            sortSelect?.addEventListener("change", this._sortHandler);
         });
 
         return myPromise;
@@ -927,6 +1037,7 @@ export default class Player{
         var playButton = document.getElementById("play"); //set player class to active if its their turn
         var passButton = document.getElementById("pass");
         var clearButton = document.getElementById("clear");
+        const sortSelect = document.getElementById("sortSelect");
         var self = this; //assign player to self
         var hand = []; //hand array holds selected cards
         var cardValidate;
@@ -944,13 +1055,20 @@ export default class Player{
         if (this._playHandler) playButton.removeEventListener("click", this._playHandler);
         if (this._passHandler) passButton.removeEventListener("click", this._passHandler);
         if (this._clearHandler) passButton.removeEventListener("click", this._clearHandler);
+        if (this._sortHandler) sortSelect?.removeEventListener("change", this._sortHandler);
         this._playHandler = null;
         this._passHandler = null;
         this._clearHandler = null;
+        this._sortHandler = null;
+
+        if (sortSelect) {
+            sortSelect.disabled = false;
+        }
 
         //function when player clicks on card
         var cardClickListener = function(card) {
             console.log('Card clicked:', card.$el);
+            sortSelect.disabled = true;
 
             //id the clicked card
             let cardId = card.suit + " " + card.rank;
@@ -1000,6 +1118,7 @@ export default class Player{
                 clearButton.disabled = false;
             } else {
                 clearButton.disabled = true;
+                sortSelect.disabled = false;
             }
         };
 
@@ -1017,6 +1136,26 @@ export default class Player{
             card.clickListener = clickListener;
         });
 
+        this._sortHandler = async () => {
+            if (!self.cards.length) return;
+            if (!sortSelect || sortSelect.disabled) return;
+
+            // lock while animating
+            sortSelect.disabled = true;
+
+            switch (sortSelect.value) {
+                case "desc": self.sortHandDesc(); break;
+                case "suit": self.sortHandSuit(); break;
+                case "combo": self.sortHandCombo(); break;
+                default:     self.sortHand();     break;
+            }
+
+            await self.sortingAnimation(0, { duration: 150, stagger: 0 });
+
+            // only re-enable if turn still active (you null _sortHandler on play/pass)
+            if (self._sortHandler && sortSelect) sortSelect.disabled = false;
+        };
+
         //resolve promise when player clicks on play button or pass button
         var myPromise = new Promise((resolve) => {
             let animationPromises = []; //holds all animation promises
@@ -1028,7 +1167,10 @@ export default class Player{
                 playButton.removeEventListener("click", self._playHandler);
                 passButton.removeEventListener("click", self._passHandler);
                 clearButton.removeEventListener("click", self._clearHandler);
-                self._playHandler = self._passHandler = self._clearHandler = null;
+                sortSelect?.removeEventListener("change", self._sortHandler);
+                self._playHandler = self._passHandler = self._clearHandler = self._sortHandler =  null;
+
+                if (sortSelect) sortSelect.disabled = true;
 
                 // convert hand containing cardId's to format that server can read to validate the hand
                 const serverValidateCards = hand.map(id => {
@@ -1171,7 +1313,10 @@ export default class Player{
                 playButton.removeEventListener("click", self._playHandler);
                 passButton.removeEventListener("click", self._passHandler);
                 clearButton.removeEventListener("click", self._clearHandler);
-                self._playHandler = self._passHandler = self._clearHandler = null;
+                sortSelect?.removeEventListener("change", self._sortHandler);
+                self._playHandler = self._passHandler = self._clearHandler = self._sortHandler =  null;
+
+                if (sortSelect) sortSelect.disabled = true;
                 
                 //remove click listeners on all cards 
                 self.cards.forEach(function(card) {
@@ -1217,6 +1362,7 @@ export default class Player{
             var clearClickListener = async function() {
                 clearButton.disabled = true; // lock immediately
                 playButton.disabled = true; // disable play button as it stays active if cleared hand was valid
+                if (sortSelect) sortSelect.disabled = false;
 
                 //animate cards in selected hand back to original position
                 hand.forEach(function (cardId) {
@@ -1247,6 +1393,7 @@ export default class Player{
             //call passClickListener function when passButton is clicked, the function will remove event listener after its called
             passButton.addEventListener("click", this._passHandler, { once: true });
             clearButton.addEventListener("click", this._clearHandler);
+            sortSelect?.addEventListener("change", this._sortHandler);
         });
 
         return myPromise;

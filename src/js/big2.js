@@ -146,6 +146,7 @@ const GameModule = (function() {
     let deckInstance = null;
     let passTracker = 0;
     let lastPlayedBy = null;
+    let sortMode = "asc";
 
     // GameModule properties
     let players = [player1, player2, player3, player4];
@@ -233,6 +234,9 @@ const GameModule = (function() {
         lastPlayedBy,
         isFirstMove,
         _currentLoopToken,
+        // getters/setters
+        get sortMode() { return sortMode; },
+        set sortMode(v) { sortMode = v || "asc"; },
         get deck() { return getDeck(); },
         set deck(d) { setDeck(d); },
         unmountDeck,
@@ -279,9 +283,18 @@ function seedShadowKeysOnce() {
 
 // Sorts everybody's cards and plays the animation, resolves when animations finish
 async function spSortHands(){ 
-    // 1) sort everyone locally (keeps DOM/z-order consistent)
+    // 1) sort ai by asc, player by asc(defaul), or value carried over from last game
     GameModule.players.forEach((p, i) => {
-        p.sortHand(); // local player normal sort
+        if (i === 0) {
+            switch (GameModule.sortMode) {
+                case "desc":  p.sortHandDesc();  break;
+                case "suit":  p.sortHandSuit();  break;
+                case "combo": p.sortHandCombo(); break;
+                default:      p.sortHand();      break;
+            }
+        } else {
+            p.sortHand(); // opponents can stay default
+        }
     });
 
     // 2) animate all seats in parallel
@@ -300,7 +313,12 @@ async function sortHands(socket, roomCode){
     // 1) sort everyone locally (keeps DOM/z-order consistent)
     GameModule.players.forEach((p, i) => {
         if (i === 0) {
-            p.sortHand(); // local player normal sort
+            switch (GameModule.sortMode) {
+                case "desc":  p.sortHandDesc();  break;
+                case "suit":  p.sortHandSuit();  break;
+                case "combo": p.sortHandCombo(); break;
+                default:      p.sortHand();      break;
+            }
         } else if (typeof p.initialSort === "function") {
             p.initialSort(i); // sort opponent's initial hands
         } else {
@@ -324,7 +342,15 @@ async function sortHands(socket, roomCode){
 
 async function sortPlayerHandAfterTurn(socket, roomCode, actorIdx) {
     console.log("ACTORIDX" + actorIdx)
-    GameModule.players[actorIdx].sortHand();
+    console.log(GameModule.sortMode);
+    const p = GameModule.players[actorIdx];
+    
+    switch (GameModule.sortMode) {
+                case "desc":  p.sortHandDesc();  break;
+                case "suit":  p.sortHandSuit();  break;
+                case "combo": p.sortHandCombo(); break;
+                default:      p.sortHand();      break;
+            }
 
     // Animate the current player's cards into position
     await GameModule.players[actorIdx].sortingAnimation(actorIdx);
@@ -763,110 +789,113 @@ function displayTurn(turn) {
 }
 
 async function localPlayerHand(socket, roomCode) {
-  const outcome = await GameModule.players[GameModule.turn].playCard(
-    GameModule.gameDeck,
-    GameModule.lastValidHand,
-    GameModule.playersFinished,
-    roomCode,
-    socket,
-    GameModule.isFirstMove
-  );
+    const outcome = await GameModule.players[GameModule.turn].playCard(
+        GameModule.gameDeck,
+        GameModule.lastValidHand,
+        GameModule.playersFinished,
+        roomCode,
+        socket,
+        GameModule.isFirstMove
+    );
 
-  if (outcome.payload.type === 'play') {
-    GameModule.playedHand = outcome.payload.cards.length;
+    const sortSelect = document.getElementById("sortSelect");
+    GameModule.sortMode = sortSelect.value; //store selected sort value in GameModule
 
-    const actorIdx = 0;                              // who actually played (for sorting)
-    const nextTurnClientId = outcome.payload.nextTurn;             // STASH – don’t flip yet
+    if (outcome.payload.type === 'play') {
+        GameModule.playedHand = outcome.payload.cards.length;
 
-    // sync server-authoritative state now
-    GameModule.lastValidHand = outcome.payload.lastValidHand;
+        const actorIdx = 0;                              // who actually played (for sorting)
+        const nextTurnClientId = outcome.payload.nextTurn;             // STASH – don’t flip yet
 
-    // mirror passed flags
-    if (Array.isArray(outcome.payload.players)) {
-      outcome.payload.players.forEach(sp => {
+        // sync server-authoritative state now
+        GameModule.lastValidHand = outcome.payload.lastValidHand;
+
+        // mirror passed flags
+        if (Array.isArray(outcome.payload.players)) {
+        outcome.payload.players.forEach(sp => {
+            const lp = GameModule.players.find(p => p.clientId === sp.id);
+            if (lp) lp.passed = !!sp.passed;
+        });
+        }
+
+        // ACK barrier: attach first, then emit
+        await new Promise((resolve) => {
+        const handler = () => { socket.off('allHandAckComplete', handler); resolve(); };
+        socket.on('allHandAckComplete', handler);
+        socket.emit('playHandAck', roomCode);
+        });
+
+        // post-turn local sort/anim just for the actor
+        await sortPlayerHandAfterTurn(socket, roomCode, actorIdx);
+
+        // now that animations are done room-wide, flip the visible turn
+        const localIdx = GameModule.players.findIndex(p => p.clientId === nextTurnClientId);
+        if (localIdx >= 0) {
+        GameModule.turn = localIdx;
+        displayTurn(GameModule.turn);
+        }
+        return;
+    }
+
+    if (outcome.payload.type === 'pass') {
+        GameModule.playedHand = 0;
+
+        // mark the passer
+        const passedPlayer = GameModule.players.find(p => p.clientId === outcome.payload.passedBy);
+        if (passedPlayer) passedPlayer.passed = true;
+
+        const nextTurnClientId = outcome.payload.nextTurn;            // STASH
+        GameModule.lastValidHand = outcome.payload.lastValidHand;
+
+        await new Promise((resolve) => {
+        const handler = () => { socket.off('allHandAckComplete', handler); resolve(); };
+        socket.on('allHandAckComplete', handler);
+        socket.emit('playHandAck', roomCode);
+        });
+
+        // Flip after barrier
+        const localIdx = GameModule.players.findIndex(p => p.clientId === nextTurnClientId);
+        if (localIdx >= 0) {
+        GameModule.turn = localIdx;
+        displayTurn(GameModule.turn);
+        }
+        return;
+    }
+
+    // passWonRound: clear pile, leader gets free turn
+    if (outcome.payload.type === 'passWonRound') {
+        GameModule.playedHand = 0;
+
+        // sync flags + last hand from server
+        GameModule.lastValidHand = outcome.payload.lastValidHand;
+        outcome.payload.players.forEach(sp => {
         const lp = GameModule.players.find(p => p.clientId === sp.id);
-        if (lp) lp.passed = !!sp.passed;
-      });
+        if (!lp) return;
+        lp.passed       = !!sp.passed;
+        lp.wonRound     = !!sp.wonRound;
+        lp.finishedGame = !!sp.finishedGame;
+        });
+
+        // who leads next (server tells you)
+        const nextTurnClientId = outcome.payload.nextTurn;            // STASH
+
+        await new Promise((resolve) => {
+        const handler = () => { socket.off('allHandAckComplete', handler); resolve(); };
+        socket.on('allHandAckComplete', handler);
+        socket.emit('playHandAck', roomCode);
+        });
+
+        // everyone clears the pile together
+        await finishDeckAnimation(socket, roomCode);
+
+        // Flip after clear-pile animation
+        const localIdx = GameModule.players.findIndex(p => p.clientId === nextTurnClientId);
+        if (localIdx >= 0) {
+        GameModule.turn = localIdx;
+        displayTurn(GameModule.turn);
+        }
+        return;
     }
-
-    // ACK barrier: attach first, then emit
-    await new Promise((resolve) => {
-      const handler = () => { socket.off('allHandAckComplete', handler); resolve(); };
-      socket.on('allHandAckComplete', handler);
-      socket.emit('playHandAck', roomCode);
-    });
-
-    // post-turn local sort/anim just for the actor
-    await sortPlayerHandAfterTurn(socket, roomCode, actorIdx);
-
-    // ✅ Now that animations are done room-wide, flip the visible turn
-    const localIdx = GameModule.players.findIndex(p => p.clientId === nextTurnClientId);
-    if (localIdx >= 0) {
-      GameModule.turn = localIdx;
-      displayTurn(GameModule.turn);
-    }
-    return;
-  }
-
-  if (outcome.payload.type === 'pass') {
-    GameModule.playedHand = 0;
-
-    // mark the passer
-    const passedPlayer = GameModule.players.find(p => p.clientId === outcome.payload.passedBy);
-    if (passedPlayer) passedPlayer.passed = true;
-
-    const nextTurnClientId = outcome.payload.nextTurn;            // STASH
-    GameModule.lastValidHand = outcome.payload.lastValidHand;
-
-    await new Promise((resolve) => {
-      const handler = () => { socket.off('allHandAckComplete', handler); resolve(); };
-      socket.on('allHandAckComplete', handler);
-      socket.emit('playHandAck', roomCode);
-    });
-
-    // ✅ Flip after barrier
-    const localIdx = GameModule.players.findIndex(p => p.clientId === nextTurnClientId);
-    if (localIdx >= 0) {
-      GameModule.turn = localIdx;
-      displayTurn(GameModule.turn);
-    }
-    return;
-  }
-
-  // passWonRound: clear pile, leader gets free turn
-  if (outcome.payload.type === 'passWonRound') {
-    GameModule.playedHand = 0;
-
-    // sync flags + last hand from server
-    GameModule.lastValidHand = outcome.payload.lastValidHand;
-    outcome.payload.players.forEach(sp => {
-      const lp = GameModule.players.find(p => p.clientId === sp.id);
-      if (!lp) return;
-      lp.passed       = !!sp.passed;
-      lp.wonRound     = !!sp.wonRound;
-      lp.finishedGame = !!sp.finishedGame;
-    });
-
-    // who leads next (server tells you)
-    const nextTurnClientId = outcome.payload.nextTurn;            // STASH
-
-    await new Promise((resolve) => {
-      const handler = () => { socket.off('allHandAckComplete', handler); resolve(); };
-      socket.on('allHandAckComplete', handler);
-      socket.emit('playHandAck', roomCode);
-    });
-
-    // everyone clears the pile together
-    await finishDeckAnimation(socket, roomCode);
-
-    // ✅ Flip after clear-pile animation
-    const localIdx = GameModule.players.findIndex(p => p.clientId === nextTurnClientId);
-    if (localIdx >= 0) {
-      GameModule.turn = localIdx;
-      displayTurn(GameModule.turn);
-    }
-    return;
-  }
 }
 
 const passSound = new Howl({ src: ["src/audio/pass.wav"], volume: 0.9 });
@@ -1637,6 +1666,7 @@ const spGameLoop = async (firstTurnClientId) => {
     const playButton = document.getElementById("play");
     const passButton = document.getElementById("pass");
     const clearButton = document.getElementById("clear");
+    const sortSelect = document.getElementById("sortSelect");
 
     //sort all player's cards, it will resolve once all 4 clients sorting animations are complete
     let sortResolve = await spSortHands(); 
@@ -1725,6 +1755,9 @@ const spGameLoop = async (firstTurnClientId) => {
             if(GameModule.playedHand >= 1 && GameModule.playedHand <= 5){
                 //GameModule.playedHistory.push(GameModule.lastHand); //push last valid hand into playedHistory array
                 console.log("played hand debug: " + GameModule.playedHand);
+
+                // store sortMode for next game 
+                GameModule.sortMode = sortSelect.value;
                 
                 // check if game ended this loop 
                 if (gameOver) {
@@ -1759,6 +1792,7 @@ const gameLoop = async (roomCode, socket, firstTurnClientId, onResume) => {
     const playButton = document.getElementById("play");
     const passButton = document.getElementById("pass");
     const clearButton = document.getElementById("clear");
+    const sortSelect = document.getElementById("sortSelect");
 
     console.log('gameLoop() entered', { onResume, hasToken: !!GameModule._currentLoopToken, canceled: gmHasCancel() });
 
@@ -3774,6 +3808,8 @@ async function spEndMenu(results) {
     const endMenu     = document.getElementById("endMenu");
     const continueBtn = document.getElementById("continueButton");
     const backBtn     = document.getElementById("backToJoinRoomButton2");
+    const gameInfo     = document.getElementById("gameInfo");
+    const sortSelect     = document.getElementById("sortSelect");
 
     let resolver;
 
@@ -3782,6 +3818,7 @@ async function spEndMenu(results) {
     hideButton("pass");
     hideButton("clear");
     setHiddenSafe(gameInfo, true);
+    setHiddenSafe(sortSelect, true);
 
     for (let div of document.getElementsByClassName("playerInfo")) {
         setHiddenSafe(div, true);
@@ -4007,7 +4044,7 @@ async function endMenu(socket, roomCode, results) {
     hideButton("play");
     hideButton("pass");
     hideButton("clear");
-    setHiddenSafe(gameInfo, false);
+    setHiddenSafe(gameInfo, true);
 
     for (let div of document.getElementsByClassName("playerInfo")) {
         setHiddenSafe(div, true);
@@ -4528,6 +4565,7 @@ function getPreGameAvgMap() {
 async function spLoop(spContinue) {
     // unhide buttons and gameInfo divs
     const gameInfo = document.getElementById("gameInfo");
+    const sortSelect = document.getElementById("sortSelect");
     const playerInfo = document.getElementsByClassName("playerInfo");
 
     // make sure gameInfo starts blank/neutral
@@ -4535,10 +4573,12 @@ async function spLoop(spContinue) {
         gameInfo.textContent = '—';
     }
 
+    // unhide buttons and game elements using a consistent hide/show system
     showButton("play");
     showButton("pass");
     showButton("clear");
     setHiddenSafe(gameInfo, false);
+    setHiddenSafe(sortSelect, false);
 
     // show names here 
     for (let i = 0; i < playerInfo.length; i++) {
@@ -4604,11 +4644,9 @@ async function spLoop(spContinue) {
 // once all four clients toggle toggleReadyState, call startGameForRoom function on server and update local gamestate to match server generated one 
 async function startGame(socket, roomCode){
     //unhide buttons and gameInfo divs
-    const playButton = document.getElementById("play");
-    const passButton = document.getElementById("pass");
-    const clearButton = document.getElementById("clear");
     const gameInfo = document.getElementById("gameInfo");
     const playerInfo = document.getElementsByClassName("playerInfo");
+    const sortSelect = document.getElementById("sortSelect");
     let firstDealClientId;
 
     // make sure gameInfo starts blank/neutral
@@ -4616,10 +4654,12 @@ async function startGame(socket, roomCode){
         gameInfo.textContent = '—';
     }
     
+    // show buttons
     showButton("play");
     showButton("pass");
     showButton("clear");
-    showButton("gameInfo");
+    setHiddenSafe(gameInfo, false);
+    setHiddenSafe(sortSelect, false);
 
     // Remove any existing event listeners for these events to avoid multiple listeners
     socket.off('clientSocketId');      //  not used by server, but safe to clear
@@ -4831,6 +4871,9 @@ function showButton(id) {
 }
 
 function removeAllGameElements() {
+    const gameInfo = document.getElementById("gameInfo");
+    const sortSelect = document.getElementById("sortSelect");
+
     // 0) Cards are dynamic → nuke them from the DOM
     unmountAllCards();
 
@@ -4838,7 +4881,8 @@ function removeAllGameElements() {
     hideButton('play');
     hideButton('pass');
     hideButton('clear');
-    setHiddenSafe(gameInfo, false);
+    setHiddenSafe(gameInfo, true);
+    setHiddenSafe(sortSelect, true);
 
     // 2) Game info HUD → hide + CLEAR TEXT
     const gi = document.getElementById('gameInfo');
