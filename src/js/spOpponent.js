@@ -416,12 +416,12 @@ export default class Opponent extends Player {
       const anims = [];
       const toRemoveIdx = [];
 
-      console.log(
+      /*console.log(
         "AI action:",
         chosenAction,
         "legal:",
         available[chosenAction] === 1
-      );
+      );*/
 
       // play the selected cards (same animation)
       for (let i = 0; i < cardsToPlay.length; i++) {
@@ -437,7 +437,7 @@ export default class Opponent extends Player {
         card.setSide('back');
 
         let rotationOffset = Math.random() * 5 + -5; // Calculate a new rotation offset for each card
-        console.log("ROTATIONAL OFFSET: " + rotationOffset)
+        //console.log("ROTATIONAL OFFSET: " + rotationOffset)
         
         // get middle card index to center pairs, triples, and combos correctly
         const { gx, gy } = self.getGameCenterXY();

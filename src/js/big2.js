@@ -247,15 +247,15 @@ const GameModule = (function() {
 function gmCancelToken(ctx='') {
   if (GameModule._currentLoopToken && !GameModule._currentLoopToken.canceled) {
     GameModule._currentLoopToken.canceled = true;
-    console.log('[loopToken] canceled', ctx);
+    //console.log('[loopToken] canceled', ctx);
   } else {
-    console.log('[loopToken] no active loop to cancel', ctx ? `(${ctx})` : '');
+    //console.log('[loopToken] no active loop to cancel', ctx ? `(${ctx})` : '');
   }
 }
 
 function gmNewToken(ctx='') {
   GameModule._currentLoopToken = { canceled: false };
-  console.log('[loopToken] new token', ctx);
+  //console.log('[loopToken] new token', ctx);
   return GameModule._currentLoopToken;
 }
 
@@ -333,7 +333,7 @@ async function sortHands(socket, roomCode){
 
     return new Promise(resolve => {
         socket.once('allSortingComplete', () => {
-            console.log('All players have completed sorting their hands.');
+            //console.log('All players have completed sorting their hands.');
             resolve('sortComplete');
         });
         socket.emit('sortHandsComplete', roomCode);
@@ -341,8 +341,8 @@ async function sortHands(socket, roomCode){
 }
 
 async function sortPlayerHandAfterTurn(socket, roomCode, actorIdx) {
-    console.log("ACTORIDX" + actorIdx)
-    console.log(GameModule.sortMode);
+    //console.log("ACTORIDX" + actorIdx)
+    //console.log(GameModule.sortMode);
     const p = GameModule.players[actorIdx];
     
     switch (GameModule.sortMode) {
@@ -358,7 +358,7 @@ async function sortPlayerHandAfterTurn(socket, roomCode, actorIdx) {
     // Wait for server confirmation before resolving
     return new Promise(resolve => {
         socket.once('sortAfterTurnComplete', () => {
-            console.log('After turn sorting complete for all clients');
+            //console.log('After turn sorting complete for all clients');
             resolve('sortAfterTurnComplete');
         });
 
@@ -520,12 +520,12 @@ function dealNextCardSounds() {
 
     dealCardSounds[idx].play();
 
-    //console.log("Random sound index:", idx);
+    ////console.log("Random sound index:", idx);
 }
 
 function dealNextFinishCardSounds() {
     finishCardSounds[finishSoundIndex].play();  // play current sound
-    console.log("Sound index" + finishSoundIndex);
+    //console.log("Sound index" + finishSoundIndex);
     finishSoundIndex = (finishSoundIndex + 1) % finishCardSounds.length; // move to next (wrap around)
 }
 
@@ -583,7 +583,7 @@ async function dealCards(serverDeck, socket, roomCode, firstDealClientId) {
         p => Number(p.clientId) === Number(firstDealClientId)
     );
 
-    console.log("local player dealt to first: " + playerIndex);
+    //console.log("local player dealt to first: " + playerIndex);
 
     // Deterministic spacing (identical on all clients)
     const playersCount = GameModule.players.length || 4;
@@ -677,7 +677,7 @@ async function dealSinglePlayerCards() {
     // Choose index of player to start dealing to
     let playerIndex = 0
 
-    console.log("local player dealt to first: " + playerIndex);
+    ////console.log("local player dealt to first: " + playerIndex);
 
     // Deterministic spacing (identical on all clients)
     const playersCount = GameModule.players.length || 4;
@@ -932,8 +932,8 @@ function receivePlayerHand(socket, roomCode) {
         // animate mirror for the player who acted (use actorIdx for pile seat math)
         const actor = GameModule.players[actorIdx];
         if (actor) {
-            console.log("POSITIONS")
-            console.log(positions);
+            //console.log("POSITIONS")
+            //console.log(positions);
 
             await actor.playServerHand(GameModule.gameDeck, cards, positions);
         }
@@ -951,7 +951,7 @@ function receivePlayerHand(socket, roomCode) {
         const handler = async () => {
             socket.off('allHandAckComplete', handler);
             await sortPlayerHandAfterTurn(socket, roomCode, actorIdx);
-            console.log('[POST-PLAY SORT]', { actorCid: clientId, actorIdx, turnAtReceive: GameModule.turn });
+            //console.log('[POST-PLAY SORT]', { actorCid: clientId, actorIdx, turnAtReceive: GameModule.turn });
 
             const localIdx = GameModule.players.findIndex(p => p.clientId === nextTurnClientId);
             if (localIdx >= 0) {
@@ -1524,7 +1524,7 @@ function subscribePlayerFinished(socket) {
     // mirror server’s authoritative array
     GameModule.playersFinished = [...playersFinished];
 
-    console.log("playerFinished:", clientId, "order:", GameModule.playersFinished);
+    //console.log("playerFinished:", clientId, "order:", GameModule.playersFinished);
   };
 
   socket.on("playerFinished", handler);
@@ -1552,7 +1552,7 @@ async function applySpTurnOutcome({ actorIndex, outcome, gameOver }) {
   const actor = GameModule.players[actorIndex];
 
   if (outcome === 'passed') {
-    console.log('PASSED');
+    ////console.log('PASSED');
     actor.passed = true;
     GameModule.playedHand = 0;
     // do NOT change gameDeck / lastValidHand on pass
@@ -1592,7 +1592,7 @@ async function applySpTurnOutcome({ actorIndex, outcome, gameOver }) {
 
 function trickEnded() {
   if (GameModule.lastPlayedBy == null) {
-    console.log('[TRICK] no leader yet');
+    ////console.log('[TRICK] no leader yet');
     return false;
   }
 
@@ -1609,15 +1609,15 @@ function trickEnded() {
     'color:#4caf50;font-weight:bold'
   );
 
-  console.log('leaderIndex:', leaderIndex);
-  console.log('leader:', {
+  //console.log('leaderIndex:', leaderIndex);
+  //console.log('leader:', {
     clientId: leader.clientId,
     finishedGame: leader.finishedGame,
     wonRound: leader.wonRound
   });
 
-  console.log('activeCount:', activeCount);
-  console.log(
+  //console.log('activeCount:', activeCount);
+  //console.log(
     'activePlayers:',
     activePlayers.map(p => ({
       clientId: p.clientId,
@@ -1626,14 +1626,14 @@ function trickEnded() {
     }))
   );
 
-  console.log('passTracker:', GameModule.passTracker);
-  console.log('passesNeeded:', passesNeeded);*/
+  //console.log('passTracker:', GameModule.passTracker);
+  //console.log('passesNeeded:', passesNeeded);*/
 
   const ended =
     passesNeeded > 0 &&
     GameModule.passTracker >= passesNeeded;
 
-  /*console.log('TRICK ENDED?', ended);
+  /*//console.log('TRICK ENDED?', ended);
 
   console.groupEnd();*/
 
@@ -1675,7 +1675,7 @@ const spGameLoop = async (firstTurnClientId) => {
     GameModule.turn = GameModule.players.findIndex(p => p.clientId === firstTurnClientId);
 
     if(sortResolve === 'sortComplete'){
-        console.log("TURN IS: " + GameModule.turn);
+        ////console.log("TURN IS: " + GameModule.turn);
 
         //let rotation = initialAnimateArrow(turn); //return initial Rotation so I can use it to animate arrow
         let gameInfoDiv = document.getElementById("gameInfo");
@@ -1690,16 +1690,16 @@ const spGameLoop = async (firstTurnClientId) => {
             clearButton.disabled = true;
             passButton.disabled = true
 
-            //log gameState values
-            console.log("GameState isFirstMove:", GameModule.isFirstMove);
-            console.log("GameState Players:", GameModule.players);
-            console.log("GameState Game Deck:", GameModule.gameDeck);
-            console.log("GameState Last Hand:", GameModule.lastHand);
-            console.log("GameState Turn:", GameModule.turn);
-            console.log("GameState Finished Deck:", GameModule.finishedDeck);
-            console.log("GameState Players Finished:", GameModule.playersFinished);
-            console.log("GameState playedHand:", GameModule.playedHand);
-            console.log("GameState passTracker:", GameModule.passTracker);
+            /*log gameState values
+            //console.log("GameState isFirstMove:", GameModule.isFirstMove);
+            //console.log("GameState Players:", GameModule.players);
+            //console.log("GameState Game Deck:", GameModule.gameDeck);
+            //console.log("GameState Last Hand:", GameModule.lastHand);
+            //console.log("GameState Turn:", GameModule.turn);
+            //console.log("GameState Finished Deck:", GameModule.finishedDeck);
+            //console.log("GameState Players Finished:", GameModule.playersFinished);
+            //console.log("GameState playedHand:", GameModule.playedHand);
+            //console.log("GameState passTracker:", GameModule.passTracker);*/
 
             // return last hand (that wasn't a pass)
             GameModule.lastHand = GameModule.playedHand > 0
@@ -1749,12 +1749,12 @@ const spGameLoop = async (firstTurnClientId) => {
             // apply flags in one place, return gameOver if 3 players have finished
             gameOver = await applySpTurnOutcome({ actorIndex, outcome, gameOver });
 
-            console.log("Played Hand Length: " + GameModule.playedHand)
+            ////console.log("Played Hand Length: " + GameModule.playedHand)
 
             //if player played a valid hand
             if(GameModule.playedHand >= 1 && GameModule.playedHand <= 5){
                 //GameModule.playedHistory.push(GameModule.lastHand); //push last valid hand into playedHistory array
-                console.log("played hand debug: " + GameModule.playedHand);
+                ////console.log("played hand debug: " + GameModule.playedHand);
 
                 // store sortMode for next game 
                 GameModule.sortMode = sortSelect.value;
@@ -1794,10 +1794,10 @@ const gameLoop = async (roomCode, socket, firstTurnClientId, onResume) => {
     const clearButton = document.getElementById("clear");
     const sortSelect = document.getElementById("sortSelect");
 
-    console.log('gameLoop() entered', { onResume, hasToken: !!GameModule._currentLoopToken, canceled: gmHasCancel() });
+    //console.log('gameLoop() entered', { onResume, hasToken: !!GameModule._currentLoopToken, canceled: gmHasCancel() });
 
     if (!GameModule._currentLoopToken || gmHasCancel()) {
-        console.log('[gameLoop] canceled or no token at entry — aborting');
+        //console.log('[gameLoop] canceled or no token at entry — aborting');
         return;
     }
     
@@ -1806,7 +1806,7 @@ const gameLoop = async (roomCode, socket, firstTurnClientId, onResume) => {
         GameModule.turn = GameModule.players.findIndex(p => Number(p.clientId) === Number(firstTurnClientId));
     } else {
         // resume game, don’t override turn, it was already set from resume payload
-        console.log("Resuming game, keeping existing GameModule.turn:", GameModule.turn);
+        //console.log("Resuming game, keeping existing GameModule.turn:", GameModule.turn);
     }
 
     seedShadowKeysOnce();
@@ -1814,7 +1814,7 @@ const gameLoop = async (roomCode, socket, firstTurnClientId, onResume) => {
     let sortResolve = await sortHands(socket, roomCode); 
 
     if(sortResolve === 'sortComplete'){
-        console.log("TURN IS: " + GameModule.turn);
+        //console.log("TURN IS: " + GameModule.turn);
 
         //let rotation = initialAnimateArrow(turn); //return initial Rotation so I can use it to animate arrow
         let gameInfoDiv = document.getElementById("gameInfo");
@@ -1832,7 +1832,7 @@ const gameLoop = async (roomCode, socket, firstTurnClientId, onResume) => {
         //GAME LOOP, each loop represents a single turn
         for(let i = 0; i < 100; i++){
             if (!GameModule._currentLoopToken || gmHasCancel()) {
-                console.log('[gameLoop] canceled during iteration — exiting early');
+                //console.log('[gameLoop] canceled during iteration — exiting early');
                 return;
             }
             playButton.disabled = true; //disable play button because no card is selected which is an invalid move
@@ -1840,14 +1840,14 @@ const gameLoop = async (roomCode, socket, firstTurnClientId, onResume) => {
             passButton.disabled = true
 
             //log gameState values
-            console.log("GameState isFirstMove:", GameModule.isFirstMove);
-            console.log("GameState Players:", GameModule.players);
-            console.log("GameState Game Deck:", GameModule.gameDeck);
-            console.log("GameState Last Hand:", GameModule.lastHand);
-            console.log("GameState Turn:", GameModule.turn);
-            console.log("GameState Finished Deck:", GameModule.finishedDeck);
-            console.log("GameState Players Finished:", GameModule.playersFinished);
-            console.log("GameState playedHand:", GameModule.playedHand);
+            //console.log("GameState isFirstMove:", GameModule.isFirstMove);
+            //console.log("GameState Players:", GameModule.players);
+            //console.log("GameState Game Deck:", GameModule.gameDeck);
+            //console.log("GameState Last Hand:", GameModule.lastHand);
+            //console.log("GameState Turn:", GameModule.turn);
+            //console.log("GameState Finished Deck:", GameModule.finishedDeck);
+            //console.log("GameState Players Finished:", GameModule.playersFinished);
+            //console.log("GameState playedHand:", GameModule.playedHand);
 
             const last = await getLastHand(socket, roomCode);
 
@@ -1866,12 +1866,12 @@ const gameLoop = async (roomCode, socket, firstTurnClientId, onResume) => {
                 // mirror move from other clients using their sent payload
                 await receivePlayerHand(socket, roomCode);
             }
-            console.log("Played Hand Length: " + GameModule.playedHand)
+            //console.log("Played Hand Length: " + GameModule.playedHand)
 
             //if player played a valid hand
             if(GameModule.playedHand >= 1 && GameModule.playedHand <= 5){
                 //GameModule.playedHistory.push(GameModule.lastHand); //push last valid hand into playedHistory array
-                console.log("played hand debug: " + GameModule.playedHand);
+                //console.log("played hand debug: " + GameModule.playedHand);
 
                 // do a new function here input current turn, instead so theres only one animation per turn instead of all cards being sorted after each turn
                 //if player or ai play a valid hand, sort their cards
@@ -1884,7 +1884,7 @@ const gameLoop = async (roomCode, socket, firstTurnClientId, onResume) => {
 
                     // Get final data (playersFinished, losingPlayer)
                     const { playersFinished, losingPlayer } = await gameOverPromise;
-                    console.log(losingPlayer);
+                    //console.log(losingPlayer);
 
                     // Now it's safe to animate: all clients have acked the last hand,
                     // and gameDeck includes those last cards, unmount finishedDeck after animations, and reset gameState
@@ -3785,12 +3785,12 @@ async function joinRoomMenu(socket, username) {
             };
 
             const onRejoin = () => {
-                console.log("successfully rejoined");
+                //console.log("successfully rejoined");
                 settle({ socket, roomCode, isRejoin: true });
             };
 
             const onJoined = () => {
-                console.log("Joined room successfully");
+                //console.log("Joined room successfully");
                 settle({ socket, roomCode, isRejoin: false });
             };
 
@@ -4577,7 +4577,7 @@ async function spLoop(spContinue) {
     showButton("play");
     showButton("pass");
     showButton("clear");
-    setHiddenSafe(gameInfo, false);
+    //setHiddenSafe(gameInfo, false);
     setHiddenSafe(sortSelect, false);
 
     // show names here 
@@ -4636,7 +4636,7 @@ async function spLoop(spContinue) {
     // main single player game loop, return results array
     const results = await spGameLoop(firstTurnClientId);
     
-    console.log(results);
+    //console.log(results);
     return results;
 }
 
@@ -4658,7 +4658,7 @@ async function startGame(socket, roomCode){
     showButton("play");
     showButton("pass");
     showButton("clear");
-    setHiddenSafe(gameInfo, false);
+    //setHiddenSafe(gameInfo, false);
     setHiddenSafe(sortSelect, false);
 
     // Remove any existing event listeners for these events to avoid multiple listeners
@@ -4690,7 +4690,7 @@ async function startGame(socket, roomCode){
                 GameModule.isFirstMove = isFirstMove;
                 // Using unique socket id, assign the appropriate index
                 const localPlayerIndex = players.findIndex(p => p.socketId === GameModule.players[0].socketId);
-                console.log("LOCAL PLAYER INDEX:", localPlayerIndex);
+                //console.log("LOCAL PLAYER INDEX:", localPlayerIndex);
 
                 if (localPlayerIndex !== -1) {
                     // Rotate server order so local player is index 0 in GameModule
@@ -4705,7 +4705,7 @@ async function startGame(socket, roomCode){
                     });
                 }
 
-                console.log()
+                //console.log()
 
                 // Update UI labels
                 for (let i = 0; i < playerInfo.length; i++) {
@@ -4763,7 +4763,7 @@ async function startGame(socket, roomCode){
 
         // listeners are now attached, tell server we’re ready to receive
         socket.emit('readyForStart', roomCode);
-        console.log("emitted readyForStart");
+        //console.log("emitted readyForStart");
 
         // wait for data to flow in
         await playersSnapshotPromise;
@@ -4776,7 +4776,7 @@ async function startGame(socket, roomCode){
         gmNewToken('startGame');
         const results = await gameLoop(roomCode, socket, firstTurnClientId, false);
         
-        console.log(results);
+        //console.log(results);
         return results;
 
     } finally {
@@ -5085,15 +5085,15 @@ function setupPauseModal(socket, roomCode){
         GameModule.isFirstMove = isFirstMove;
         GameModule.lastValidHand = lastValidHand;
 
-        console.log("isFirstMove")
-        console.log(GameModule.isFirstMove)
+        //console.log("isFirstMove")
+        //console.log(GameModule.isFirstMove)
 
         // 3) Ensure our local player has the current socket id
         GameModule.players[0].socketId = socket.id;
 
         const localPlayerIndex = players.findIndex(p => p.socketId === GameModule.players[0].socketId);
 
-        console.log("LOCAL PLAYER INDEX:", localPlayerIndex);
+        //console.log("LOCAL PLAYER INDEX:", localPlayerIndex);
 
         // repopulate gamemodule players with info from server emit
         if (localPlayerIndex !== -1) {
@@ -5127,7 +5127,7 @@ function setupPauseModal(socket, roomCode){
 
         // set turn to appopriate player index based off server's current turn client id
         GameModule.turn = GameModule.players.findIndex(p => p.clientId === turnClientId);
-        console.log(GameModule.turn);
+        //console.log(GameModule.turn);
         // 1) Find my local seat
         const mySeat = GameModule.players.findIndex(p => p.clientId === me);
 
@@ -5255,7 +5255,7 @@ function setupPauseModal(socket, roomCode){
 
     // listen for force reset emit from server (means 1 player left in server)
     const onRoomForceReset = ({ reason }) => {
-        console.log('Force reset:', reason);
+        //console.log('Force reset:', reason);
 
         cleanupPauseBindings();
         gmCancelToken('forceReset');
@@ -5282,7 +5282,7 @@ function waitForForceResetOnce() {
 function startGameSafe(socket, roomCode, username) {
     if (window.isResume) {
         // Do not arm startGame at all; Promise.race will ignore this branch.
-        console.log("not arming")
+        //console.log("not arming")
         
         return new Promise(() => {});
     }
@@ -5417,7 +5417,7 @@ window.onload = async function() {
                 if (!Array.isArray(startOutcome)) continue;
 
                 const results = startOutcome;
-                console.log(results);
+                //console.log(results);
                 
                 const endOutcome = await Promise.race([
                     endMenu(joinedRoomSocket, roomCode, results),

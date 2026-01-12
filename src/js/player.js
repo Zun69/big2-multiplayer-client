@@ -30,8 +30,8 @@ function playRandomCardSound() {
         idx = (Math.random() * playCardSounds.length) | 0;
     } while (playCardSounds.length > 1 && idx === lastSoundIndex);
     lastSoundIndex = idx;
-    console.log("playCard sound")
-    console.log(idx);
+    /*console.log("playCard sound")
+    console.log(idx);*/
     playCardSounds[idx].play();
 }
 
@@ -175,7 +175,7 @@ export default class Player{
             return va - vb; // ascending
         });
 
-        console.log("currrent hand: " + hand);
+        //console.log("currrent hand: " + hand);
     }
 
     // ---- GC-relative sorting anchors (percent-of-container) ----
@@ -292,18 +292,17 @@ export default class Player{
         for(let i = 3; i >= 0; i--){
             var currentRank = +hand[i].split(' ')[1]; // Convert to number
             var nextRank = +hand[i + 1].split(' ')[1]; // Convert to number
-            
 
             //if nextRank - currentRank value not 1, means card values are not exactly one rank higher
             if(nextRank - currentRank != 1){
-                console.log("CURRENT RANK: " + currentRank + "NEXT RANK: " + nextRank + "i value: " + i);
+                //console.log("CURRENT RANK: " + currentRank + "NEXT RANK: " + nextRank + "i value: " + i);
                 // J Q K A 2, make transition from king (current rank) to A (next rank) a valid straight
                 if(i == 3 && currentRank == 13 && nextRank == 1){
-                    console.log("10 J Q K A")
+                    //console.log("10 J Q K A")
                     continue;
                 }
                 if(i == 2 && currentRank == 13 && nextRank == 1){
-                    console.log("J Q K A 2")
+                    //console.log("J Q K A 2")
                     continue;
                 }
                 //if i == 1 (2 card) AND currentRank == 13 (2 rank card) AND nextrank = 1 (3 rank card), means hand is A 2 3 4 5, continue to ace card
@@ -408,17 +407,17 @@ export default class Player{
                 hand.splice(4, 1); //remove 2 from hand
                 hand.splice(3, 1); //remove Ace from hand
                 hand.unshift(aceCard, twoCard); //add ace card and two to start of hand
-                console.log(hand);
+                //console.log(hand);
         }
         //else if hand contains 3 4 5 6 2 change to 2 3 4 5 6
         else if(splitCard1[1] == 3 && splitCard2[1] == 4 && splitCard3[1] == 5 && splitCard4[1] == 6 && splitCard5[1] == 2){
             var twoCard = hand[4];
             hand.splice(4, 1); //remove 2 from hand
             hand.unshift(twoCard);
-            console.log(hand);
+            //console.log(hand);
         } 
         else {
-            console.log("not a unique straight");
+            //console.log("not a unique straight");
             return;
         }
     }
@@ -429,8 +428,8 @@ export default class Player{
         deck.sort(); //sort in big 2 ascending order
         var cardMap = deck.cardHash();
 
-        console.log("gameDeck length: " + gameDeck.length);
-        console.log("serverLastValidHand: " + serverLastValidHand);
+        //console.log("gameDeck length: " + gameDeck.length);
+        //console.log("serverLastValidHand: " + serverLastValidHand);
 
         // Normalize to the string format your validator expects ("suit rank")
         const lastPlayedHand = (serverLastValidHand || []).map(c => `${c.suit} ${c.rank}`);
@@ -442,8 +441,8 @@ export default class Player{
                 //if gamedeck is empty TO DO program it to detect after round has been won, pass in passTracker
                 if(gameDeck.length == 0){ 
                     if(hand[0] == "0 3" && isFirstMove){
-                        console.log('first round 3 of diamonds validation true')
-                        console.log(isFirstMove);
+                        //console.log('first round 3 of diamonds validation true')
+                        //console.log(isFirstMove);
                         return true;
                     }
                     //if player has won the previous hand, allow them to place any single card down 
@@ -544,7 +543,7 @@ export default class Player{
                 this.detectUniqueStraights(hand);
                 //return player's current combo
                 var combo = this.validateCombo(hand);
-                console.log("current combo: " + combo);
+                //console.log("current combo: " + combo);
 
                 //TODO clean this up
                 if(gameDeck.length == 0){
@@ -610,7 +609,7 @@ export default class Player{
                         const normalize = (s) => (s || '').replace('WonRound','');
                         // if you also want to collapse “3d” lead variants when comparing types:
                         const normalize5 = (s) => normalize(s).replace('3d','');
-                        console.log("last played combo: " + lastPlayedCombo);
+                        //console.log("last played combo: " + lastPlayedCombo);
 
                         // then use these for all your 5-card type comparisons:
                         const L = normalize5(lastPlayedCombo);
@@ -748,12 +747,12 @@ export default class Player{
 
         //function when player clicks on card
         var cardClickListener = function(card) {
-            console.log('Card clicked:', card.$el);
+            //console.log('Card clicked:', card.$el);
             sortSelect.disabled = true;
 
             //id the clicked card
             let cardId = card.suit + " " + card.rank;
-            console.log(cardId);
+            //console.log(cardId);
 
             if(hand.includes(cardId)) { 
                 //remove checked class
@@ -766,11 +765,11 @@ export default class Player{
                     x: card.x,
                     y: card.y + 10,
                 })
-                console.log("unclicked");
+                /*console.log("unclicked");
                 console.log("currrent hand: " + hand);
-                console.log("currrent hand length: " + hand.length);
+                console.log("currrent hand length: " + hand.length);*/
             } else if (!hand.includes(cardId) && hand.length < 5){ //else if card isnt in hand array && hand length is less than 5
-                console.log("clicked");
+                //console.log("clicked");
                 hand.push(cardId); //insert clicked on card into hand
                 //add checked css class for styling
                 card.animateTo({
@@ -781,12 +780,12 @@ export default class Player{
                     x: card.x,
                     y: card.y - 10,
                 })
-                console.log("currrent hand length: " + hand.length);
+                //console.log("currrent hand length: " + hand.length);
             }
 
             self.sortHandArray(hand);
             cardValidate = self.cardLogic(gameDeck, hand, lastValidHand, playersFinished, isFirstMove); //return valid if played card meets requirements
-            console.log("card validation: " + cardValidate);
+            //console.log("card validation: " + cardValidate);
 
             //if current hand is validated, enable play button, else disable it because its an invalid move
             if(cardValidate) {
@@ -867,7 +866,7 @@ export default class Player{
                     let stackInterval = 0.25;
 
                     let rotationOffset = Math.random() * 5 + -5; // Calculate a new rotation offset for each card
-                    console.log("ROTATIONAL OFFSET: " + rotationOffset)
+                    //console.log("ROTATIONAL OFFSET: " + rotationOffset)
 
                     // simple, global target for everyone
                     // set x coord as center of middle card
@@ -897,9 +896,9 @@ export default class Player{
                             
                             onComplete: function () {
                                 if (cardIndex !== -1) {
-                                    console.log("card inserted: " + self.cards[cardIndex].suit + self.cards[cardIndex].rank);
+                                    //console.log("card inserted: " + self.cards[cardIndex].suit + self.cards[cardIndex].rank);
                                     cardsToRemove.unshift(self.cards[cardIndex].suit + " " + self.cards[cardIndex].rank); //add card index into cardsToRemove array, so I can remove all cards at same time after animations are finished
-                                    console.log("Cards to remove: " + cardsToRemove);
+                                    //console.log("Cards to remove: " + cardsToRemove);
                                 }
                                 //card.mount(gameDeckDiv);
                                 cardResolve(); //only resolve promise when animation is complete
@@ -1067,12 +1066,12 @@ export default class Player{
 
         //function when player clicks on card
         var cardClickListener = function(card) {
-            console.log('Card clicked:', card.$el);
+            //console.log('Card clicked:', card.$el);
             sortSelect.disabled = true;
 
             //id the clicked card
             let cardId = card.suit + " " + card.rank;
-            console.log(cardId);
+            //console.log(cardId);
 
             if(hand.includes(cardId)) { 
                 //remove checked class
@@ -1085,11 +1084,11 @@ export default class Player{
                     x: card.x,
                     y: card.y + 10,
                 })
-                console.log("unclicked");
-                console.log("currrent hand: " + hand);
-                console.log("currrent hand length: " + hand.length);
+                //console.log("unclicked");
+                //console.log("currrent hand: " + hand);
+                //console.log("currrent hand length: " + hand.length);
             } else if (!hand.includes(cardId) && hand.length < 5){ //else if card isnt in hand array && hand length is less than 5
-                console.log("clicked");
+                //console.log("clicked");
                 hand.push(cardId); //insert clicked on card into hand
                 //add checked css class for styling
                 card.animateTo({
@@ -1100,12 +1099,12 @@ export default class Player{
                     x: card.x,
                     y: card.y - 10,
                 })
-                console.log("currrent hand length: " + hand.length);
+                //console.log("currrent hand length: " + hand.length);
             }
 
             self.sortHandArray(hand);
             cardValidate = self.cardLogic(gameDeck, hand, serverLastValidHand, playersFinished, isFirstMove); //return valid if played card meets requirements
-            console.log("card validation: " + cardValidate);
+            //("card validation: " + cardValidate);
 
             //if current hand is validated, enable play button, else disable it because its an invalid move
             if(cardValidate) {
@@ -1194,8 +1193,8 @@ export default class Player{
                 // then wait for verdict
                 const outcome = await self.waitForTurnOutcome(socket);
 
-                console.log("Outcome Played Cards");
-                console.log(outcome);
+                //console.log("Outcome Played Cards");
+                //console.log(outcome);
 
                 
 
@@ -1243,9 +1242,9 @@ export default class Player{
                                 onComplete: function () {
                                     if (cardIndex !== -1) {
                                         
-                                        console.log("card inserted: " + self.cards[cardIndex].suit + self.cards[cardIndex].rank);
+                                        //console.log("card inserted: " + self.cards[cardIndex].suit + self.cards[cardIndex].rank);
                                         cardsToRemove.unshift(self.cards[cardIndex].suit + " " + self.cards[cardIndex].rank); //add card index into cardsToRemove array, so I can remove all cards at same time after animations are finished
-                                        console.log("Cards to remove: " + cardsToRemove);
+                                        //console.log("Cards to remove: " + cardsToRemove);
                                     }
                                     //card.mount(gameDeckDiv);
                                     cardResolve(); //only resolve promise when animation is complete
@@ -1263,7 +1262,7 @@ export default class Player{
                             });
                     
                             if (indexToRemove !== -1) {
-                                console.log("removed card: " + self.cards[indexToRemove].suit + self.cards[indexToRemove].rank);
+                                //console.log("removed card: " + self.cards[indexToRemove].suit + self.cards[indexToRemove].rank);
                                 self.cards.splice(indexToRemove, 1);
                             }
                         });
@@ -1303,7 +1302,7 @@ export default class Player{
                         attemptedCards: serverValidateCards, // what the client tried to submit
                         clientId: self.clientId,             // if you have it on the client
                     });*/
-                    console.log("Cheater detected")
+                    //console.log("Cheater detected")
                 }
             }
                 
@@ -1352,8 +1351,8 @@ export default class Player{
                 // then wait for payload that contains server gamestate
                 const outcome = await self.waitForTurnOutcome(socket);
 
-                console.log("Outcome Played Cards");
-                console.log(outcome);
+                //console.log("Outcome Played Cards");
+                //console.log(outcome);
 
                 passSound.play(); 
                 resolve(outcome); 
