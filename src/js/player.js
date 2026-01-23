@@ -181,7 +181,7 @@ export default class Player{
     // ---- GC-relative sorting anchors (percent-of-container) ----
     // axis: which axis the hand fans along; dir: +/- spread direction; rot: card face orientation
     SORT_ANCHORS = [
-        { leftPct: 0.50, topPct: 0.83, axis: 'x', dir: +1, rot: 0,   sideways: false }, // seat 0 (you, bottom)
+        { leftPct: 0.50, topPct: 0.84, axis: 'x', dir: +1, rot: 0,   sideways: false }, // seat 0 (you, bottom)
         { leftPct: 0.06, topPct: 0.50, axis: 'y', dir: +1, rot: 270, sideways: true  }, // seat 1 (left)
         { leftPct: 0.50, topPct: 0.1, axis: 'x', dir: -1, rot: 0,   sideways: false }, // seat 2 (top)
         { leftPct: 0.940, topPct: 0.50, axis: 'y', dir: -1, rot: 270, sideways: true  }, // seat 3 (right)
@@ -212,7 +212,9 @@ export default class Player{
 
     sortingAnimation(playerNum, { rotateAfterTurn = false, duration = 200, stagger = 0 } = {}) {
         const promises = [];
-        const STEP = 40; // fan spacing (px) – tweak to taste
+
+        // match your deal stride look
+        const STEP = 35;
 
         const N   = Math.max(1, this.cards.length);
         const mid = (N - 1) / 2;
@@ -220,17 +222,35 @@ export default class Player{
         const { ax, ay, cfg } = this.getSeatAnchorGC(playerNum);
         const rotTarget = rotateAfterTurn ? 0 : cfg.rot;
 
-        this.cards.forEach((card, i) => {
-            promises.push(new Promise(resolve => {
-            try {
-                // compute GC-space target for this index
-                const spread = (i - mid) * STEP * cfg.dir;
-                const xGC = cfg.axis === 'x' ? (ax + spread) : ax;
-                const yGC = cfg.axis === 'y' ? (ay + spread) : ay;
+        // cache a reasonable card size once (avoid per-card layout thrash)
+        // fall back to measured rect if offsetWidth/Height not available yet
+        let cardW = 0, cardH = 0;
+        for (const c of this.cards) {
+            const el = c?.$el;
+            if (!el) continue;
+            cardW = el.offsetWidth  || el.getBoundingClientRect().width  || 0;
+            cardH = el.offsetHeight || el.getBoundingClientRect().height || 0;
+            if (cardW && cardH) break;
+        }
+        const halfW = cardW ? cardW / 2 : 0;
+        const halfH = cardH ? cardH / 2 : 0;
 
-                // convert to the card's current parent's local space before animating
-                const parentEl = card.$el.parentElement || document.getElementById('gameDeck');
-                const { x, y } = this.gcToLocal(xGC, yGC, parentEl);
+        this.cards.forEach((card, i) => {
+            promises.push(new Promise((resolve) => {
+            try {
+                // compute GC-space target for this index (this is the *center* point)
+                const spread = (i - mid) * STEP * cfg.dir;
+                const xGC_center = (cfg.axis === 'x') ? (ax + spread) : ax;
+                const yGC_center = (cfg.axis === 'y') ? (ay + spread) : ay;
+
+                // convert GC-space -> parent's local space
+                const parentEl = card.$el?.parentElement || document.getElementById('gameDeck');
+                const { x: xLocalCenter, y: yLocalCenter } = this.gcToLocal(xGC_center, yGC_center, parentEl);
+
+                // IMPORTANT: Deck.animateTo positions the element by its top-left,
+                // so subtract half card size to truly center the card on the anchor.
+                const x = Math.round(xLocalCenter - halfW);
+                const y = Math.round(yLocalCenter - halfH);
 
                 // zIndex: near edge on top for left/up fans
                 const invert = (cfg.dir < 0);
@@ -241,7 +261,7 @@ export default class Player{
                 const finish = () => {
                 if (finished) return;
                 finished = true;
-                card.$el.style.zIndex = z;
+                if (card.$el) card.$el.style.zIndex = z;
                 resolve();
                 };
 
@@ -251,11 +271,13 @@ export default class Player{
                 ease: 'linear',
                 rot: rotTarget,
                 rotateSideways: !!cfg.sideways,
-                x, y,
+                x,
+                y,
                 onComplete: finish
                 });
 
-                setTimeout(finish, duration + 100); // safety
+                // safety resolve in case Deck.js drops onComplete on mobile
+                setTimeout(finish, duration + 120);
             } catch (e) {
                 console.warn('[sortingAnimation] error animating card', e);
                 resolve();
@@ -265,8 +287,6 @@ export default class Player{
 
         return Promise.all(promises);
     }
-
-
 
     //return combo string based on hand array
     validateCombo(hand){

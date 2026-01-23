@@ -4,48 +4,6 @@ import spOpponent, { loadPolicyModel } from "./spOpponent.js";
 import PocketBase, { BaseAuthStore } from "https://cdn.jsdelivr.net/npm/pocketbase@0.21.1/dist/pocketbase.es.mjs";
 import { resetHenryObsMemory } from "./henryObs.js";
 
-// preload 52 SVG card faces (0_1.svg .. 3_13.svg)
-const CARD_FACE_DIR = "src/css/faces"; // no leading slash for GitHub Pages
-
-function buildAllFaceUrls() {
-  const urls = [];
-  for (let suit = 0; suit <= 3; suit++) {
-    for (let rank = 1; rank <= 13; rank++) {
-      urls.push(`${CARD_FACE_DIR}/${suit}_${rank}.svg`);
-    }
-  }
-  return urls;
-}
-
-// Fire-and-forget warm-cache (doesn't block your initial render)
-function warmSvgCache(urls, { concurrency = 8 } = {}) {
-  const q = [...new Set(urls)].filter(Boolean);
-  let i = 0;
-
-  const worker = async () => {
-    while (i < q.length) {
-      const url = q[i++];
-      try {
-        await fetch(url, { cache: "force-cache" });
-      } catch (_) {}
-    }
-  };
-
-  for (let w = 0; w < concurrency; w++) worker();
-}
-
-function preloadCardsSoonAfterLoad() {
-  const urls = buildAllFaceUrls();
-
-  const run = () => warmSvgCache(urls, { concurrency: 8 });
-
-  // Prefer idle time so you don't slow first paint
-  if ("requestIdleCallback" in window) requestIdleCallback(run, { timeout: 1500 });
-  else setTimeout(run, 400);
-}
-
-window.addEventListener("load", preloadCardsSoonAfterLoad);
-
 // lookup table for printing actual rank in last played hand
 const rankLookup = {
     1: 'A',
@@ -540,11 +498,17 @@ function gcToLocal(xGC, yGC, parentEl) {
     };
 }
 
+function gcToLocalCentered(xGC, yGC, parentEl, cardEl) {
+  const { x, y } = gcToLocal(xGC, yGC, parentEl);
+  const w = cardEl?.offsetWidth  || 0;
+  const h = cardEl?.offsetHeight || 0;
+  return { x: x - w / 2, y: y - h / 2 };
+}
 
 // ---- Dealing layout (percent-of-container, no seat divs) ----
 const DEAL_ANCHORS = [
     // seat 0 (bottom; fan along X →)
-    { leftPct: 0.50, topPct: 0.83, axis: 'x', dir: +1, rot: 0 },
+    { leftPct: 0.50, topPct: 0.84, axis: 'x', dir: +1, rot: 0 },
     // seat 1 (left; fan down ↓)
     { leftPct: 0.06, topPct: 0.50, axis: 'y', dir: +1, rot: 90 },
     // seat 2 (top; fan along X ←)
@@ -612,7 +576,7 @@ async function dealCards(serverDeck, socket, roomCode, firstDealClientId) {
 
         // compute coords for the card’s *current* parent (deck is mounted in #gameDeck)
         const deckParent = card.$el.parentElement || document.getElementById('gameDeck');
-        const { x: xLocal, y: yLocal } = gcToLocal(xGC, yGC, deckParent);
+        const { x: xLocal, y: yLocal } = gcToLocalCentered(xGC, yGC, deckParent, card.$el);
 
         const localSeat = 0; // you
 
@@ -706,7 +670,7 @@ async function dealSinglePlayerCards() {
 
         // compute coords for the card’s *current* parent (deck is mounted in #gameDeck)
         const deckParent = card.$el.parentElement || document.getElementById('gameDeck');
-        const { x: xLocal, y: yLocal } = gcToLocal(xGC, yGC, deckParent);
+        const { x: xLocal, y: yLocal } = gcToLocalCentered(xGC, yGC, deckParent, card.$el);
 
         const localSeat = 0; // you
 
@@ -1931,6 +1895,12 @@ async function loginMenu() {
     let spButton = document.getElementById("singlePlayerButton");
     const errorMessage1 = document.getElementById("errorMessage1");
 
+    // Build deck (server-supplied), mount to DOM, and shuffle/arrange
+    let deck = Deck(false);
+    deck.mount(document.getElementById('warmupDeck'));
+    deck.flip();
+    deck.fan();
+
     // reset & rebind references
     [loginButton, createAccountButton, lostPasswordButton] = resetButtonListeners(loginButton, createAccountButton, lostPasswordButton);
 
@@ -2017,6 +1987,7 @@ async function loginMenu() {
 
             const onAuthed = () => {
                 if (authed) return;
+                deck.unmount();
                 authed = true;
                 socket.off('authenticated', onAuthed);
                 clearLoginErrors(); 
@@ -2064,6 +2035,7 @@ async function loginMenu() {
 
         // buttons
         loginButton.addEventListener("click", () => {
+            deck.unmount();
             clickSounds[0].play();
             const u = userNameInput.value.trim();
             const p = passwordInput.value.trim();
@@ -2077,6 +2049,7 @@ async function loginMenu() {
         });
 
         spButton.addEventListener("click", () => {
+            deck.unmount();
             clickSounds[0].play();
             setHiddenSafe(loginMenu, true);
             settle({ type: "singlePlayer" });
@@ -2087,6 +2060,7 @@ async function loginMenu() {
         createAccountButton.addEventListener(
             "click",
             () => {
+                deck.unmount();
                 clickSounds[0].play();
                 clearLoginErrors(); 
                 setHiddenSafe(loginMenu, true);
@@ -2097,6 +2071,7 @@ async function loginMenu() {
 
         // Route: Forgot Password (optional menu below)
         lostPasswordButton.addEventListener("click", () => {
+            deck.unmount();
             clickSounds[0].play();
             clearLoginErrors(); 
             settle({ type: 'forgotPassword' });
@@ -4930,6 +4905,12 @@ function gcToGameDeck(xGC, yGC) {
     return { x: xGC - (dr.left - gr.left), y: yGC - (dr.top - gr.top) };
 }
 
+function centerXY(x, y, cardEl) {
+  const w = cardEl?.offsetWidth  || 0;
+  const h = cardEl?.offsetHeight || 0;
+  return { x: x - w / 2, y: y - h / 2 };
+}
+
 // mount cards into gameDeck using the SAME pose function as dealing
 function mountCardsInGC(cards, seatIdx, faceUp = false) {
     const gameDeck = document.getElementById('gameDeck');
@@ -4954,9 +4935,18 @@ function mountCardsInGC(cards, seatIdx, faceUp = false) {
 
         // convert GC → gameDeck local space
         const { x, y } = gcToGameDeck(xGC, yGC);
+        const pos = centerXY(x, y, card.$el);
 
         card.setSide(faceUp ? 'front' : 'back');
-        card.animateTo({ delay: 0, duration: 0, ease: 'linear', rot, x, y, z: i + 1 });
+        card.animateTo({
+            delay: 0,
+            duration: 0,
+            ease: 'linear',
+            rot,
+            x: pos.x,
+            y: pos.y,
+            z: i + 1 
+        });
 
         // keep your local state in sync
         if (GameModule.players?.[seatIdx]) GameModule.players[seatIdx].addCard?.(card);
@@ -5080,7 +5070,7 @@ function setupPauseModal(socket, roomCode){
         showButton("play");
         showButton("pass");
         showButton("clear");
-        setHiddenSafe(gameInfo, false);
+        //setHiddenSafe(gameInfo, false);
 
         GameModule.isFirstMove = isFirstMove;
         GameModule.lastValidHand = lastValidHand;
@@ -5174,15 +5164,15 @@ function setupPauseModal(socket, roomCode){
                 const yGC = anchorYGC + (i * STACK_DRIFT);
 
                 // convert GC to gameDeck local space
-                const { x, y } = gcToLocal(xGC, yGC, stage);
+                const { x: xLocal, y: yLocal } = gcToLocalCentered(xGC, yGC, stage, card.$el);
 
                 card.animateTo({
                     delay: 0,
                     duration: 0,
                     ease: 'linear',
                     rot: 0,
-                    x,
-                    y,
+                    xLocal,
+                    yLocal,
                     z: i + 1,
                 });
             });
@@ -5204,7 +5194,7 @@ function setupPauseModal(socket, roomCode){
             // GC center to stage local
             const { rect } = _getGCMeta();                      
             const centerGC = { x: rect.width * 0.5, y: rect.height * 0.5 };
-            const centerLocal = gcToLocal(centerGC.x, centerGC.y, stage);
+            const centerLocal = gcToLocalCentered(centerGC.x, centerGC.y, stage, card.$el);
 
             gameDeck.forEach((c, i) => {
                 const card = Deck.Card(i);
@@ -5300,31 +5290,7 @@ function waitForResumedResultsOnce() {
     });
 }
 
-function preventScrollAndZoom(targetId = 'gameContainer') {
-    const el = document.getElementById(targetId);
-    if (!el) return;
-
-    let lastTouchEnd = 0;
-
-    // Block double-tap scroll
-    el.addEventListener('touchend', (e) => {
-        const now = Date.now();
-        if (now - lastTouchEnd <= 300) e.preventDefault();
-        lastTouchEnd = now;
-    }, { passive: false });
-
-    // Block any dragging / edge scroll
-    el.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
-
-    // Block legacy pinch gestures (older iOS)
-    document.addEventListener('gesturestart', (e) => e.preventDefault());
-}
-
-
 window.onload = async function() {
-    // finally lock scrolling/zoom for mobile
-    //preventScrollAndZoom('gameContainer');
-
     // If the user came via email link
     const url = new URL(window.location.href);
     const token = url.searchParams.get('token') || url.hash.replace(/^#.*token=/, '').split('token=')[1];

@@ -1,11 +1,14 @@
 /* Styles for desktops and laptops */
 
 /* Media query targeting devices with a minimum screen width of 1000px (typical for desktops and laptops) */
-@media only screen and (min-width: 1000px) {
+
     *, *::after, *::before {
         box-sizing: border-box;
     }
-    
+
+    html {
+      font-size: 125%;
+    }
     
     body {
         font-family: Arial, Helvetica, sans-serif;
@@ -203,9 +206,18 @@
     /*gameDeck styling*/
     #gameDeck {
         position: absolute;
-        top: 50%; /* Place it vertically in the middle */
-        left: 50%; /* Place it horizontally in the middle */
-        transform: translate(-50%, -50%); /* Center it perfectly */
+        top: 40%; /* Place it vertically in the middle */
+        left: 47%; /* Place it horizontally in the middle */
+        transform: translate(-50%, -50%);
+    }
+
+    #warmupDeck {
+        position: absolute;
+        top: 47%; /* Place it vertically in the middle */
+        left: 40%; /* Place it horizontally in the middle */
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+        z-index: 0;
     }
     
     #gameInfo {
@@ -370,7 +382,7 @@
     /* Lock page scroll while paused */
     body.is-paused{ overflow:hidden; }
 
-}
+
 
 
 
