@@ -214,7 +214,7 @@ export default class Player{
         const promises = [];
 
         // match your deal stride look
-        const STEP = 35;
+        const STEP = 40;
 
         const N   = Math.max(1, this.cards.length);
         const mid = (N - 1) / 2;
