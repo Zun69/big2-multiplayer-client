@@ -499,10 +499,10 @@ function gcToLocal(xGC, yGC, parentEl) {
 }
 
 function gcToLocalCentered(xGC, yGC, parentEl, cardEl) {
-  const { x, y } = gcToLocal(xGC, yGC, parentEl);
-  const w = cardEl?.offsetWidth  || 0;
-  const h = cardEl?.offsetHeight || 0;
-  return { x: x - w / 2, y: y - h / 2 };
+    const { x, y } = gcToLocal(xGC, yGC, parentEl);
+    const w = cardEl?.offsetWidth  || 0;
+    const h = cardEl?.offsetHeight || 0;
+    return { x: x - w / 2, y: y - h / 2 };
 }
 
 // ---- Dealing layout (percent-of-container, no seat divs) ----
@@ -1987,7 +1987,7 @@ async function loginMenu() {
 
             const onAuthed = () => {
                 if (authed) return;
-                deck.unmount();
+                try { deck.unmount(); } catch (e) { /* already unmounted */ }
                 authed = true;
                 socket.off('authenticated', onAuthed);
                 clearLoginErrors(); 
@@ -2035,7 +2035,7 @@ async function loginMenu() {
 
         // buttons
         loginButton.addEventListener("click", () => {
-            deck.unmount();
+            try { deck.unmount(); } catch (e) { /* already unmounted */ }
             clickSounds[0].play();
             const u = userNameInput.value.trim();
             const p = passwordInput.value.trim();
@@ -2049,7 +2049,7 @@ async function loginMenu() {
         });
 
         spButton.addEventListener("click", () => {
-            deck.unmount();
+            try { deck.unmount(); } catch (e) { /* already unmounted */ }
             clickSounds[0].play();
             setHiddenSafe(loginMenu, true);
             settle({ type: "singlePlayer" });
@@ -2060,7 +2060,7 @@ async function loginMenu() {
         createAccountButton.addEventListener(
             "click",
             () => {
-                deck.unmount();
+                try { deck.unmount(); } catch (e) { /* already unmounted */ }
                 clickSounds[0].play();
                 clearLoginErrors(); 
                 setHiddenSafe(loginMenu, true);
@@ -2071,7 +2071,7 @@ async function loginMenu() {
 
         // Route: Forgot Password (optional menu below)
         lostPasswordButton.addEventListener("click", () => {
-            deck.unmount();
+            try { deck.unmount(); } catch (e) { /* already unmounted */ }
             clickSounds[0].play();
             clearLoginErrors(); 
             settle({ type: 'forgotPassword' });
