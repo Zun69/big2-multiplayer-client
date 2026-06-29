@@ -81,7 +81,7 @@ const pb = new PocketBase(PB_URL, new SessionAuthStore("pb_auth"));
 
 function pbAvatarUrl(pbId, file, thumb='64x64') {
     if (!pbId || !file) return '';
-    return pb.files.getUrl({ collectionId: '_pb_users_auth_', id: pbId }, file, { thumb });
+    return pb.files.getURL({ collectionId: '_pb_users_auth_', id: pbId }, file, { thumb });
 }
 
 let _spModelPromise = null;
