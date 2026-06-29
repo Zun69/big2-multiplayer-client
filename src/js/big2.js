@@ -1,7 +1,7 @@
 import Player from "./player.js"
 import Opponent from "./opponent.js"
 import spOpponent, { loadPolicyModel } from "./spOpponent.js";
-import PocketBase, { BaseAuthStore } from "https://cdn.jsdelivr.net/npm/pocketbase@0.21.1/dist/pocketbase.es.mjs";
+import PocketBase, { BaseAuthStore } from "https://cdn.jsdelivr.net/npm/pocketbase@0.27.0/dist/pocketbase.es.mjs";
 import { resetHenryObsMemory } from "./henryObs.js";
 
 // lookup table for printing actual rank in last played hand
@@ -47,7 +47,7 @@ let currentProfileUsername = null;
 
 let isJoiningRoom = false;
 
-const PB_URL = 'http://127.0.0.1:8090';
+const PB_URL = 'https://big2.kbcardgames.xyz/pb/';
 // store key "pb_auth" in sessionStorage (per tab), not localStorage (shared across tabs)
 
 class SessionAuthStore extends BaseAuthStore {
@@ -1977,7 +1977,7 @@ async function loginMenu() {
             const displayName = authData?.record?.name || usernameInput;
 
             // if account verified then socket connect with token
-            const socket = io(import.meta.env?.VITE_WS_URL || 'http://localhost:3000', {
+            const socket = io('https://big2.kbcardgames.xyz', {
                 auth: { pbToken: pb.authStore.token },
                 username: displayName, // export username
                 transports: ['polling','websocket'],
