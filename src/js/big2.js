@@ -2758,9 +2758,17 @@ async function renderLeaderboardMenu(metric = 'avg') {
             img.className = 'w-8 h-8 rounded-md object-cover border border-gray-300 dark:border-gray-600';
             img.style.aspectRatio = '1 / 1';
 
-            const nameSpan = document.createElement('span');
-            nameSpan.className = 'font-semibold text-gray-900 dark:text-gray-100 truncate';
+            const nameSpan = document.createElement('button');
+            nameSpan.type = 'button';
+            nameSpan.className = 'font-semibold text-blue-600 hover:text-blue-800 underline underline-offset-2 truncate cursor-pointer bg-transparent border-0 p-0 text-sm';
             nameSpan.textContent = row.name;
+            nameSpan.addEventListener('click', async () => {
+                try { clickSounds?.[2]?.play(); } catch {}
+                const profileMenu = document.getElementById('profileMenu');
+                setHiddenSafe(profileMenu, false);
+                await renderProfileHeader(row.name);
+                await renderProfileTable(row.name);
+            });
 
             rowDiv.append(img, nameSpan);
             playerTd.appendChild(rowDiv);
@@ -4114,6 +4122,7 @@ async function endMenu(socket, roomCode, results) {
     // leave to join room
     const handleBackClick = () => {
         clickSounds[0].play();
+        document.getElementById('chatBox').innerHTML = '';
         socket.emit('leaveRoom', roomCode);
         cleanup();
         setHiddenSafe(endMenu, true);
