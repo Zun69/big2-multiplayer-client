@@ -82,27 +82,8 @@
                     background-color 0.2s ease,
                     transform 0.2s ease;
     }
-
-    /* Make both close buttons hug the top-right corner */
-    #closeProfileButton,
-    #closeGameProfileButton,
-    #closeLeaderboardButton {
-        position: absolute;       /* keep absolute */
-        top: 0.25rem;             /* tighter top offset (≈4px) */
-        right: 0.25rem;           /* tighter right offset */
-        z-index: 10;              /* stay above menu contents */
-    }
-
-    #closeProfileButton:hover,
-    #closeGameProfileButton:hover,
-    #closeLeaderboardButton:hover {
-        background-color: rgba(0,0,0,0.05);
-    }
  
-    #profileMenu,
-    #gameProfileMenu,
     #joinRoomMenu,
-    #leaderboardMenu,
     #lobbyMenu,
     #endMenu {
         position: absolute;
@@ -110,19 +91,6 @@
         left: 50%; /* Place it horizontally in the middle */
         transform: translate(-50%, -50%); /* Center it perfectly */
         font-family: 'Poppins', sans-serif;
-    }
-
-    #availableRooms {
-        font-family: 'Poppins', sans-serif;
-        color: black;
-        text-align: left;
-    }
-
-    #availableRooms h3 {
-        margin-top: 0;
-        font-size: 18px;
-        text-align: center;
-        color: black;
     }
 
     /*leaderboard styling*/
@@ -382,7 +350,86 @@
     /* Lock page scroll while paused */
     body.is-paused{ overflow:hidden; }
 
+/* ===== joinRoomMenu top bar ===== */
+    #joinRoomMenu > div:first-child {
+        background: #fff;
+        border-bottom: 1px solid #f1f5f9;
+        padding: 10px 14px;
+    }
 
+    /* Avatar button ring on hover */
+    #avatarButton:hover { box-shadow: 0 0 0 3px #e2e8f0; }
+
+    /* ===== Available rooms list ===== */
+    #availableRooms {
+        background: #f8fafc;
+        padding: 12px;
+    }
+    #availableRooms h3 {
+        font-size: 0.7rem;
+        font-weight: 700;
+        color: #94a3b8;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        margin: 0 0 10px;
+    }
+
+    /* ===== Profile & leaderboard modals ===== */
+    #profileMenu,
+    #gameProfileMenu,
+    #leaderboardMenu {
+        background: #fff;
+        border: none;
+        border-radius: 20px;
+        box-shadow: 0 25px 60px rgba(0,0,0,0.18);
+    }
+
+    #closeProfileButton,
+    #closeGameProfileButton,
+    #closeLeaderboardButton {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: #f1f5f9;
+        color: #64748b;
+        font-size: 1.2rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: none;
+        cursor: pointer;
+        transition: background .15s;
+        z-index: 10;
+    }
+    #closeProfileButton:hover,
+    #closeGameProfileButton:hover,
+    #closeLeaderboardButton:hover {
+        background: #e2e8f0;
+        color: #0f172a;
+    }
+
+    /* ===== Leaderboard sort dropdown ===== */
+    #dropdown {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.10);
+        overflow: hidden;
+    }
+    #dropdown ul { padding: 4px 0; }
+    #dropdown li a {
+        color: #334155;
+        font-size: 0.875rem;
+        padding: 8px 16px;
+        display: block;
+        border-radius: 8px;
+        margin: 2px 4px;
+        transition: background .1s;
+    }
+    #dropdown li a:hover { background: #f1f5f9; color: #0f172a; }
 
 
 
