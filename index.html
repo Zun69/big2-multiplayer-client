@@ -132,7 +132,7 @@
                     </div>
                     <div class="mb-5">
                         <label for="usernameRegistration" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Your username</label>
-                        <input type="text" 
+                        <input type="text"
                         id="usernameRegistration"
                         pattern="^[A-Za-z0-9_]{3,12}$"
                         title="3 to 12 characters: letters, numbers, underscores only"
@@ -140,7 +140,11 @@
                         class="bg-gray-50 border border-gray-300 text-gray-900 text-sm
                         rounded-lg focus:ring-blue-500 focus:border-blue-500
                         block w-full p-1.5
-                        dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white" autocomplete="username" required/>
+                        dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white"
+                        autocomplete="username" required
+                        onfocus="document.getElementById('usernameHint').style.display='block'"
+                        onblur="document.getElementById('usernameHint').style.display='none'" />
+                        <p id="usernameHint" style="display:none;" class="mt-1 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">3–12 characters. Letters, numbers and underscores only.</p>
                     </div>
                     <div class="mb-5">
                         <label for="caPassword" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Your password</label>
@@ -156,7 +160,10 @@
                             block w-full p-1.5
                             dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white"
                             autocomplete="new-password"
-                            required />
+                            required
+                            onfocus="document.getElementById('passwordHint').style.display='block'"
+                            onblur="document.getElementById('passwordHint').style.display='none'" />
+                        <p id="passwordHint" style="display:none;" class="mt-1 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">8–64 characters. Must include uppercase, lowercase, a number, and one of: ! @ # $ % ^ & *</p>
                     </div>
                     <div class="mb-5">
                         <label for="caRepeatPassword" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Repeat password</label>

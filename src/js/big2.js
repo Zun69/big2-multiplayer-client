@@ -47,7 +47,7 @@ let currentProfileUsername = null;
 
 let isJoiningRoom = false;
 
-const PB_URL = 'https://big2.kbcardgames.xyz/pb/';
+const PB_URL = 'http://127.0.0.1:8090'//'https://big2.kbcardgames.xyz/pb/';
 // store key "pb_auth" in sessionStorage (per tab), not localStorage (shared across tabs)
 
 class SessionAuthStore extends BaseAuthStore {
@@ -1977,7 +1977,7 @@ async function loginMenu() {
             const displayName = authData?.record?.name || usernameInput;
 
             // if account verified then socket connect with token
-            const socket = io('https://big2.kbcardgames.xyz', {
+            const socket = io('http://localhost:3000', { //'https://big2.kbcardgames.xyz'
                 auth: { pbToken: pb.authStore.token },
                 username: displayName, // export username
                 transports: ['polling','websocket'],
@@ -2504,13 +2504,13 @@ async function getUserByName(name) {
 
 function getSortForMetric(metric) {
     switch (metric) {
-        case 'wins':     return '-wins, -games_played';      // more is better
-        case 'games':    return '-games_played, -wins';      // more is better
-        case 'losses':   return 'fourths, -games_played';    // fewer is better
-        case 'seconds':  return '-seconds, -games_played';   // more seconds
-        case 'thirds':   return '-thirds, -games_played';    // more thirds
+        case 'wins':     return '-win_pct, -games_played';
+        case 'games':    return '-games_played, -win_pct';
+        case 'losses':   return '-loss_pct, -games_played';  // higher loss% first
+        case 'seconds':  return '-second_pct, -games_played';
+        case 'thirds':   return '-third_pct, -games_played';
         case 'avg':
-        default:         return 'avg_finish, -games_played'; // lower is better
+        default:         return 'avg_finish, -games_played';
     }
 }
 
@@ -2544,7 +2544,11 @@ async function fetchLeaderboardPage(pb, { page = 1, perPage = 10, metric = 'avg'
       thirds:  row.thirds  ?? 0,
       fourths,
       losses,
-      avg: (typeof row.avg_finish === 'number') ? row.avg_finish : null,
+      avg:       (typeof row.avg_finish === 'number') ? row.avg_finish : null,
+      winPct:    row.win_pct    ?? 0,
+      secondPct: row.second_pct ?? 0,
+      thirdPct:  row.third_pct  ?? 0,
+      lossPct:   row.loss_pct   ?? 0,
       updated: row.updated ?? null,
     };
   });
@@ -2675,6 +2679,24 @@ async function renderLeaderboardMenu(metric = 'avg') {
     wrapper.className = 'mt-3 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden';
     dropdownButton.insertAdjacentElement('afterend', wrapper);
 
+    const colOrder = {
+        wins:    ['gp', 'win',  'second', 'third',  'loss'],
+        seconds: ['gp', 'second', 'win',  'third',  'loss'],
+        thirds:  ['gp', 'third',  'win',  'second', 'loss'],
+        losses:  ['gp', 'loss',   'win',  'second', 'third'],
+        avg:     ['gp', 'avg',    'win',  'second', 'third', 'loss'],
+        games:   ['gp', 'win', 'second', 'third', 'loss'],
+    };
+
+    const colHeaders = {
+        gp:     '<th class="px-4 py-3 font-semibold text-right w-16">GP</th>',
+        win:    '<th class="px-4 py-3 font-semibold text-right w-20 whitespace-nowrap">Win%</th>',
+        second: '<th class="px-4 py-3 font-semibold text-right w-20 whitespace-nowrap">2nd%</th>',
+        third:  '<th class="px-4 py-3 font-semibold text-right w-20 whitespace-nowrap">3rd%</th>',
+        loss:   '<th class="px-4 py-3 font-semibold text-right w-20 whitespace-nowrap">Loss%</th>',
+        avg:    '<th class="px-4 py-3 font-semibold text-right w-20 whitespace-nowrap">Avg</th>',
+    };
+
     // table
     const table = document.createElement('table');
     table.className = 'min-w-full table-fixed text-sm text-left';
@@ -2683,9 +2705,9 @@ async function renderLeaderboardMenu(metric = 'avg') {
     thead.className = 'bg-gradient-to-r from-green-400 via-green-500 to-green-600 text-gray-800 dark:text-gray-100';
     thead.innerHTML = `
         <tr>
-        <th class="px-4 py-3 font-semibold w-14">#</th>
+        <th class="px-4 py-3 font-semibold w-10">#</th>
         <th class="px-4 py-3 font-semibold">Player</th>
-        <th class="px-4 py-3 font-semibold text-right w-28">${metricHeader(metric)}</th>
+        ${(colOrder[metric] || colOrder.avg).map(c => colHeaders[c]).join('')}
         </tr>
     `;
 
@@ -2730,7 +2752,7 @@ async function renderLeaderboardMenu(metric = 'avg') {
 
         if (!res.items.length) {
         const empty = document.createElement('tr');
-        empty.innerHTML = `<td colspan="3" class="px-4 py-6 text-center text-gray-500 dark:text-gray-400 italic">No players yet</td>`;
+       empty.innerHTML = `<td colspan="8" class="px-4 py-6 text-center text-gray-500 dark:text-gray-400 italic">No players yet</td>`;
         tbody.appendChild(empty);
         } else {
         const rankStart = (res.page - 1) * res.perPage + 1;
@@ -2774,9 +2796,17 @@ async function renderLeaderboardMenu(metric = 'avg') {
             playerTd.appendChild(rowDiv);
             tr.appendChild(playerTd);
 
-            // metric cell (right aligned)
-            const value = metricCellValue(row, metric);
-            tr.appendChild(td('px-4 py-2 text-right tabular-nums', value));
+            // stat columns in metric-dependent order
+            const pct = (n) => n != null ? (n * 100).toFixed(1) + '%' : '—';
+            const colCells = {
+                gp:     () => td('px-4 py-2 text-right tabular-nums text-gray-700', row.games ?? 0),
+                win:    () => td('px-4 py-2 text-right tabular-nums text-green-700 font-semibold', pct(row.winPct)),
+                second: () => td('px-4 py-2 text-right tabular-nums text-blue-600', pct(row.secondPct)),
+                third:  () => td('px-4 py-2 text-right tabular-nums text-yellow-600', pct(row.thirdPct)),
+                loss:   () => td('px-4 py-2 text-right tabular-nums text-red-500', pct(row.lossPct)),
+                avg:    () => td('px-4 py-2 text-right tabular-nums font-bold text-gray-900', row.avg != null ? row.avg.toFixed(3) : '—'),
+            };
+            (colOrder[metric] || colOrder.avg).forEach(c => tr.appendChild(colCells[c]()));
 
             tbody.appendChild(tr);
         });
