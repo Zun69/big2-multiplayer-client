@@ -1,7 +1,4 @@
 /* Styles for desktops and laptops */
-
-/* Media query targeting devices with a minimum screen width of 1000px (typical for desktops and laptops) */
-
     *, *::after, *::before {
         box-sizing: border-box;
     }
@@ -186,16 +183,14 @@
     #container {
         background-color: white;
         width: 1300px;
-        min-height: 1440px; /* Set a minimum height as a fallback */
+        min-height: 910px; /* Set a minimum height as a fallback */
         margin: 0 auto; /* Center game container horizontally */
     }
     
     #gameContainer {
         width: 1200px;
         height: 780px;
-        background-image: url('background/green-background-alt.jpg');
-        background-size: cover; background-position: center;
-        background-repeat: no-repeat; /* Prevent the image from repeating */
+        background: radial-gradient(ellipse at center, #1e6b3c 0%, #0d3d20 100%);
         text-align: center;
         font-size: 0.8rem;
         position: relative;
@@ -381,6 +376,79 @@
 
     /* Lock page scroll while paused */
     body.is-paused{ overflow:hidden; }
+
+    /* Lobby chat message styling */
+    #messageContainer {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    #messageContainer .chat-row {
+        display: flex;
+        width: 100%;
+    }
+
+    #messageContainer .chat-row--theirs {
+        justify-content: flex-start;
+    }
+
+    #messageContainer .chat-row--mine {
+        justify-content: flex-end;
+    }
+
+    #messageContainer .chat-bubble {
+        max-width: 75%;
+        padding: 6px 10px;
+        border-radius: 14px;
+        font-family: 'Poppins', 'Helvetica', sans-serif;
+        font-size: 12.5px;
+        line-height: 1.4;
+        word-break: break-word;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+        animation: chatPop 0.15s ease-out;
+    }
+
+    #messageContainer .chat-bubble--theirs {
+        background-color: #ffffff;
+        border: 1px solid #e5e7eb;
+        color: #1f2937;
+        border-bottom-left-radius: 4px;
+    }
+
+    #messageContainer .chat-bubble--mine {
+        background-color: #2563eb;
+        color: #ffffff;
+        border-bottom-right-radius: 4px;
+    }
+
+    #messageContainer .chat-sender {
+        font-size: 10.5px;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+        color: #2563eb;
+        margin-bottom: 2px;
+    }
+
+    #messageContainer .chat-text {
+        white-space: pre-wrap;
+    }
+
+    @keyframes chatPop {
+        from { opacity: 0; transform: translateY(4px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Dark-mode variant, since #messageContainer uses Tailwind's dark: classes */
+    .dark #messageContainer .chat-bubble--theirs {
+        background-color: #1f2937;
+        border-color: #374151;
+        color: #e5e7eb;
+    }
+
+    .dark #messageContainer .chat-sender {
+        color: #60a5fa;
+    }
 
 
 

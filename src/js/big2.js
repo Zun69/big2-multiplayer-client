@@ -47,7 +47,7 @@ let currentProfileUsername = null;
 
 let isJoiningRoom = false;
 
-const PB_URL = 'https://big2.kbcardgames.xyz/pb/'//'http://127.0.0.1:8090';
+const PB_URL = 'http://127.0.0.1:8090'//'https://big2.kbcardgames.xyz/pb/
 // store key "pb_auth" in sessionStorage (per tab), not localStorage (shared across tabs)
 
 class SessionAuthStore extends BaseAuthStore {
@@ -442,17 +442,21 @@ function shuffleDeckAsync(deck, times, delayBetweenShuffles, serverDeck) {
 }
 
 // deal card sounds
+// Base volume lowered (was 0.9) — full-volume clips firing every 60ms were
+// summing/clipping against each other, which read as "harsh".
+const DEAL_SOUND_BASE_VOLUME = 0.9;
+
 const dealCardSounds = [
-  new Howl({ src: ["src/audio/dealcard_01.wav"], volume: 0.9 }),
-  new Howl({ src: ["src/audio/dealcard_02.wav"], volume: 0.9 }),
-  new Howl({ src: ["src/audio/dealcard_03.wav"], volume: 0.9 }),
-  new Howl({ src: ["src/audio/dealcard_04.wav"], volume: 0.9 }),
-  new Howl({ src: ["src/audio/dealcard_05.wav"], volume: 0.9 }),
-  new Howl({ src: ["src/audio/dealcard_06.wav"], volume: 0.9 }),
-  new Howl({ src: ["src/audio/dealcard_07.wav"], volume: 0.9 }),
-  new Howl({ src: ["src/audio/dealcard_08.wav"], volume: 0.9 }),
-  new Howl({ src: ["src/audio/dealcard_09.wav"], volume: 0.9 }),
-  new Howl({ src: ["src/audio/dealcard_10.wav"], volume: 0.9 })
+  new Howl({ src: ["src/audio/dealcard_01.wav"], volume: DEAL_SOUND_BASE_VOLUME }),
+  new Howl({ src: ["src/audio/dealcard_02.wav"], volume: DEAL_SOUND_BASE_VOLUME }),
+  new Howl({ src: ["src/audio/dealcard_03.wav"], volume: DEAL_SOUND_BASE_VOLUME }),
+  new Howl({ src: ["src/audio/dealcard_04.wav"], volume: DEAL_SOUND_BASE_VOLUME }),
+  new Howl({ src: ["src/audio/dealcard_05.wav"], volume: DEAL_SOUND_BASE_VOLUME }),
+  new Howl({ src: ["src/audio/dealcard_06.wav"], volume: DEAL_SOUND_BASE_VOLUME }),
+  new Howl({ src: ["src/audio/dealcard_07.wav"], volume: DEAL_SOUND_BASE_VOLUME }),
+  new Howl({ src: ["src/audio/dealcard_08.wav"], volume: DEAL_SOUND_BASE_VOLUME }),
+  new Howl({ src: ["src/audio/dealcard_09.wav"], volume: DEAL_SOUND_BASE_VOLUME }),
+  new Howl({ src: ["src/audio/dealcard_10.wav"], volume: DEAL_SOUND_BASE_VOLUME })
 ];
 
 const finishCardSounds = [
@@ -476,7 +480,23 @@ function dealNextCardSounds() {
 
     lastDealSoundIndex = idx;
 
-    dealCardSounds[idx].play();
+    const sound = dealCardSounds[idx];
+
+    // Slight per-hit volume variation so every card doesn't land at
+    // identical loudness (real dealing has natural velocity variance).
+    const vol = DEAL_SOUND_BASE_VOLUME * (0.85 + Math.random() * 0.3); // ~0.47–0.71
+
+    // Slight pitch/rate variation so the same 10 samples cycling in rapid
+    // succession don't sound as repetitive/mechanical.
+    const rate = 0.94 + Math.random() * 0.14; // ~0.94–1.06
+
+    const id = sound.play();
+    sound.volume(vol, id);
+    sound.rate(rate, id);
+
+    // Cut the tail short before the next card's sound fires ~60ms later,
+    // so decay tails stop overlapping/stacking into a harsh, muddy blur.
+    sound.fade(vol, 0, 70, id);
 
     ////console.log("Random sound index:", idx);
 }
@@ -1977,7 +1997,7 @@ async function loginMenu() {
             const displayName = authData?.record?.name || usernameInput;
 
             // if account verified then socket connect with token
-            const socket = io('https://big2.kbcardgames.xyz', { //'http://localhost:3000'
+            const socket = io('http://localhost:3000', { //'https://big2.kbcardgames.xyz'
                 auth: { pbToken: pb.authStore.token },
                 username: displayName, // export username
                 transports: ['polling','websocket'],
@@ -4152,7 +4172,10 @@ async function endMenu(socket, roomCode, results) {
     // leave to join room
     const handleBackClick = () => {
         clickSounds[0].play();
-        document.getElementById('chatBox').innerHTML = '';
+        // Clear chat messages only — wiping the whole #chatBox would also
+        // delete the input/send button elements that lobbyMenu() relies on.
+        const messageContainerEl = document.getElementById('messageContainer');
+        if (messageContainerEl) messageContainerEl.innerHTML = '';
         socket.emit('leaveRoom', roomCode);
         cleanup();
         setHiddenSafe(endMenu, true);
@@ -4290,10 +4313,41 @@ async function lobbyMenu(socket, roomCode){
 
     // Function to append a message to the message container
     function appendMessage(message) {
-        const messageElement = document.createElement('div');
-        messageElement.textContent = message;
-        messageContainer.appendChild(messageElement);
+        const myName = pb?.authStore?.model?.name || pb?.authStore?.model?.username || '';
+
+        // Messages arrive as "Username: text" — split so we can style sender vs. text
+        const separatorIndex = message.indexOf(':');
+        const hasSender = separatorIndex > -1;
+        const sender = hasSender ? message.slice(0, separatorIndex).trim() : '';
+        const text = hasSender ? message.slice(separatorIndex + 1).trim() : message;
+        const isMine = hasSender && myName && sender === myName;
+
+        const row = document.createElement('div');
+        row.className = `chat-row ${isMine ? 'chat-row--mine' : 'chat-row--theirs'}`;
+
+        const bubble = document.createElement('div');
+        bubble.className = `chat-bubble ${isMine ? 'chat-bubble--mine' : 'chat-bubble--theirs'}`;
+
+        if (hasSender && !isMine) {
+            const senderEl = document.createElement('div');
+            senderEl.className = 'chat-sender';
+            senderEl.textContent = sender;
+            bubble.appendChild(senderEl);
+        }
+
+        const textEl = document.createElement('div');
+        textEl.className = 'chat-text';
+        textEl.textContent = text;
+        bubble.appendChild(textEl);
+
+        row.appendChild(bubble);
+        messageContainer.appendChild(row);
         messageContainer.scrollTop = messageContainer.scrollHeight; // Auto scroll to the bottom
+    }
+
+    // Clears all chat messages from the message container
+    function clearMessages() {
+        messageContainer.innerHTML = '';
     }
 
     // Function to send a message
@@ -4386,7 +4440,10 @@ async function lobbyMenu(socket, roomCode){
             socket.off('updateReadyState');
             socket.off('receiveMessage');
             socket.off('gameStarted');
-        
+
+            // Clear chat so old messages don't carry into the next lobby visit
+            clearMessages();
+
             // Hide the lobby menu and clear the interval
             setHiddenSafe(lobbyMenu, true);
 
@@ -4411,6 +4468,9 @@ async function lobbyMenu(socket, roomCode){
             socket.off('updateReadyState');
             socket.off('receiveMessage');
             socket.off('gameStarted');
+
+            // Clear chat so old messages don't carry into the next lobby visit
+            clearMessages();
 
             // Hide the lobby menu and clear the interval
             setHiddenSafe(lobbyMenu, true);

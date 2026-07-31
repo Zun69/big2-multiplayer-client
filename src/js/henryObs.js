@@ -1,7 +1,7 @@
 // henryObs.js
 // 1:1 observation encoder + debug GUI modeled after Henry Charlesworth's big2_PPOalgorithm.
 //
-// IMPORTANT 1: This matches Henry's 412-length layout exactly.
+// IMPORTANT 1: This matches Henry's 413-length layout exactly.
 // IMPORTANT 2: The "Cards Played (Q K A 2)" block is persistent memory in Henry's code.
 //              We replicate that with a module-level Set. Call resetHenryObsMemory() per new game.
 
@@ -145,8 +145,16 @@ function isFullHouse5(ids) {
   return counts.length === 2 && counts[0] === 2 && counts[1] === 3;
 }
 
+// Four of a kind + kicker (a "bomb" - ranks above full house, below
+// straight flush). Mirrors gameLogic.py's isFourOfAKindHand.
+function isFourOfAKind5(ids) {
+  if (ids.length !== 5) return false;
+  const counts = Array.from(byValCount(ids).values()).sort((a, b) => a - b);
+  return counts.length === 2 && counts[0] === 1 && counts[1] === 4;
+}
+
 // ------------------------------------------------------------
-// Main encoder (412)
+// Main encoder (413)
 // ------------------------------------------------------------
 export function buildHenryObs({
   players,         // GameModule.players (length 4)
@@ -156,7 +164,7 @@ export function buildHenryObs({
   control = false, // set true when current player has control (everyone else passed)
   lastPlayedBy = null,
 } = {}) {
-  const obs = new Int32Array(412);
+  const obs = new Int32Array(413);
 
   // Layout (from big2Game.py / generateGUI.py)
   const HAND = 0;       // 22*13 = 286
@@ -288,6 +296,12 @@ export function buildHenryObs({
   // -----------------------------
   // clear PREV block
   for (let i = 0; i < 29; i++) obs[PREV + i] = 0;
+  // new appended dimension (index 412) for four-of-a-kind+kicker - the
+  // packed PREV block above has no spare room (same constraint as
+  // nPlayerInd+24/25/26 in big2Game.py), so this lives in newly added
+  // space at the very end instead. Must be reset explicitly each call or
+  // it stays stuck "on" from a previous turn.
+  obs[412] = 0;
 
   // Type indices relative to PREV (matching big2Game.py phInd offsets):
   // phInd = PREV
@@ -357,6 +371,13 @@ export function buildHenryObs({
         highId = sortedPrev[2];
         suit = -1;
         setPrevType(25); // FullHouse
+      } else if (isFourOfAKind5(sortedPrev)) {
+        // big2Game.py uses prevHand[1] for the quad's value (always part
+        // of the quad regardless of whether the kicker sorted lowest or
+        // highest) and suit=-1, same convention as full house
+        highId = sortedPrev[1];
+        suit = -1;
+        obs[412] = 1; // new appended dimension, not part of the PREV block
       }
     } else {
       // shouldn't happen in Henry rules, but keep safe
@@ -529,7 +550,7 @@ export function showObsGUI(obs, label = "") {
   if (!root) return;
 
   const nonZero = Array.from(obs).reduce((a, v) => a + (v !== 0), 0);
-  win.__setObs(Array.from(obs), label, `len=412 • nonZero=${nonZero}`);
+  win.__setObs(Array.from(obs), label, `len=413 • nonZero=${nonZero}`);
 
   root.innerHTML = "";
 
@@ -662,6 +683,12 @@ export function showObsGUI(obs, label = "") {
         tbl.appendChild(_el(doc, "div", "rowHdr", rh));
         tbl.appendChild(_cell(doc, obs[PREV + 17 + i] | 0, true));
       });
+
+      // FourOfAKind5 lives outside the packed PREV block (new appended
+      // index 412), so it's rendered as an extra row rather than via the
+      // typeHdrs loop above.
+      tbl.appendChild(_el(doc, "div", "rowHdr", "FourOfAKind5"));
+      tbl.appendChild(_cell(doc, obs[412] | 0, true));
 
       wrap.appendChild(tbl);
     }

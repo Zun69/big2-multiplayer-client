@@ -1,38 +1,89 @@
 // ---------------------------
 // Global sound setup
 // ---------------------------
+// Lowered from 0.9 to give headroom: the quietest sample (playcard_08) needs
+// roughly +2.9dB (~1.4x) boost to match the others, and 0.9 * 1.4 > 1.0 would
+// just get clamped by Howler, losing the compensation. 0.65 leaves room.
+const PLAY_SOUND_BASE_VOLUME = 0.65;
+
+// Recalculated after the de-harshing EQ pass (high-shelf cut, -5dB @ 3.5kHz),
+// which shifted the loudness balance slightly. RMS-matched to -37.43 dB.
+const PLAY_SOUND_GAIN = [
+    0.87, // playcard_01
+    1.15, // playcard_02
+    0.76, // playcard_03
+    1.32, // playcard_04
+    1.02, // playcard_05
+    1.07, // playcard_06
+    0.96, // playcard_07
+    1.35, // playcard_08
+    1.24, // playcard_09
+    0.87, // playcard_10
+    0.73, // playcard_11
+    1.34, // playcard_12
+    1.20, // playcard_13
+    0.97, // playcard_14
+    1.07, // playcard_15
+    0.54, // playcard_16
+];
+
 const playCardSounds = [
-    new Howl({ src: ["src/audio/playcard_01.wav"], volume: 0.9 }),
-    new Howl({ src: ["src/audio/playcard_02.wav"], volume: 0.9 }),
-    new Howl({ src: ["src/audio/playcard_03.wav"], volume: 0.9 }),
-    new Howl({ src: ["src/audio/playcard_04.wav"], volume: 0.9 }),
-    new Howl({ src: ["src/audio/playcard_05.wav"], volume: 0.9 }),
-    new Howl({ src: ["src/audio/playcard_06.wav"], volume: 0.9 }),
-    new Howl({ src: ["src/audio/playcard_07.wav"], volume: 0.9 }),
-    new Howl({ src: ["src/audio/playcard_08.wav"], volume: 0.9 }),
-    new Howl({ src: ["src/audio/playcard_09.wav"], volume: 0.9 }),
-    new Howl({ src: ["src/audio/playcard_10.wav"], volume: 0.9 }),
-    new Howl({ src: ["src/audio/playcard_11.wav"], volume: 0.9 }),
-    new Howl({ src: ["src/audio/playcard_12.wav"], volume: 0.9 }),
-    new Howl({ src: ["src/audio/playcard_13.wav"], volume: 0.9 }),
-    new Howl({ src: ["src/audio/playcard_14.wav"], volume: 0.9 }),
-    new Howl({ src: ["src/audio/playcard_15.wav"], volume: 0.9 }),
-    new Howl({ src: ["src/audio/playcard_16.wav"], volume: 0.9 })
+    new Howl({ src: ["src/audio/playcard_01.wav"], volume: PLAY_SOUND_BASE_VOLUME }),
+    new Howl({ src: ["src/audio/playcard_02.wav"], volume: PLAY_SOUND_BASE_VOLUME }),
+    new Howl({ src: ["src/audio/playcard_03.wav"], volume: PLAY_SOUND_BASE_VOLUME }),
+    new Howl({ src: ["src/audio/playcard_04.wav"], volume: PLAY_SOUND_BASE_VOLUME }),
+    new Howl({ src: ["src/audio/playcard_05.wav"], volume: PLAY_SOUND_BASE_VOLUME }),
+    new Howl({ src: ["src/audio/playcard_06.wav"], volume: PLAY_SOUND_BASE_VOLUME }),
+    new Howl({ src: ["src/audio/playcard_07.wav"], volume: PLAY_SOUND_BASE_VOLUME }),
+    new Howl({ src: ["src/audio/playcard_08.wav"], volume: PLAY_SOUND_BASE_VOLUME }),
+    new Howl({ src: ["src/audio/playcard_09.wav"], volume: PLAY_SOUND_BASE_VOLUME }),
+    new Howl({ src: ["src/audio/playcard_10.wav"], volume: PLAY_SOUND_BASE_VOLUME }),
+    new Howl({ src: ["src/audio/playcard_11.wav"], volume: PLAY_SOUND_BASE_VOLUME }),
+    new Howl({ src: ["src/audio/playcard_12.wav"], volume: PLAY_SOUND_BASE_VOLUME }),
+    new Howl({ src: ["src/audio/playcard_13.wav"], volume: PLAY_SOUND_BASE_VOLUME }),
+    new Howl({ src: ["src/audio/playcard_14.wav"], volume: PLAY_SOUND_BASE_VOLUME }),
+    new Howl({ src: ["src/audio/playcard_15.wav"], volume: PLAY_SOUND_BASE_VOLUME }),
+    new Howl({ src: ["src/audio/playcard_16.wav"], volume: PLAY_SOUND_BASE_VOLUME })
 ];
 
 const passSound = new Howl({ src: ["src/audio/pass.wav"], volume: 0.9 });
 
-let lastSoundIndex = -1;
+// Remember the last few played indices (not just one) so the same sample
+// can't reappear too soon — a pool of 16 still "feels" repetitive if the
+// same clip comes back after only 1 or 2 others.
+const RECENT_SOUND_HISTORY = 3;
+let recentSoundIndices = [];
 
-function playRandomCardSound() {
+function playRandomCardSound(isRapidFollowUp = false) {
     let idx;
+    let attempts = 0;
     do {
         idx = (Math.random() * playCardSounds.length) | 0;
-    } while (playCardSounds.length > 1 && idx === lastSoundIndex);
-    lastSoundIndex = idx;
+        attempts++;
+        // safety valve in case the pool is smaller than the history window
+    } while (recentSoundIndices.includes(idx) && attempts < 20);
+
+    recentSoundIndices.push(idx);
+    if (recentSoundIndices.length > RECENT_SOUND_HISTORY) {
+        recentSoundIndices.shift();
+    }
+
+    const sound = playCardSounds[idx];
+    const gain = PLAY_SOUND_GAIN[idx] ?? 1.0;
+    // Slightly quieter for the 2nd+ card in a multi-card hand, since they
+    // land only 30ms apart and would otherwise stack on top of each other.
+    const vol = PLAY_SOUND_BASE_VOLUME * gain * (isRapidFollowUp ? 0.8 : 1.0);
+
+    // Small random pitch offset so the same 16 (now loudness-matched)
+    // samples don't feel like a fixed jukebox on repeat.
+    const rate = 0.97 + Math.random() * 0.06; // ~0.97–1.03
+
+    const id = sound.play();
+    sound.volume(vol, id);
+    sound.rate(rate, id);
+
     /*console.log("playCard sound")
     console.log(idx);*/
-    playCardSounds[idx].play();
 }
 
 const INITIAL_HAND_SIZE = 13;
@@ -899,7 +950,7 @@ export default class Player{
                     const dx = (gx - cx);
                     const dy = (gy - cy);
 
-                    //animate card object to gameDeck position (//can use turn to slightly stagger the cards like uno on ios)
+                    //animate card object to gameDeck position 
                     let p1Promise = new Promise((cardResolve) => {
                         card.animateTo({
                             delay: i * 30, // wait 1 second + i * 2 ms
@@ -911,7 +962,10 @@ export default class Player{
                             onStart: function() {
                                 gameDeck.push(self.cards[cardIndex]); //insert player's card that matches cardId into game deck
                                 card.$el.style.zIndex = gameDeck.length; //make it equal gameDeck.length
-                                playRandomCardSound();
+                                // Cards in a multi-card hand fire 30ms apart — slightly
+                                // trim the trailing volume on rapid repeats so they
+                                // don't sum/stack into an inconsistent loudness blob.
+                                playRandomCardSound(i > 0);
                             },
                             
                             onComplete: function () {
@@ -1256,7 +1310,10 @@ export default class Player{
                                 onStart: function() {
                                     gameDeck.push(self.cards[cardIndex]); //insert player's card that matches cardId into game deck
                                     card.$el.style.zIndex = gameDeck.length; //make it equal gameDeck.length
-                                    playRandomCardSound();
+                                    // Cards in a multi-card hand fire 30ms apart — slightly
+                                    // trim the trailing volume on rapid repeats so they
+                                    // don't sum/stack into an inconsistent loudness blob.
+                                    playRandomCardSound(i > 0);
                                 },
                                 
                                 onComplete: function () {
