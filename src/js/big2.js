@@ -3,31 +3,7 @@ import Opponent from "./opponent.js"
 import spOpponent, { loadPolicyModel } from "./spOpponent.js";
 import PocketBase, { BaseAuthStore } from "https://cdn.jsdelivr.net/npm/pocketbase@0.27.0/dist/pocketbase.es.mjs";
 import { resetHenryObsMemory } from "./henryObs.js";
-
-// lookup table for printing actual rank in last played hand
-const rankLookup = {
-    1: 'A',
-    2: '2',
-    3: '3',
-    4: '4',
-    5: '5',
-    6: '6',
-    7: '7',
-    8: '8',
-    9: '9',
-    10: '10',
-    11: 'J',
-    12: 'Q',
-    13: 'K',
-};
-
-// lookup table for printing suit icon in last played hand
-const suitLookup = {
-    0: '♦', // Diamonds
-    1: '♣', // Clubs
-    2: '♥', // Hearts
-    3: '♠', // Spades
-};
+import { setStatus, showToast, formatHand, getComboEmoji } from "./ui.js";
 
 // helpers: rank/suit to Unicode playing card glyphs ---
 const SUIT_BASES = {
@@ -915,6 +891,11 @@ function receivePlayerHand(socket, roomCode) {
 
         // animate mirror for the player who acted (use actorIdx for pile seat math)
         const actor = GameModule.players[actorIdx];
+        const actorName = actorIdx === 0 ? 'You' : (actor?.username ?? 'Someone');
+        const willFinish = actor && cards.length === actor.cards.length;
+        if (!willFinish) {
+            showToast(`${actorName} played ${formatHand(cards)}${getComboEmoji(cards)}`);
+        }
         if (actor) {
             //console.log("POSITIONS")
             //console.log(positions);
@@ -950,64 +931,72 @@ function receivePlayerHand(socket, roomCode) {
     };
 
     const onPassedTurn = (payload) => {
-      GameModule.playedHand = 0;
+        GameModule.playedHand = 0;
 
-      const passedPlayer = GameModule.players.find(p => p.clientId === payload.passedBy);
-      if (passedPlayer) passedPlayer.passed = true;
+        const passedPlayer = GameModule.players.find(p => p.clientId === payload.passedBy);
+        if (passedPlayer) passedPlayer.passed = true;
 
-      const nextTurnClientId = payload.nextTurn;              // STASH
-      GameModule.lastValidHand = payload.lastValidHand;
+        const passedIdx = GameModule.players.findIndex(p => p.clientId === payload.passedBy);
+        const passedName = passedIdx === 0 ? 'You' : (passedPlayer?.username ?? 'Someone');
+        showToast(`${passedName} passed`);
 
-      passSound.play();
+        const nextTurnClientId = payload.nextTurn;  // STASH           
+        GameModule.lastValidHand = payload.lastValidHand;
 
-      const handler = () => {
-        socket.off('allHandAckComplete', handler);
+        passSound.play();
 
-        const localIdx = GameModule.players.findIndex(p => p.clientId === nextTurnClientId);
-        if (localIdx >= 0) {
-          GameModule.turn = localIdx;
-          displayTurn(GameModule.turn);
-        }
+        const handler = () => {
+            socket.off('allHandAckComplete', handler);
 
-        onAllHandDone();
-      };
-      socket.on('allHandAckComplete', handler);
-      socket.emit('playHandAck', roomCode);
+            const localIdx = GameModule.players.findIndex(p => p.clientId === nextTurnClientId);
+            if (localIdx >= 0) {
+            GameModule.turn = localIdx;
+            displayTurn(GameModule.turn);
+            }
+
+            onAllHandDone();
+        };
+        socket.on('allHandAckComplete', handler);
+        socket.emit('playHandAck', roomCode);
     };
 
     const onWonRound = (payload) => {
-      GameModule.playedHand = 0;
-      GameModule.lastValidHand = payload.lastValidHand;
+        GameModule.playedHand = 0;
+        GameModule.lastValidHand = payload.lastValidHand;
 
-      // mirror flags
-      payload.players.forEach(sp => {
-        const lp = GameModule.players.find(p => p.clientId === sp.id);
-        if (!lp) return;
-        lp.passed       = !!sp.passed;
-        lp.wonRound     = !!sp.wonRound;
-        lp.finishedGame = !!sp.finishedGame;
-      });
+        // mirror flags
+        payload.players.forEach(sp => {
+            const lp = GameModule.players.find(p => p.clientId === sp.id);
+            if (!lp) return;
+            lp.passed       = !!sp.passed;
+            lp.wonRound     = !!sp.wonRound;
+            lp.finishedGame = !!sp.finishedGame;
+        });
 
-      // leader for free turn (server authoritative)
-      const nextTurnClientId = payload.players.find(p => p.wonRound)?.id;  // STASH
+        // leader for free turn (server authoritative)
+        const nextTurnClientId = payload.players.find(p => p.wonRound)?.id;  // STASH
 
-      passSound.play();
+        const winnerIdx = GameModule.players.findIndex(p => p.clientId === nextTurnClientId);
+            const winnerName = winnerIdx === 0 ? 'You' : (GameModule.players[winnerIdx]?.username ?? 'Someone');
+            showToast(`${winnerName} won the round!`);
 
-      // ack → clear pile → THEN flip
-      const handler = async () => {
-        socket.off('allHandAckComplete', handler);
-        await finishDeckAnimation(socket, roomCode);
+        passSound.play();
 
-        const localIdx = GameModule.players.findIndex(p => p.clientId === nextTurnClientId);
-        if (localIdx >= 0) {
-          GameModule.turn = localIdx;
-          displayTurn(GameModule.turn);
-        }
+        // ack → clear pile → THEN flip
+        const handler = async () => {
+            socket.off('allHandAckComplete', handler);
+            await finishDeckAnimation(socket, roomCode);
 
-        onAllHandDone();
-      };
-      socket.on('allHandAckComplete', handler);
-      socket.emit('playHandAck', roomCode);
+            const localIdx = GameModule.players.findIndex(p => p.clientId === nextTurnClientId);
+            if (localIdx >= 0) {
+            GameModule.turn = localIdx;
+            displayTurn(GameModule.turn);
+            }
+
+            onAllHandDone();
+        };
+        socket.on('allHandAckComplete', handler);
+        socket.emit('playHandAck', roomCode);
     };
 
     socket.on('cardsPlayed', onCardsPlayed);
@@ -1148,24 +1137,37 @@ async function finishDeckAnimation(socket, roomCode) {
     });
 }
 
+// How long to show the losing player's remaining cards, face-up, before
+// they get swept into the finished deck. Shared by both the single-player
+// and multiplayer finish animations below.
+const LOSER_REVEAL_MS = 1200;
+
 async function finishSpGameAnimation(gameDeck, losingPlayer) {
   return new Promise(async function (resolve) {
 
-    // anchor config: % within gameContainer
     const PCT_LEFT  = 0.75;
     const PCT_TOP   = 0.35;
     const STACK_DRIFT = 0.25;
 
-    // compute once per run
     const meta = _getGCMeta();
     const anchorX = meta.rect.width  * PCT_LEFT;
     const anchorY = meta.rect.height * PCT_TOP;
 
-    // --------------------------------------------------
-    // 1) Animate all cards already in the game deck
-    // --------------------------------------------------
-    for (let i = 0; i < gameDeck.length; i++) {
-      const card = gameDeck[i];
+    // 1) Reveal the losing player's hand face-up and hold, BEFORE any sweeping
+    const player = losingPlayer
+      ? GameModule.players.find(p => p.clientId === losingPlayer.clientId)
+      : null;
+
+    if (player && player.cards && player.cards.length > 0) {
+        player.cards.forEach(card => card.setSide('front'));
+        await sleep(LOSER_REVEAL_MS);
+    }
+
+    // 2) Sweep the pile AND the loser's cards together, as one combined batch
+    const toSweep = [...gameDeck, ...((player && player.cards) || [])];
+
+    for (let i = 0; i < toSweep.length; i++) {
+      const card = toSweep[i];
       card.setSide('back');
 
       const { cx, cy } = _cardCenterInGC(card.$el, meta);
@@ -1178,67 +1180,17 @@ async function finishSpGameAnimation(gameDeck, losingPlayer) {
       await new Promise((cardResolve) => {
         setTimeout(() => {
           card.animateTo({
-            delay: 0,
-            duration: 50,
-            ease: 'linear',
-            rot: 0,
+            delay: 0, duration: 50, ease: 'linear', rot: 0,
             x: Math.round(card.x + dx + offX),
             y: Math.round(card.y + dy - offY),
             onStart: () => {
               GameModule.finishedDeck.push(card);
               card.$el.style.zIndex = String(GameModule.finishedDeck.length + 1);
             },
-            onComplete: () => {
-              dealNextFinishCardSounds();
-              cardResolve();
-            }
+            onComplete: () => { dealNextFinishCardSounds(); cardResolve(); }
           });
         }, 20);
       });
-    }
-    // --------------------------------------------------
-    // 2) Animate remaining cards from JUST the losing player
-    // --------------------------------------------------
-    if (!losingPlayer) {
-      await sleep(200);
-      resolve();
-      return;
-    }
-
-    const player = GameModule.players.find(p => p.clientId === losingPlayer.clientId);
-    if (player && player.cards && player.cards.length > 0) {
-        for (let i = 0; i < player.cards.length; i++) {
-            const losingCard = player.cards[i];
-            losingCard.setSide('back');
-
-            const { cx, cy } = _cardCenterInGC(losingCard.$el, meta);
-            const dx = anchorX - cx;
-            const dy = anchorY - cy;
-
-            const offX = -(GameModule.finishedDeck.length * STACK_DRIFT);
-            const offY =  (GameModule.finishedDeck.length * STACK_DRIFT);
-
-            await new Promise((cardResolve) => {
-            setTimeout(() => {
-                losingCard.animateTo({
-                delay: 0,
-                duration: 50,
-                ease: 'linear',
-                rot: 0,
-                x: Math.round(losingCard.x + dx + offX),
-                y: Math.round(losingCard.y + dy - offY),
-                onStart: () => {
-                    GameModule.finishedDeck.push(losingCard);
-                    losingCard.$el.style.zIndex = String(GameModule.finishedDeck.length + 1);
-                },
-                onComplete: () => {
-                    dealNextFinishCardSounds();
-                    cardResolve();
-                }
-                });
-            }, 20);
-            });
-        }
     }
 
     await sleep(200);
@@ -1246,8 +1198,7 @@ async function finishSpGameAnimation(gameDeck, losingPlayer) {
   });
 }
 
-
-async function finishGameAnimation(roomCode, socket, gameDeck, losingPlayer){
+async function finishGameAnimation(roomCode, socket, gameDeck, losingPlayer, losingPlayerCards){
     return new Promise(async function (resolve, reject) {
         // anchor config: % within gameContainer
         const PCT_LEFT  = 0.75;     
@@ -1262,15 +1213,42 @@ async function finishGameAnimation(roomCode, socket, gameDeck, losingPlayer){
         // Find player who came last
         const lastPlacePlayer = GameModule.players.find(p => p.username === losingPlayer);
 
-        for (let i = 0; i < gameDeck.length; i++) {
-            //loop through all game deck cards
-            let card = gameDeck[i];
+        // --------------------------------------------------
+        // 1) Reveal the losing player's hand face-up and hold, BEFORE any
+        //    sweeping starts (so nothing is mid-flight while it's shown)
+        // --------------------------------------------------
+        if (lastPlacePlayer && lastPlacePlayer.cards && lastPlacePlayer.cards.length > 0) {
+            // overwrite placeholders with the real cards the server sent (same
+            // trick opponent.js uses in playServerHand), so the reveal below
+            // shows the loser's actual hand instead of the "4 of spades" mask
+            if (Array.isArray(losingPlayerCards)) {
+                lastPlacePlayer.cards.forEach((card, i) => {
+                    const real = losingPlayerCards[i];
+                    if (!real) return;
+                    card.rank = real.rank;
+                    card.suit = real.suit;
+                    card.setRankSuit(card.rank, card.suit);
+                });
+            }
+
+            lastPlacePlayer.cards.forEach(card => card.setSide('front'));
+            await sleep(LOSER_REVEAL_MS);
+        }
+
+        // --------------------------------------------------
+        // 2) Sweep the last round's pile AND the loser's cards into the
+        //    finished deck together, as one combined batch
+        // --------------------------------------------------
+        const toSweep = [...gameDeck, ...((lastPlacePlayer && lastPlacePlayer.cards) || [])];
+
+        for (let i = 0; i < toSweep.length; i++) {
+            let card = toSweep[i];
             card.setSide('back');
 
-            // measure this card’s current visual center (relative to GC)
+            // measure this card's current visual center (relative to GC)
             const { cx, cy } = _cardCenterInGC(card.$el, meta);
 
-            // delta to land the card’s center exactly on the anchor
+            // delta to land the card's center exactly on the anchor
             const dx = anchorX - cx;
             const dy = anchorY - cy;
 
@@ -1283,7 +1261,7 @@ async function finishGameAnimation(roomCode, socket, gameDeck, losingPlayer){
                 setTimeout(function () {
                     card.animateTo({
                         delay: 0,
-                        duration: 80,
+                        duration: 50,
                         ease: 'linear',
                         rot: 0,
                         x: Math.round(card.x + dx + offX),
@@ -1292,46 +1270,6 @@ async function finishGameAnimation(roomCode, socket, gameDeck, losingPlayer){
                             GameModule.finishedDeck.push(card); // push gameDeck card into finishedDeck
                             // keep z stacking consistent as the pile grows
                             card.$el.style.zIndex = String(GameModule.finishedDeck.length + 1);
-                        },
-                        onComplete: function () {
-                            dealNextFinishCardSounds();
-                            cardResolve(); //resolve, so next card can animate
-                        }
-                    });
-                }, 20);
-            });
-        }
-
-        //loop through losing player's cards
-        for (let i = 0; i < lastPlacePlayer.numberOfCards; i++){
-            let losingCard = lastPlacePlayer.cards[i];
-            losingCard.setSide('back');
-
-            // measure this card’s current visual center (relative to GC)
-            const { cx, cy } = _cardCenterInGC(losingCard.$el, meta);
-
-            // delta to land the card’s center exactly on the anchor
-            const dx = anchorX - cx;
-            const dy = anchorY - cy;
-
-            // keep your original stagger look using finishedDeck length
-            const offX = -(GameModule.finishedDeck.length * STACK_DRIFT);
-            const offY =  (GameModule.finishedDeck.length * STACK_DRIFT);
-            
-            //wait until each card is finished animating
-            await new Promise((cardResolve) => {
-                setTimeout(function () {
-                    losingCard.animateTo({
-                        delay: 0,
-                        duration: 80,
-                        ease: 'linear',
-                        rot: 0,
-                        x: Math.round(losingCard.x + dx + offX),
-                        y: Math.round(losingCard.y + dy - offY),
-                        onStart: () => {
-                            GameModule.finishedDeck.push(losingCard); // push gameDeck card into finishedDeck
-                            // keep z stacking consistent as the pile grows
-                            losingCard.$el.style.zIndex = String(GameModule.finishedDeck.length + 1);
                         },
                         onComplete: function () {
                             dealNextFinishCardSounds();
@@ -1365,118 +1303,16 @@ async function finishedGame(socket) {
     });
 }
 
-// Convert an array of card objects into a human-readable string
-function formatHand(cards) {
-    if (!Array.isArray(cards) || cards.length === 0) return '—';
-
-    // --- lookups (client-side) ---
-    const rankToWord = {
-        1:'Ace', 2:'Two', 3:'Three', 4:'Four', 5:'Five',
-        6:'Six', 7:'Seven', 8:'Eight', 9:'Nine', 10:'Ten',
-        11:'Jack', 12:'Queen', 13:'King'
-    };
-    const suitName = ['Diamonds','Clubs','Hearts','Spades']; // 0..3
-    const plural = (w) => w === 'Six' ? 'Sixes'
-                        : w === 'Ace' ? 'Aces'
-                        : w === 'Two' ? 'Twos'
-                        : w + 's';
-
-    // --- helpers ---
-    const byRank = new Map(); // rank -> suits[]
-    const bySuit = new Map(); // suit -> count
-    for (const c of cards) {
-        if (!byRank.has(c.rank)) byRank.set(c.rank, []);
-        byRank.get(c.rank).push(c.suit);
-        bySuit.set(c.suit, (bySuit.get(c.suit) || 0) + 1);
-    }
-    const ranks = [...byRank.keys()].sort((a,b)=>a-b);
-    const countsDesc = [...byRank.values()].map(v=>v.length).sort((a,b)=>b-a);
-    const topSuitName = (suits) => suitName[Math.max(...suits)];
-
-    // Big 2 straights: handle A2345 and JQKA2 as valid 5-card sequences
-    const isFive = cards.length === 5;
-    const isFlush = isFive && (bySuit.size === 1);
-    // helper: Big 2 rank order (2 highest, then A)
-    const big2Order = (r) => (r === 2 ? 15 : r === 1 ? 14 : r);
-
-    const isStraight = (() => {
-        if (!isFive) return false;
-        const uniq = [...new Set(ranks)];
-        if (uniq.length !== 5) return false;
-
-        // regular consecutive
-        const consec = uniq.every((v,i,a)=> i===0 || v - a[i-1] === 1);
-        if (consec) return true;
-
-        // A2345 sorted -> [1,2,3,4,5]
-        // JQKA2 sorted -> [1,2,11,12,13]
-        const a2345 = uniq[0]===1 && uniq[1]===2 && uniq[2]===3 && uniq[3]===4 && uniq[4]===5;
-        const jqka2 = uniq[0]===1 && uniq[1]===2 && uniq[2]===11 && uniq[3]===12 && uniq[4]===13;
-        return a2345 || jqka2;
-    })();
-
-    // --- singles / pairs / trips (unchanged behavior) ---
-    if (cards.length === 1) {
-        const c = cards[0];
-        return `${rankLookup[c.rank]} of ${suitName[c.suit]}`; // e.g., "3 hearts"
-    }
-    if (cards.length === 2 && byRank.size === 1) {
-        const r = ranks[0];
-        // show the higher suit for flavor, like "double 3 hearts"
-        return `Double ${rankLookup[r]} ${topSuitName(byRank.get(r))}`;
-    }
-    if (cards.length === 3 && byRank.size === 1) {
-        const r = ranks[0];
-        return `Triple ${plural(rankToWord[r])}`;
-    }
-
-    // --- five-card combos ---
-    if (isFive) {
-        // Straight flush
-        if (isStraight && isFlush) {
-            const onlySuit = cards[0].suit;
-            const hi = cards.reduce((best, c) =>
-                big2Order(c.rank) > big2Order(best.rank) ? c : best
-            , cards[0]);
-            return `Straight Flush ${rankLookup[hi.rank]} of ${suitName[onlySuit]}`;
-        }
-
-        // Four of a kind (+ kicker). In Big 2 this is a 5-card bomb.
-        if (countsDesc[0] === 4) {
-            const quadRank = [...byRank.entries()].find(([,s]) => s.length === 4)[0];
-            return `Quad ${plural(rankToWord[quadRank])}`;
-        }
-
-        // Full house (works for both 333-55 and 33-555)
-        if (countsDesc[0] === 3 && countsDesc[1] === 2) {
-            const tripleRank = [...byRank.entries()].find(([,s]) => s.length === 3)[0];
-            return `Full House ${plural(rankToWord[tripleRank])}`;
-        }
-
-        // Flush
-        if (isFlush) {
-            const onlySuit = cards[0].suit;
-            // pick the highest-ranked card by Big 2 order
-            const hi = cards.reduce((best, c) =>
-            big2Order(c.rank) > big2Order(best.rank) ? c : best , cards[0]);
-
-            // e.g. "flush 9 hearts" or "flush A spades" or "flush 2 clubs"
-            return `${rankLookup[hi.rank]} Of ${suitName[onlySuit]} Flush`;
-        }
-
-        // Straight
-        if (isStraight) {
-            const hi = cards.reduce((best, c) =>
-                big2Order(c.rank) > big2Order(best.rank) ? c : best
-            , cards[0]);
-
-            return `${rankLookup[hi.rank]} of ${suitName[hi.suit]} Straight `;
-        }
-    }
-
-    // fallback, show raw symbols like "3♦ 3♥"
-    return cards.map(c => `${rankLookup[c.rank]}${suitLookup[c.suit]}`).join(' ');
+// Toast wording + emoji for a finishing position. 1st is the actual winner;
+// 2nd/3rd just finished; the 4th (never empties their hand, since the game
+// ends once 3 players are done) is the loser.
+function placeCallout(name, place) {
+    if (place === 1) return `🏆 ${name} won the game!`;
+    if (place === 2) return `🥈 ${name} finished 2nd!`;
+    if (place === 3) return `🥉 ${name} finished 3rd!`;
+    return `💀 ${name} lost!`;
 }
+
 
 
 function getSpLastHand(gameDeck, lastValidHand) {
@@ -1498,7 +1334,6 @@ function getLastHand(socket, roomCode) {
   });
 }
 
-
 function subscribePlayerFinished(socket) {
   const handler = ({ clientId, playersFinished }) => {
     // mark local flag
@@ -1507,6 +1342,11 @@ function subscribePlayerFinished(socket) {
 
     // mirror server’s authoritative array
     GameModule.playersFinished = [...playersFinished];
+
+    const place = GameModule.playersFinished.length;
+    const finisherIdx = GameModule.players.findIndex(p => p.clientId === clientId);
+    const finisherName = finisherIdx === 0 ? 'You' : (player?.username ?? 'Someone');
+    showToast(placeCallout(finisherName, place));
 
     //console.log("playerFinished:", clientId, "order:", GameModule.playersFinished);
   };
@@ -1520,13 +1360,13 @@ function subscribePlayerFinished(socket) {
 // Listen ONCE for "gameHasFinished", run animations, then resolve results
 function waitForGameHasFinished(socket) {
    return new Promise((resolve) => {
-    const handler = (playersFinished, losingPlayer) => {
+    const handler = (playersFinished, losingPlayer, losingPlayerCards) => {
         GameModule.playersFinished = [...playersFinished];
         GameModule.losingPlayer = losingPlayer;
         socket.off('gameHasFinished', handler);
         
         // Just resolve data; do NOT animate here.
-        resolve({ playersFinished, losingPlayer });
+        resolve({ playersFinished, losingPlayer, losingPlayerCards });
     };
     socket.on('gameHasFinished', handler);
   });
@@ -1557,6 +1397,11 @@ async function applySpTurnOutcome({ actorIndex, outcome, gameOver }) {
     if (actor.cards.length === 0) {
         actor.finishedGame = true;
         GameModule.playersFinished.push(actor.clientId);
+
+        const place = GameModule.playersFinished.length; // 1, 2, or 3
+        const finisherName = actorIndex === 0 ? 'You' : (actor?.username ?? 'Someone');
+        console.log(finisherName);
+        showToast(placeCallout(finisherName, place));
 
         // prevent stale pass state from messing with next lead
         GameModule.players.forEach(p => { p.passed = false; });
@@ -1661,9 +1506,6 @@ const spGameLoop = async (firstTurnClientId) => {
     if(sortResolve === 'sortComplete'){
         ////console.log("TURN IS: " + GameModule.turn);
 
-        //let rotation = initialAnimateArrow(turn); //return initial Rotation so I can use it to animate arrow
-        let gameInfoDiv = document.getElementById("gameInfo");
-
         // listen for server event notifying that 3 players have finished
         // ONE-SHOT waiter + quick flag to know when to break the loop
         let gameOver = false;
@@ -1690,8 +1532,8 @@ const spGameLoop = async (firstTurnClientId) => {
             ? GameModule.gameDeck.slice(GameModule.gameDeck.length - GameModule.playedHand)
             : GameModule.lastHand; // unchanged on pass
             
-            // print out last played hand
-            gameInfoDiv.textContent = `${formatHand(GameModule.lastHand)}`;
+            // print out last played hand in status bar
+            setStatus(formatHand(GameModule.lastHand));
 
             //Change turn here
             displayTurn(GameModule.turn);
@@ -1709,6 +1551,9 @@ const spGameLoop = async (firstTurnClientId) => {
                 await spFinishDeckAnimation();
 
                 actor.wonRound = true;
+
+                const winnerName = actorIndex === 0 ? 'You' : (actor?.username ?? 'Someone');
+                showToast(`${winnerName} won the round!`);
             }
 
             let outcome;
@@ -1733,6 +1578,17 @@ const spGameLoop = async (firstTurnClientId) => {
             // apply flags in one place, return gameOver if 3 players have finished
             gameOver = await applySpTurnOutcome({ actorIndex, outcome, gameOver });
 
+            // toast feedback for this turn's action (ported from Shithead)
+            const actorName = actorIndex === 0 ? 'You' : (actor?.username ?? 'Someone');
+            if (GameModule.playedHand >= 1 && GameModule.playedHand <= 5) {
+                if (!actor.finishedGame) {
+                    const justPlayed = GameModule.gameDeck.slice(GameModule.gameDeck.length - GameModule.playedHand);
+                    showToast(`${actorName} played ${formatHand(justPlayed)}${getComboEmoji(justPlayed)}`);
+                }
+            } else if (GameModule.playedHand === 0) {
+                showToast(`${actorName} passed`);
+            }
+
             ////console.log("Played Hand Length: " + GameModule.playedHand)
 
             //if player played a valid hand
@@ -1748,8 +1604,12 @@ const spGameLoop = async (firstTurnClientId) => {
                     // return other 3 player's clientIds and remaining cards
                     const losingPlayer = getLosingPlayerWithCards();
 
-                    // see last card played for a bit
-                    await sleep(100); 
+                    // let the "X finished 3rd!" toast actually be seen before it's replaced
+                    await sleep(400);
+
+                    const loserIdx = GameModule.players.findIndex(p => p.clientId === losingPlayer?.clientId);
+                    const loserName = loserIdx === 0 ? 'You' : (GameModule.players[loserIdx]?.username ?? 'Someone');
+                    showToast(placeCallout(loserName, 4));
 
                     // play finish game animation
                     await finishSpGameAnimation(GameModule.gameDeck, losingPlayer);
@@ -1800,9 +1660,6 @@ const gameLoop = async (roomCode, socket, firstTurnClientId, onResume) => {
     if(sortResolve === 'sortComplete'){
         //console.log("TURN IS: " + GameModule.turn);
 
-        //let rotation = initialAnimateArrow(turn); //return initial Rotation so I can use it to animate arrow
-        let gameInfoDiv = document.getElementById("gameInfo");
-
         // listen for server event notifying that a player has finished
         const unsubscribePlayerFinished  = subscribePlayerFinished(socket);
 
@@ -1837,7 +1694,7 @@ const gameLoop = async (roomCode, socket, firstTurnClientId, onResume) => {
 
             // local mirror
             GameModule.lastHand = last;                  
-            gameInfoDiv.textContent = `${formatHand(last)}`;
+            setStatus(formatHand(last));
 
             //Change turn here
             displayTurn(GameModule.turn);
@@ -1867,14 +1724,20 @@ const gameLoop = async (roomCode, socket, firstTurnClientId, onResume) => {
                     unsubscribePlayerFinished();
 
                     // Get final data (playersFinished, losingPlayer)
-                    const { playersFinished, losingPlayer } = await gameOverPromise;
+                    const { playersFinished, losingPlayer, losingPlayerCards } = await gameOverPromise;
+
+                    await sleep(900); // let the 3rd-place finish toast be seen first
+
+                    const loserIdx = GameModule.players.findIndex(p => p.username === losingPlayer);
+                    const loserName = loserIdx === 0 ? 'You' : (GameModule.players[loserIdx]?.username ?? 'Someone');
+                    showToast(placeCallout(loserName, 4));
                     //console.log(losingPlayer);
 
                     // Now it's safe to animate: all clients have acked the last hand,
                     // and gameDeck includes those last cards, unmount finishedDeck after animations, and reset gameState
                     // Now it's safe to animate: all clients have acked the last hand,
                     // and gameDeck includes those last cards…
-                    await finishGameAnimation(roomCode, socket, GameModule.gameDeck, losingPlayer);
+                    await finishGameAnimation(roomCode, socket, GameModule.gameDeck, losingPlayer, losingPlayerCards);
                     await finishedGame(socket);
 
                     // Make sure no late events from this round can fire
@@ -1914,12 +1777,6 @@ async function loginMenu() {
     let lostPasswordButton  = document.getElementById("lostPasswordButton");
     let spButton = document.getElementById("singlePlayerButton");
     const errorMessage1 = document.getElementById("errorMessage1");
-
-    // Build deck (server-supplied), mount to DOM, and shuffle/arrange
-    let deck = Deck(false);
-    deck.mount(document.getElementById('warmupDeck'));
-    deck.flip();
-    deck.fan();
 
     // reset & rebind references
     [loginButton, createAccountButton, lostPasswordButton] = resetButtonListeners(loginButton, createAccountButton, lostPasswordButton);
@@ -2007,7 +1864,6 @@ async function loginMenu() {
 
             const onAuthed = () => {
                 if (authed) return;
-                try { deck.unmount(); } catch (e) { /* already unmounted */ }
                 authed = true;
                 socket.off('authenticated', onAuthed);
                 clearLoginErrors(); 
@@ -5260,7 +5116,7 @@ function setupPauseModal(socket, roomCode){
 
                 // stagger the pile slightly like live animation
                 const xGC = anchorXGC - (i * STACK_DRIFT);
-                const yGC = anchorYGC + (i * STACK_DRIFT);
+                const yGC = anchorYGC - (i * STACK_DRIFT);
 
                 // convert GC to gameDeck local space
                 const { x: xLocal, y: yLocal } = gcToLocalCentered(xGC, yGC, stage, card.$el);
@@ -5270,8 +5126,8 @@ function setupPauseModal(socket, roomCode){
                     duration: 0,
                     ease: 'linear',
                     rot: 0,
-                    xLocal,
-                    yLocal,
+                    x: xLocal,
+                    y: yLocal,
                     z: i + 1,
                 });
             });
@@ -5293,16 +5149,29 @@ function setupPauseModal(socket, roomCode){
             // GC center to stage local
             const { rect } = _getGCMeta();                      
             const centerGC = { x: rect.width * 0.5, y: rect.height * 0.5 };
-            const centerLocal = gcToLocalCentered(centerGC.x, centerGC.y, stage, card.$el);
+            
+            // Build the first card up front so we have a real, DOM-attached card
+            // element to measure width/height from for centering
+            const firstCard = Deck.Card(0);
+            firstCard.rank = gameDeck[0].rank;
+            firstCard.suit = gameDeck[0].suit;
+            firstCard.setRankSuit(gameDeck[0].rank, gameDeck[0].suit);
+            firstCard.setSide('front');
+            stage.appendChild(firstCard.$el);
+            GameModule.gameDeck.push(firstCard);
+
+            const centerLocal = gcToLocalCentered(centerGC.x, centerGC.y, stage, firstCard.$el);
 
             gameDeck.forEach((c, i) => {
-                const card = Deck.Card(i);
-                card.rank = c.rank;
-                card.suit = c.suit;
-                card.setRankSuit(c.rank, c.suit);
-                card.setSide('front');
-                stage.appendChild(card.$el);
-                GameModule.gameDeck.push(card);
+                const card = i === 0 ? firstCard : Deck.Card(i);
+                if (i !== 0) {
+                    card.rank = c.rank;
+                    card.suit = c.suit;
+                    card.setRankSuit(c.rank, c.suit);
+                    card.setSide('front');
+                    stage.appendChild(card.$el);
+                    GameModule.gameDeck.push(card);
+                }
 
                 // lay out into rows of size n, centered on the table
                 const col = i % n;                    // index within this hand
@@ -5315,7 +5184,7 @@ function setupPauseModal(socket, roomCode){
 
                 const x = centerLocal.x + offX;
                 const y = centerLocal.y + offY;
-                const rot = Math.random() * 5 + -5;
+                const rot = Math.random() * 2 - 1; 
 
                 card.animateTo({
                     delay: 0,
@@ -5331,6 +5200,19 @@ function setupPauseModal(socket, roomCode){
 
         // restart game here and use info from payload that server will send in room:resumed emit, then window dispatch to send results like normal
         gmCancelToken('room:resumed');   // safe even if none
+
+        // nuke every listener tied to the old game loop, regardless of what state
+        // it was suspended in — the cancel token alone can't interrupt an in-flight
+        // await, so this guarantees no duplicate listeners after a reconnect
+        socket.off('cardsPlayed');
+        socket.off('passedTurn');
+        socket.off('wonRound');
+        socket.off('allHandAckComplete');
+        socket.off('playerFinished');
+        socket.off('gameHasFinished');
+        socket.off('finishGameAnimationComplete');
+        socket.off('gotLastHand');
+
         await Promise.resolve();         // give the old loop a tick to exit
         gmNewToken('room:resumed');
         const results = await gameLoop(roomCode, socket, null, true);

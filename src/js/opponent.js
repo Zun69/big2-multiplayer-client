@@ -82,7 +82,7 @@ export default class Opponent extends Player {
         card.$el.offsetHeight;   // force layout/paint
         card.setSide('back');
 
-        let rotationOffset = Math.random() * 5 + -5; // Calculate a new rotation offset for each card
+        let rotationOffset = Math.random() * 2 - 1; // Calculate a new rotation offset for each card
         console.log("ROTATIONAL OFFSET: " + rotationOffset)
         
         // get middle card index to center pairs, triples, and combos correctly

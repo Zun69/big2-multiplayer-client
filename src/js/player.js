@@ -1,4 +1,5 @@
-// ---------------------------
+import { setStatus, showToast, formatHand, getComboEmoji } from "./ui.js";
+
 // Global sound setup
 // ---------------------------
 // Lowered from 0.9 to give headroom: the quietest sample (playcard_08) needs
@@ -871,6 +872,15 @@ export default class Player{
                 clearButton.disabled = true;
                 sortSelect.disabled = false;
             }
+
+            // status bar feedback on the current selection (ported from Shithead)
+            if (hand.length === 0) {
+                setStatus('Your turn — select cards to play');
+            } else if (cardValidate) {
+                setStatus('Ready — tap Play');
+            } else {
+                setStatus("That selection isn't legal right now");
+            }
         };
 
         //add event listeners on cards
@@ -936,7 +946,7 @@ export default class Player{
                     let card = self.findCardObject(cardId); //return card object using cardId to search
                     let stackInterval = 0.25;
 
-                    let rotationOffset = Math.random() * 5 + -5; // Calculate a new rotation offset for each card
+                    let rotationOffset = Math.random() * 2 - 1; // Calculate a new rotation offset for each card
                     //console.log("ROTATIONAL OFFSET: " + rotationOffset)
 
                     // simple, global target for everyone
@@ -1193,6 +1203,14 @@ export default class Player{
                 clearButton.disabled = true;
                 sortSelect.disabled = false;
             }
+            // status bar feedback on the current selection (ported from Shithead)
+            if (hand.length === 0) {
+                setStatus('Your turn — select cards to play');
+            } else if (cardValidate) {
+                setStatus('Ready — tap Play');
+            } else {
+                setStatus("That selection isn't legal right now");
+            }
         };
 
         //add event listeners on cards
@@ -1270,9 +1288,9 @@ export default class Player{
                 //console.log("Outcome Played Cards");
                 //console.log(outcome);
 
-                
-
                 if(outcome.payload.verdict === "validated"){
+                    showToast(`You played ${formatHand(serverValidateCards)}${getComboEmoji(serverValidateCards)}`);
+
                     // get middle card index to center pairs, triples, and combos correctly
                     const { gx, gy } = self.getGameCenterXY();
                     const n = hand.length;
@@ -1284,8 +1302,8 @@ export default class Player{
                         let card = self.findCardObject(cardId); //return card object using cardId to search
                         let stackInterval = 0.25;
 
-                        let rotationOffset = Math.random() * 5 + -5; // Calculate a new rotation offset for each card
-                        console.log("ROTATIONAL OFFSET: " + rotationOffset)
+                        let rotationOffset = Math.random() * 2 - 1 // Calculate a new rotation offset for each card
+                        //console.log("ROTATIONAL OFFSET: " + rotationOffset)
 
                         // simple, global target for everyone
                         // set x coord as center of middle card
@@ -1431,6 +1449,7 @@ export default class Player{
                 //console.log("Outcome Played Cards");
                 //console.log(outcome);
 
+                showToast('You passed');
                 passSound.play(); 
                 resolve(outcome); 
             }

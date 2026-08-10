@@ -1,5 +1,6 @@
 import Player from "./player.js";
 import { buildHenryObs, debugObs } from "./henryObs.js";
+import { setStatus } from "./ui.js";
 
 import {
   ACTION_DIM,
@@ -318,6 +319,7 @@ export default class Opponent extends Player {
     // flip them to front, animate to pile, then remove those indices.
     async spPlayCard(gameDeck, lastPlayedHand, players, turn, isFirstMove, lastPlayedBy) {
       const self = this;
+      setStatus(`${self.username} is thinking…`);
       const passCount = self.derivePassCount(players, turn);
       const control = self.wonRound;
 
@@ -436,7 +438,7 @@ export default class Opponent extends Player {
         card.$el.offsetHeight;   // force a layout/paint
         card.setSide('back');
 
-        let rotationOffset = Math.random() * 5 + -5; // Calculate a new rotation offset for each card
+        let rotationOffset = Math.random() * 2 - 1; // Calculate a new rotation offset for each card
         //console.log("ROTATIONAL OFFSET: " + rotationOffset)
         
         // get middle card index to center pairs, triples, and combos correctly

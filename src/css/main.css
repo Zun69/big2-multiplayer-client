@@ -205,15 +205,6 @@
         left: 47%; /* Place it horizontally in the middle */
         transform: translate(-50%, -50%);
     }
-
-    #warmupDeck {
-        position: absolute;
-        top: 47%; /* Place it vertically in the middle */
-        left: 40%; /* Place it horizontally in the middle */
-        transform: translate(-50%, -50%);
-        pointer-events: none;
-        z-index: 0;
-    }
     
     #gameInfo {
         position: absolute;
@@ -227,6 +218,37 @@
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
         border-radius: 5px; /* Adjust the border-radius value as needed */
         pointer-events: none;
+    }
+
+    /* ---------- toast ---------- */
+    #toastContainer {
+        position: absolute;
+        top: 5%;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        z-index: 90;
+        pointer-events: none;
+    }
+    .toast {
+        background-color: rgba(17,24,39,0.92);
+        color: #fff;
+        font-family: 'Poppins', sans-serif;
+        font-size: 0.8rem;
+        font-weight: 500;
+        padding: 8px 18px;
+        border-radius: 999px;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+        opacity: 0;
+        transform: translateY(6px);
+        transition: opacity 0.25s ease, transform 0.25s ease;
+    }
+    .toast.show {
+        opacity: 0.8;
+        transform: translateY(0);
     }
 
    #sortSelect {

@@ -79,7 +79,7 @@
     background-repeat: no-repeat;
   }
   .card .back {
-    background-image: url("faces/back_red.svg");
+    background-image: url("faces/bitmap.svg");
     background-position: center;
     background-repeat: no-repeat;
     background-size: cover;   /* ✅ no distortion */
