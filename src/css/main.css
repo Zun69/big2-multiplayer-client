@@ -247,7 +247,7 @@
         transition: opacity 0.25s ease, transform 0.25s ease;
     }
     .toast.show {
-        opacity: 0.8;
+        opacity: 1;
         transform: translateY(0);
     }
 
