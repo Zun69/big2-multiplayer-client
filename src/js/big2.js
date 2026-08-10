@@ -23,7 +23,7 @@ let currentProfileUsername = null;
 
 let isJoiningRoom = false;
 
-const PB_URL = 'http://127.0.0.1:8090'//'https://big2.kbcardgames.xyz/pb/
+const PB_URL = 'https://big2.kbcardgames.xyz/pb/'//http://127.0.0.1:8090
 // store key "pb_auth" in sessionStorage (per tab), not localStorage (shared across tabs)
 
 class SessionAuthStore extends BaseAuthStore {
@@ -1854,7 +1854,7 @@ async function loginMenu() {
             const displayName = authData?.record?.name || usernameInput;
 
             // if account verified then socket connect with token
-            const socket = io('http://localhost:3000', { //'https://big2.kbcardgames.xyz'
+            const socket = io('https://big2.kbcardgames.xyz', { //'http://localhost:3000'
                 auth: { pbToken: pb.authStore.token },
                 username: displayName, // export username
                 transports: ['polling','websocket'],
