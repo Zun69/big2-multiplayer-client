@@ -30,31 +30,17 @@ const rankLookup = {
     13: 'K',
 };
 
-const MAX_TOASTS = 4;
-
 let toastTimer = null;
-
 export function showToast(text, ms = 1700) {
-    const container = document.getElementById('toastContainer');
-    if (!container) return;
-
-    const el = document.createElement('div');
-    el.className = 'toast';
+    const el = document.getElementById('toast');
+    if (!el) return;
     el.textContent = text;
-    container.appendChild(el);
-
-    // cap how many can stack at once — drop the oldest if we're over
-    while (container.children.length > MAX_TOASTS) {
-        container.removeChild(container.firstElementChild);
-    }
-
+    el.hidden = false;
     requestAnimationFrame(() => el.classList.add('show'));
-
-    setTimeout(() => {
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
         el.classList.remove('show');
-        setTimeout(() => {
-            if (el.parentNode) el.parentNode.removeChild(el);
-        }, 300);
+        setTimeout(() => { el.hidden = true; }, 300);
     }, ms);
 }
 

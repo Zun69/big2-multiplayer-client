@@ -221,19 +221,11 @@
     }
 
     /* ---------- toast ---------- */
-    #toastContainer {
+    .toast {
         position: absolute;
-        top: 5%;
+        top: 3%;
         left: 50%;
         transform: translateX(-50%);
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 6px;
-        z-index: 90;
-        pointer-events: none;
-    }
-    .toast {
         background-color: rgba(17,24,39,0.92);
         color: #fff;
         font-family: 'Poppins', sans-serif;
@@ -242,13 +234,14 @@
         padding: 8px 18px;
         border-radius: 999px;
         box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+        z-index: 90;
+        pointer-events: none;
         opacity: 0;
-        transform: translateY(6px);
         transition: opacity 0.25s ease, transform 0.25s ease;
     }
     .toast.show {
         opacity: 1;
-        transform: translateY(0);
+        transform: translateX(-50%) translateY(6px);
     }
 
    #sortSelect {

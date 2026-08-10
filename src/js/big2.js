@@ -1140,7 +1140,7 @@ async function finishDeckAnimation(socket, roomCode) {
 // How long to show the losing player's remaining cards, face-up, before
 // they get swept into the finished deck. Shared by both the single-player
 // and multiplayer finish animations below.
-const LOSER_REVEAL_MS = 1200;
+const LOSER_REVEAL_MS = 2500;
 
 async function finishSpGameAnimation(gameDeck, losingPlayer) {
   return new Promise(async function (resolve) {
