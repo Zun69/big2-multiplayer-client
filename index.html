@@ -22,7 +22,7 @@
         <script src="src/import/socket.io.min.js"></script>
         <script src="src/import/howler.min.js"></script>
         <link rel="stylesheet" href="src/css/tailwind.build.css">
-        <script src="src/import/flowbite.min.js"></script>
+        <link rel="stylesheet" href="src/css/menus.css">
     </head>
     <body>
         <div id ="container">
@@ -64,410 +64,260 @@
                     <option value="suit">Sort: Suit</option>
                     <option value="combo">Sort: Combo</option>
                 </select>
-                <div id="loginMenu" class="w-full max-w-sm p-4 bg-white border border-gray-200 rounded-lg shadow-sm sm:p-6 md:p-8 dark:bg-gray-800 dark:border-gray-700">
-                    <form class="space-y-6" onsubmit="return false;">
-                        <div class="flex justify-center items-center mb-6 text-2xl font-semibold text-gray-900 dark:text-white">
-                            <img class="w-8 h-8 mr-2" src="icons/android-chrome-512x512.png" alt="logo">
-                            Big 2 Multiplayer
-                        </div>
-                        <div>
-                            <label for="username" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Your email</label>
-                            <input type="email" name="username" id="username"  class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg
-                            focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-                            block w-full p-1.5
-                            dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white
-                            dark:focus:ring-2 dark:focus:ring-blue-500 dark:focus:border-blue-500" required
-                            />
-                        </div>
-                        <div>
-                            <label for="password" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Your password</label>
-                            <input type="password" name="password" id="password" placeholder="••••••••" 
-                            class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg
-                            focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-                            block w-full p-1.5
-                            dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white
-                            dark:focus:ring-2 dark:focus:ring-blue-500 dark:focus:border-blue-500" required
-                            />
-                        </div>
-                        <p id="errorMessage1"
-                            class="text-sm text-red-600 text-center h-4 overflow-hidden -mt-4 mb-1 transition-all duration-200">
-                        </p>
-                        <button id="loginButton" type="button"
-                            class="w-full text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none
-                                focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center dark:bg-blue-600
-                                dark:hover:bg-blue-700 dark:focus:ring-blue-800" >
-                            Login
-                        </button>
-                        <button id="singlePlayerButton" type="button"
-                            class="w-full text-white bg-purple-600 hover:bg-purple-700 focus:ring-4 focus:outline-none 
-                                focus:ring-purple-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center
-                                dark:bg-purple-500 dark:hover:bg-purple-600 dark:focus:ring-purple-900 mt-2">
-                            Single Player
-                        </button>
-                        <div class="flex justify-between text-sm font-medium text-gray-500 dark:text-gray-300">
-                            <span>
-                                Not registered? 
-                                <button type="button"
-                                    id="createAccountButton"
-                                    class="text-blue-700 hover:underline dark:text-blue-500 bg-transparent border-0 p-0 font-medium cursor-pointer">
-                                    Create account
-                                </button>
-                            </span>
-                            <button type="button"
-                                id="lostPasswordButton"
-                                class="text-blue-700 hover:underline dark:text-blue-500 bg-transparent border-0 p-0 font-medium cursor-pointer">
-                                Lost Password?
-                            </button>
+                <!-- ===== Login ===== -->
+                <div id="loginMenu" class="menu-card menu-card--auth">
+                    <form class="menu-form" onsubmit="return false;">
+                        <div class="menu-brand">
+                            <img src="icons/android-chrome-192x192.png" alt="">
+                            <div>
+                                <div class="menu-title">Big 2</div>
+                                <div class="menu-subtitle">Sign in to play with friends</div>
                             </div>
-                    </form>
-                </div>
-                <div id="createAccountMenu" hidden class="w-full max-w-sm p-4 bg-white border border-gray-200 rounded-lg shadow-sm sm:p-6 md:p-8 dark:bg-gray-800 dark:border-gray-700">
-                    <form class="max-w-sm mx-auto">
-                    <div class="mb-5">
-                        <label for="email" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Your email</label>
-                        <input type="email" id="email" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm
-                        rounded-lg focus:ring-blue-500 focus:border-blue-500
-                        block w-full p-1.5
-                        dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white" autocomplete="email" required/>
-                    </div>
-                    <div class="mb-5">
-                        <label for="usernameRegistration" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Your username</label>
-                        <input type="text"
-                        id="usernameRegistration"
-                        pattern="^[A-Za-z0-9_]{3,12}$"
-                        title="3 to 12 characters: letters, numbers, underscores only"
-                        maxlength="12"
-                        class="bg-gray-50 border border-gray-300 text-gray-900 text-sm
-                        rounded-lg focus:ring-blue-500 focus:border-blue-500
-                        block w-full p-1.5
-                        dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white"
-                        autocomplete="username" required
-                        onfocus="document.getElementById('usernameHint').style.display='block'"
-                        onblur="document.getElementById('usernameHint').style.display='none'" />
-                        <p id="usernameHint" style="display:none;" class="mt-1 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">3–12 characters. Letters, numbers and underscores only.</p>
-                    </div>
-                    <div class="mb-5">
-                        <label for="caPassword" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Your password</label>
-                        <input
-                            type="password"
-                            id="caPassword"
-                            minlength="8"
-                            maxlength="64"
-                            pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*]).+$"
-                            title="8 to 64 chars incl. upper, lower, number, symbol."
-                            class="bg-gray-50 border border-gray-300 text-gray-900 text-sm
-                            rounded-lg focus:ring-blue-500 focus:border-blue-500
-                            block w-full p-1.5
-                            dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white"
-                            autocomplete="new-password"
-                            required
-                            onfocus="document.getElementById('passwordHint').style.display='block'"
-                            onblur="document.getElementById('passwordHint').style.display='none'" />
-                        <p id="passwordHint" style="display:none;" class="mt-1 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">8–64 characters. Must include uppercase, lowercase, a number, and one of: ! @ # $ % ^ & *</p>
-                    </div>
-                    <div class="mb-5">
-                        <label for="caRepeatPassword" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Repeat password</label>
-                        <input type="password" id="caRepeatPassword" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm
-                        rounded-lg focus:ring-blue-500 focus:border-blue-500
-                        block w-full p-1.5
-                        dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white" autocomplete="new-password" required />
-                    </div>
-
-                    <p id="errorMessageCA" class="mt-0 text-sm text-red-600 h-2" aria-live="polite"></p>
-                    
-                    <div class="flex gap-2">
-                        <button type="submit"
-                            class="inline-flex items-center justify-center w-full sm:w-auto px-4 py-2.5
-                                rounded-lg text-sm font-medium
-                                text-white bg-blue-600 hover:bg-blue-700
-                                focus:outline-none focus:ring-4 focus:ring-blue-300
-                                disabled:opacity-60 disabled:cursor-not-allowed
-                                transition">
-                            Register
-                        </button>
-
-                        <button type="button" id="caBackButton"
-                            class="inline-flex items-center justify-center w-full sm:w-auto px-4 py-2.5
-                                rounded-lg text-sm font-medium
-                                text-gray-700 bg-gray-100 hover:bg-gray-200
-                                focus:outline-none focus:ring-4 focus:ring-gray-300
-                                transition">
-                            Back to login
-                        </button>
-                    </div>
-                    </form>
-                </div>
-                <!-- Lost password: request email -->
-                <div id="lostPasswordMenu" hidden class="w-full max-w-sm p-4 bg-white border border-gray-200 rounded-lg shadow-sm sm:p-6 md:p-8 dark:bg-gray-800 dark:border-gray-700">
-                <form class="space-y-4" onsubmit="return false;">
-                    <h3 class="text-lg font-medium text-gray-900 dark:text-white">Reset your password</h3>
-                    <p class="text-sm text-gray-600 dark:text-gray-300">
-                    Enter your account email and we’ll send you a reset link.
-                    </p>
-
-                    <div>
-                    <label for="forgotEmail" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Email</label>
-                    <input type="email" id="forgotEmail" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg
-                        focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block w-full p-1.5
-                        dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white" required />
-                    </div>
-
-                    <p id="errorMessageFP" class="text-sm text-red-600 h-4"></p>
-                    <p id="infoMessageFP"  class="text-sm text-green-600 h-4"></p>
-
-                    <div class="flex gap-2">
-                    <button type="submit" id="sendResetBtn"
-                        class="inline-flex items-center justify-center w-full sm:w-auto px-4 py-2.5 rounded-lg text-sm font-medium
-                            text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300">
-                        Send reset link
-                    </button>
-                    <button type="button" id="fpBackButton"
-                        class="inline-flex items-center justify-center w-full sm:w-auto px-4 py-2.5 rounded-lg text-sm font-medium
-                            text-gray-700 bg-gray-100 hover:bg-gray-200 focus:outline-none focus:ring-4 focus:ring-gray-300">
-                        Back to login
-                    </button>
-                    </div>
-                </form>
-                </div>
-
-                <!-- Lost password: set new password (shown after clicking email link) -->
-                <div id="resetPasswordMenu" hidden class="w-full max-w-sm p-4 bg-white border border-gray-200 rounded-lg shadow-sm sm:p-6 md:p-8 dark:bg-gray-800 dark:border-gray-700">
-                <form class="space-y-4" onsubmit="return false;">
-                    <h3 class="text-lg font-medium text-gray-900 dark:text-white">Choose a new password</h3>
-
-                    <div>
-                    <label for="rpPassword" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">New password</label>
-                    <input type="password" id="rpPassword" minlength="8" maxlength="64"
-                        class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg
-                            focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block w-full p-1.5
-                            dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white" required />
-                    </div>
-
-                    <div>
-                    <label for="rpPassword2" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Repeat password</label>
-                    <input type="password" id="rpPassword2" minlength="8" maxlength="64"
-                        class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg
-                            focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block w-full p-1.5
-                            dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white" required />
-                    </div>
-
-                    <p id="errorMessageRP" class="text-sm text-red-600 h-4"></p>
-                    <p id="infoMessageRP"  class="text-sm text-green-600 h-4"></p>
-
-                    <div class="flex gap-2">
-                    <button type="submit" id="setNewPasswordBtn"
-                        class="inline-flex items-center justify-center w-full sm:w-auto px-4 py-2.5 rounded-lg text-sm font-medium
-                            text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300">
-                        Update password
-                    </button>
-                    <button type="button" id="rpBackButton"
-                        class="inline-flex items-center justify-center w-full sm:w-auto px-4 py-2.5 rounded-lg text-sm font-medium
-                            text-gray-700 bg-gray-100 hover:bg-gray-200 focus:outline-none focus:ring-4 focus:ring-gray-300">
-                        Back to login
-                    </button>
-                    </div>
-                </form>
-                </div>
-
-                <div
-                    id="joinRoomMenu" hidden
-                    class="flex-col w-[90%] h-[80%] 
-                        bg-white/90 dark:bg-gray-900/90 rounded-xl shadow-xl
-                        overflow-hidden min-h-0">
-                    <!-- Top bar -->
-                    <div class="flex justify-between items-center px-3 py-2 border-b border-gray-200 bg-white dark:bg-gray-900 sticky top-0 z-10">
-                        <button
-                        id="jrProfileButton"
-                        class="px-3 py-1.5 text-sm text-gray-900 rounded-md bg-linear-to-br from-green-400 to-blue-600 hover:bg-linear-to-bl focus:ring-4 focus:outline-none focus:ring-green-200 dark:focus:ring-green-800  active:scale-[0.98] transition"
-                        >
-                        Profile
-                        </button>
-
-                        <button
-                        id="avatarButton"
-                        class="relative p-0 w-16 h-16 rounded-md overflow-hidden hover:ring-2 hover:ring-gray-300 transition"
-                        aria-label="Choose avatar"
-                        >
-                        <img
-                            id="jrAvatarImg"
-                            src="/src/css/avatars/avatar-placeholder.png"
-                            alt="Avatar"
-                            class="w-full h-full object-cover border border-gray-300 rounded-md box-border"
-                            style="aspect-ratio: 1 / 1;"
-                            loading="lazy"
-                            decoding="async"
-                        />
-                        </button>
-
-                        <button
-                        id="jrLeaderboardButton"
-                        class="px-3 py-1.5 text-sm rounded-md text-gray-900 bg-linear-to-br from-pink-500 to-orange-400 hover:bg-linear-to-bl focus:ring-4 focus:outline-none focus:ring-pink-200 dark:focus:ring-pink-800 active:scale-[0.98] transition"
-                        >
-                        Leaderboards
-                        </button>
-                    </div>
-
-                    <!-- Scrollable rooms list -->
-                    <div
-                        id="availableRooms"
-                        class="overflow-y-auto p-3 bg-gray-50 dark:bg-gray-800 space-y-2 min-h-0 max-h-[calc(100%-100px)] overscroll-contain">
-                    ></div>
-
-                    <!-- Error row -->
-                    <div
-                        id="errorMessage2"
-                        class="px-3 py-2 min-h-6 text-red-600 border-t border-gray-200 bg-white dark:bg-gray-900"
-                    ></div>
-                </div>
-
-               <div id="profileMenu" hidden
-                    class="w-[95%] h-[95%] p-4 bg-white border border-gray-200 rounded-xl shadow-2xl
-                        dark:bg-gray-800 dark:border-gray-700 flex-col z-9998">
-
-                    <!-- Close (X) Button -->
-                    <button id="closeProfileButton"
-                        class="absolute text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300
-                        text-2xl leading-none font-light rounded-full w-8 h-8 flex items-center justify-center
-                        hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-150">
-                        &times;
-                    </button>
-
-                     <!-- Steam-like profile header -->
-                    <div id="profileHeader" 
-                    class="flex items-center gap-4 p-3 rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700">
-                        <!-- Filled by JS -->
-                    </div>
-
-                    <!-- Body -->
-                    <div id="profileBody" class="mt-4 flex-1 overflow-y-auto text-gray-800 dark:text-gray-200">
-                        <!-- More profile sections go here -->
-                    </div>
-                </div>
-
-                <div id="gameProfileMenu" hidden
-                    class="w-[85%] h-[98%] p-4 bg-white border border-gray-200 rounded-xl shadow-2xl
-                        dark:bg-gray-800 dark:border-gray-700 flex-col z-9999">
-
-                    <!-- Close (X) Button -->
-                    <button id="closeGameProfileButton"
-                        class="absolute text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300
-                        text-2xl leading-none font-light rounded-full w-8 h-8 flex items-center justify-center
-                        hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-150">
-                        &times;
-                    </button>
-
-                     <!-- Body -->
-                    <div id="gameProfileBody" class="mt-0 flex-1 overflow-y-auto text-gray-800 dark:text-gray-200">
-                        <!-- More profile sections go here -->
-                    </div>
-                </div>
-
-                <div id="leaderboardMenu" hidden
-                    class="w-[95%] h-[95%] p-4 bg-white border border-gray-200 rounded-xl shadow-2xl
-                        dark:bg-gray-800 dark:border-gray-700 flex-col z-9997">
-
-                    <!-- Close (X) Button -->
-                    <button id="closeLeaderboardButton"
-                        class="absolute text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300
-                        text-2xl leading-none font-light rounded-full w-8 h-8 flex items-center justify-center
-                        hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-150">
-                        &times;
-                    </button>
-
-                     <!-- Body -->
-                    <div id="leaderboardMenuBody" class="mt-0 flex-1 overflow-y-auto text-gray-800 dark:text-gray-200">
-                        
-                    <button id="dropdownDefaultButton" data-dropdown-toggle="dropdown" 
-                    class="mt-2 text-white bg-linear-to-r from-purple-500 via-purple-600 to-purple-700 hover:bg-linear-to-br focus:ring-4 focus:outline-none focus:ring-purple-300 font-medium 
-                    rounded-lg text-sm px-5 py-2.5 text-center inline-flex items-center dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800" 
-                    type="button">Dropdown Button<svg class="w-2.5 h-2.5 ms-3" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 10 6">
-                    <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m1 1 4 4 4-4"/>
-                    </svg>
-                    </button>
-
-                    <!-- Dropdown menu -->
-                    <div id="dropdown"
-                        class="z-10 hidden
-                            bg-slate-900/95
-                            border border-purple-500/20
-                            rounded-lg shadow-xl w-44
-                            backdrop-blur-sm
-                        ">
-                        <ul class="py-2 text-sm text-white dark:text-gray-200" aria-labelledby="dropdownDefaultButton">
-                            <li><a href="#" id="lbAvgOption"   class="block px-4 py-2 hover:bg-gray-600 dark:hover:bg-gray-600 dark:hover:text-white">Average</a></li>
-                            <li><a href="#" id="lbWinsOption"  class="block px-4 py-2 hover:bg-gray-600 dark:hover:bg-gray-600 dark:hover:text-white">Wins</a></li>
-                            <li><a href="#" id="lbSecondsOption" class="block px-4 py-2 hover:bg-gray-600 dark:hover:bg-gray-600 dark:hover:text-white">Seconds</a></li>
-                            <li><a href="#" id="lbThirdsOption"  class="block px-4 py-2 hover:bg-gray-600 dark:hover:bg-gray-600 dark:hover:text-white">Thirds</a></li>
-                            <li><a href="#" id="lbLossOption"  class="block px-4 py-2 hover:bg-gray-600 dark:hover:bg-gray-600 dark:hover:text-white">Losses</a></li>
-                            <li><a href="#" id="lbGamesOption" class="block px-4 py-2 hover:bg-gray-600 dark:hover:bg-gray-600 dark:hover:text-white">Games Played</a></li>
-                        </ul>
-                    </div>
-
-                    </div>
-                </div>
-
-                <div id="lobbyMenu" hidden class="w-[85%] h-[80%] p-4 bg-white border border-gray-200 rounded-xl shadow-lg dark:bg-gray-800 dark:border-gray-700 flex-col">
-                    <h2 id="lobbyHeading" class="text-2xl font-semibold text-gray-900 dark:text-white text-center mb-1">Lobby</h2>
-
-                    <!-- Player List -->
-                    <div id="connectedClients" 
-                    class="bg-gray-100 dark:bg-gray-900 p-0 rounded-lg mb-6 border 
-                        border-gray-200 dark:border-gray-700 
-                        text-gray-700 dark:text-gray-300 shadow-inner">
-                    </div>
-
-                    <!-- Chat Box -->
-                    <div id="chatBox" class="flex flex-col space-y-2 mb-4">
-                        <div id="messageContainer"
-                            class="overscroll-contain bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3 h-40 overflow-y-auto text-sm text-gray-800 dark:text-gray-200">
                         </div>
-                        <div class="flex space-x-2">
-                        <input id="messageInput" type="text" placeholder="Type your message..."
-                                class="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 p-2"/>
-                        <button id="sendMessageButton"
-                                class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-md transition disabled:opacity-60 disabled:cursor-not-allowed">
-                            Send
+                        <div class="field">
+                            <label for="username">Email</label>
+                            <input type="email" name="username" id="username" class="input" placeholder="you@example.com" autocomplete="email" required />
+                        </div>
+                        <div class="field">
+                            <label for="password">Password</label>
+                            <input type="password" name="password" id="password" class="input" placeholder="••••••••" autocomplete="current-password" required />
+                        </div>
+                        <p id="errorMessage1" class="form-error" aria-live="polite"></p>
+                        <button id="loginButton" type="button" class="btn btn-primary btn-block">Log in</button>
+                        <div class="menu-divider">or</div>
+                        <button id="singlePlayerButton" type="button" class="btn btn-secondary btn-block">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 8V4M8 4h8"/><circle cx="9" cy="14" r="1.2" fill="currentColor"/><circle cx="15" cy="14" r="1.2" fill="currentColor"/></svg>
+                            Play solo vs AI
                         </button>
+                        <div class="menu-footer-links">
+                            <span>New here? <button type="button" id="createAccountButton" class="btn-link">Create account</button></span>
+                            <button type="button" id="lostPasswordButton" class="btn-link">Forgot password?</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- ===== Create account ===== -->
+                <div id="createAccountMenu" hidden class="menu-card menu-card--auth">
+                    <form class="menu-form">
+                        <div class="menu-brand">
+                            <img src="icons/android-chrome-192x192.png" alt="">
+                            <div>
+                                <div class="menu-title">Create your account</div>
+                                <div class="menu-subtitle">We'll email you a link to verify it</div>
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label for="email">Email</label>
+                            <input type="email" id="email" class="input" placeholder="you@example.com" autocomplete="email" required/>
+                        </div>
+                        <div class="field">
+                            <label for="usernameRegistration">Username</label>
+                            <input type="text"
+                                id="usernameRegistration"
+                                class="input"
+                                placeholder="This is what other players see"
+                                pattern="^[A-Za-z0-9_]{3,12}$"
+                                title="3 to 12 characters: letters, numbers, underscores only"
+                                maxlength="12"
+                                autocomplete="username" required
+                                onfocus="document.getElementById('usernameHint').style.display='block'"
+                                onblur="document.getElementById('usernameHint').style.display='none'" />
+                            <p id="usernameHint" style="display:none;" class="field-hint">3–12 characters. Letters, numbers and underscores only.</p>
+                        </div>
+                        <div class="field">
+                            <label for="caPassword">Password</label>
+                            <input
+                                type="password"
+                                id="caPassword"
+                                class="input"
+                                placeholder="At least 8 characters"
+                                minlength="8"
+                                maxlength="64"
+                                pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*]).+$"
+                                title="8 to 64 chars incl. upper, lower, number, symbol."
+                                autocomplete="new-password"
+                                required
+                                onfocus="document.getElementById('passwordHint').style.display='block'"
+                                onblur="document.getElementById('passwordHint').style.display='none'" />
+                            <p id="passwordHint" style="display:none;" class="field-hint">8–64 characters, with an uppercase letter, a lowercase letter, a number, and one of ! @ # $ % ^ &amp; *</p>
+                        </div>
+                        <div class="field">
+                            <label for="caRepeatPassword">Repeat password</label>
+                            <input type="password" id="caRepeatPassword" class="input" placeholder="••••••••" autocomplete="new-password" required />
+                        </div>
+
+                        <p id="errorMessageCA" class="form-error" aria-live="polite"></p>
+
+                        <button type="submit" class="btn btn-primary btn-block">Create account</button>
+                        <div class="menu-footer-links menu-footer-center">
+                            Already have an account? <button type="button" id="caBackButton" class="btn-link">Log in</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- ===== Lost password: request email ===== -->
+                <div id="lostPasswordMenu" hidden class="menu-card menu-card--auth">
+                    <form class="menu-form" onsubmit="return false;">
+                        <div class="menu-brand">
+                            <img src="icons/android-chrome-192x192.png" alt="">
+                            <div>
+                                <div class="menu-title">Reset your password</div>
+                                <div class="menu-subtitle">Enter your account email and we'll send you a reset link</div>
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label for="forgotEmail">Email</label>
+                            <input type="email" id="forgotEmail" class="input" placeholder="you@example.com" autocomplete="email" required />
+                        </div>
+
+                        <p id="errorMessageFP" class="form-error" aria-live="polite"></p>
+                        <p id="infoMessageFP" class="form-info" aria-live="polite"></p>
+
+                        <button type="submit" id="sendResetBtn" class="btn btn-primary btn-block">Send reset link</button>
+                        <div class="menu-footer-links menu-footer-center">
+                            Remembered it? <button type="button" id="fpBackButton" class="btn-link">Back to log in</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- ===== Lost password: set new password (shown after clicking email link) ===== -->
+                <div id="resetPasswordMenu" hidden class="menu-card menu-card--auth">
+                    <form class="menu-form" onsubmit="return false;">
+                        <div class="menu-brand">
+                            <img src="icons/android-chrome-192x192.png" alt="">
+                            <div>
+                                <div class="menu-title">Choose a new password</div>
+                                <div class="menu-subtitle">8–64 characters with upper, lower, number and symbol</div>
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label for="rpPassword">New password</label>
+                            <input type="password" id="rpPassword" class="input" minlength="8" maxlength="64" autocomplete="new-password" required />
+                        </div>
+                        <div class="field">
+                            <label for="rpPassword2">Repeat password</label>
+                            <input type="password" id="rpPassword2" class="input" minlength="8" maxlength="64" autocomplete="new-password" required />
+                        </div>
+
+                        <p id="errorMessageRP" class="form-error" aria-live="polite"></p>
+                        <p id="infoMessageRP" class="form-info" aria-live="polite"></p>
+
+                        <button type="submit" id="setNewPasswordBtn" class="btn btn-primary btn-block">Update password</button>
+                        <div class="menu-footer-links menu-footer-center">
+                            <button type="button" id="rpBackButton" class="btn-link">Back to log in</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- ===== Rooms ===== -->
+                <div id="joinRoomMenu" hidden class="menu-card menu-card--panel">
+                    <div class="jr-topbar">
+                        <div class="jr-me">
+                            <button id="avatarButton" class="jr-avatar-btn" aria-label="Change avatar" title="Change avatar">
+                                <img id="jrAvatarImg" src="src/css/avatars/avatar-placeholder.png" alt="" loading="lazy" decoding="async" />
+                            </button>
+                            <div style="min-width:0">
+                                <div id="jrUsername" class="jr-name">Player</div>
+                                <div class="jr-sub">Tap your picture to change it</div>
+                            </div>
+                        </div>
+                        <div class="jr-actions">
+                            <button id="jrProfileButton" class="btn btn-secondary btn-sm">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+                                Profile
+                            </button>
+                            <button id="jrLeaderboardButton" class="btn btn-secondary btn-sm">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4Z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg>
+                                Leaderboard
+                            </button>
                         </div>
                     </div>
 
-                    <!-- Error -->
-                    <p id="errorMessage3" class="text-sm text-red-600 mb-3 text-center"></p>
+                    <div class="jr-body">
+                        <div class="menu-header">
+                            <div>
+                                <div class="menu-title">Rooms</div>
+                                <div class="menu-subtitle">Pick a room. The game starts when all 4 players are ready.</div>
+                            </div>
+                            <span id="jrOnlineCount" class="pill pill-green" hidden></span>
+                        </div>
 
-                    <!-- Buttons -->
-                    <div class="flex justify-between">
-                        <button id="readyButton"
-                                class="flex-1 mr-2 px-4 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-md transition">
-                        Ready Up
-                        </button>
-                        <button id="backToJoinRoomButton"
-                                class="flex-1 ml-2 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg shadow-md transition">
-                        Go Back
-                        </button>
+                        <div id="availableRooms"></div>
+
+                        <div id="errorMessage2" role="alert"></div>
                     </div>
                 </div>
 
-                <div id="endMenu" hidden
-                    class="w-[50%] h-[70%] p-4
-                    bg-white border border-gray-200 rounded-xl shadow-lg
-                    dark:border-gray-700
-                    flex-col items-center justify-center space-y-4">
-
-                <div id="resultsContainer" class="w-full max-w-sm mx-auto text-center">
-                    <!-- JS will populate this -->
+                <!-- ===== Profile ===== -->
+                <div id="profileMenu" hidden class="menu-card menu-card--panel">
+                    <button id="closeProfileButton" class="modal-close" aria-label="Close">&times;</button>
+                    <div id="profileHeader"><!-- Filled by JS --></div>
+                    <div id="profileBody"><!-- Filled by JS --></div>
                 </div>
 
-                <div class="flex justify-between gap-3 mt-4 w-full max-w-sm mx-auto">
-                    <button id="backToJoinRoomButton2"
-                        class="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg shadow-md transition">
-                        Go Back
-                    </button>
-                    <button id="continueButton"
-                        class="flex-1 px-4 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-md transition">
-                        Continue
-                    </button>
+                <!-- ===== Game detail ===== -->
+                <div id="gameProfileMenu" hidden class="menu-card menu-card--panel">
+                    <button id="closeGameProfileButton" class="modal-close" aria-label="Close">&times;</button>
+                    <div id="gameProfileBody"><!-- Filled by JS --></div>
                 </div>
-                
+
+                <!-- ===== Leaderboard ===== -->
+                <div id="leaderboardMenu" hidden class="menu-card menu-card--panel">
+                    <button id="closeLeaderboardButton" class="modal-close" aria-label="Close">&times;</button>
+                    <div class="menu-header" style="padding-right:48px">
+                        <div>
+                            <div class="menu-title">Leaderboard</div>
+                            <div id="lbSubtitle" class="menu-subtitle">Ranked by average finish — lower is better</div>
+                        </div>
+                    </div>
+                    <div id="lbTabs" class="segmented" role="tablist" aria-label="Rank by">
+                        <button type="button" id="lbAvgOption"     role="tab">Average</button>
+                        <button type="button" id="lbWinsOption"    role="tab">Wins</button>
+                        <button type="button" id="lbSecondsOption" role="tab">2nds</button>
+                        <button type="button" id="lbThirdsOption"  role="tab">3rds</button>
+                        <button type="button" id="lbLossOption"    role="tab">Losses</button>
+                        <button type="button" id="lbGamesOption"   role="tab">Games played</button>
+                    </div>
+                    <div id="leaderboardMenuBody"><!-- Filled by JS --></div>
+                </div>
+
+                <!-- ===== Lobby ===== -->
+                <div id="lobbyMenu" hidden class="menu-card menu-card--panel">
+                    <div class="menu-header">
+                        <div>
+                            <h2 id="lobbyHeading" class="menu-title">Lobby</h2>
+                            <div id="lobbySubheading" class="menu-subtitle">Waiting for players…</div>
+                        </div>
+                    </div>
+
+                    <!-- Seats -->
+                    <div id="connectedClients"></div>
+
+                    <!-- Chat -->
+                    <div id="chatBox" class="lobby-chat">
+                        <div class="menu-section-title" style="margin:0">Chat</div>
+                        <div id="messageContainer"></div>
+                        <div class="lobby-compose">
+                            <input id="messageInput" type="text" class="input" maxlength="100" placeholder="Type a message…" autocomplete="off"/>
+                            <button id="sendMessageButton" class="btn btn-secondary" disabled>Send</button>
+                        </div>
+                    </div>
+
+                    <p id="errorMessage3" class="form-error"></p>
+
+                    <div class="lobby-actions">
+                        <button id="backToJoinRoomButton" class="btn btn-secondary">Leave room</button>
+                        <button id="readyButton" class="btn btn-primary">Ready up 0/4</button>
+                    </div>
+                </div>
+
+                <!-- ===== Results (multiplayer + single player) ===== -->
+                <div id="endMenu" hidden class="menu-card menu-card--auth">
+                    <div id="resultsContainer"><!-- JS will populate this --></div>
+                    <div class="results-actions">
+                        <button id="backToJoinRoomButton2" class="btn btn-secondary">Leave</button>
+                        <button id="continueButton" class="btn btn-primary">Play again</button>
+                    </div>
                 </div>
 
                 <!-- Pause / Disconnect overlay -->

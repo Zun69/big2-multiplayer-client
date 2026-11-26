@@ -1800,6 +1800,13 @@ async function loginMenu() {
     userNameInput.addEventListener("input", updateLoginButtonState);
     passwordInput.addEventListener("input", updateLoginButtonState);
 
+    // Enter in either field logs in (the form has no submit button). Property, not listener, so re-entering the menu doesn't stack them.
+    const onLoginEnter = (e) => {
+        if (e.key === 'Enter' && !loginButton.disabled) { e.preventDefault(); loginButton.click(); }
+    };
+    userNameInput.onkeydown = onLoginEnter;
+    passwordInput.onkeydown = onLoginEnter;
+
     return new Promise((resolve) => {
         let settled = false;
         function settle(v) { if (!settled) { settled = true; resolve(v); } }
@@ -1827,7 +1834,7 @@ async function loginMenu() {
                 // explain + offer resend
                 errorMessage1.innerHTML = `
                     Your email isn’t verified yet.
-                    <button type="button" id="resendVerifyBtn" class="underline">Resend verification email</button>
+                    <button type="button" id="resendVerifyBtn" class="btn-link">Resend verification email</button>
                 `;
 
                 // wire "Resend"
@@ -1878,7 +1885,7 @@ async function loginMenu() {
                 if (msg === 'Email not verified') {
                     errorMessage1.innerHTML = `
                         Your email isn’t verified yet.
-                        <button type="button" id="resendVerifyBtn" class="underline">Resend verification email</button>
+                        <button type="button" id="resendVerifyBtn" class="btn-link">Resend verification email</button>
                     `;
                     document.getElementById('resendVerifyBtn')?.addEventListener('click', async () => {
                     try {
@@ -1904,7 +1911,11 @@ async function loginMenu() {
             const msg = e?.data?.message || 'Login failed';
             const identityMsg = e?.data?.data?.identity?.message;
             const passwordMsg = e?.data?.data?.password?.message;
-            errorMessage1.innerText = identityMsg || passwordMsg || msg;
+            // PocketBase answers a wrong email/password with a generic 400 "Failed to authenticate."
+            const friendly = e?.status === 400 ? 'Incorrect email or password.'
+                : e?.status === 0 ? "Can't reach the server. Check your connection and try again."
+                : msg;
+            errorMessage1.innerText = identityMsg || passwordMsg || friendly;
             loginButton.disabled = false;
         }
         }
@@ -1917,8 +1928,8 @@ async function loginMenu() {
             const p = passwordInput.value.trim();
             if (!u || !p) {
                 errorMessage1.innerText = !u && !p
-                ? "Both username and password are required."
-                : (!u ? "Username is required." : "Password is required.");
+                ? "Enter your email and password."
+                : (!u ? "Enter your email." : "Enter your password.");
                 return;
             }
             handleClick();
@@ -2374,6 +2385,23 @@ function getAvgTier(avg) {
 
 function esc(v) { return String(v).replace(/"/g, '\\"'); }
 
+// escape text before putting it into an HTML template string (usernames are player-chosen)
+function escapeHtml(v) {
+    return String(v ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+}
+
+// tier colour as a plain hex, for elements styled by menus.css (which overrides Tailwind text colours)
+const TIER_HEX = { Mythic: '#059669', Legendary: '#0891b2', Epic: '#7c3aed', Rare: '#d97706', Uncommon: '#ea580c', Common: '#e11d48' };
+const PLACE_LABELS = ['1st', '2nd', '3rd', '4th'];
+
+// little "1st"/"2nd"... badge element
+function makePlaceBadge(place) {
+    const b = document.createElement('span');
+    b.className = `place-badge place-${place}`;
+    b.textContent = PLACE_LABELS[place - 1] ?? String(place);
+    return b;
+}
+
 async function getUserByName(name) {
     return await pb.collection('users').getFirstListItem(`name="${esc(name)}"`);
 }
@@ -2469,91 +2497,90 @@ function td(cls, text) {
   return c;
 }
 
-function setDropdownActive(metric) {
-    const map = {
-        avg:     document.getElementById('lbAvgOption'),
-        wins:    document.getElementById('lbWinsOption'),
-        games:   document.getElementById('lbGamesOption'),
-        losses:  document.getElementById('lbLossOption'),
-        seconds: document.getElementById('lbSecondsOption'),
-        thirds:  document.getElementById('lbThirdsOption'),
-    };
+// leaderboard "rank by" tabs: metric -> button id
+const LB_TABS = {
+    avg:     'lbAvgOption',
+    wins:    'lbWinsOption',
+    seconds: 'lbSecondsOption',
+    thirds:  'lbThirdsOption',
+    losses:  'lbLossOption',
+    games:   'lbGamesOption',
+};
 
-    document.querySelectorAll('#dropdown a').forEach(el => {
-        el.classList.remove('bg-gray-600', 'dark:bg-gray-600');
-    });
+const LB_SUBTITLES = {
+    avg:     'Ranked by average finish — lower is better',
+    wins:    'Ranked by win rate',
+    seconds: 'Ranked by 2nd-place rate',
+    thirds:  'Ranked by 3rd-place rate',
+    losses:  'Ranked by loss rate',
+    games:   'Ranked by games played',
+};
 
-    const el = map[metric];
-    if (el) el.classList.add('bg-gray-600', 'dark:bg-gray-600');
+function setLeaderboardTab(metric) {
+    for (const [m, id] of Object.entries(LB_TABS)) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        const on = m === metric;
+        el.classList.toggle('is-active', on);
+        el.setAttribute('aria-selected', on ? 'true' : 'false');
+    }
+    const sub = document.getElementById('lbSubtitle');
+    if (sub) sub.textContent = LB_SUBTITLES[metric] || LB_SUBTITLES.avg;
+}
 
-    const dropdownButton = document.getElementById('dropdownDefaultButton');
-    if (dropdownButton) {
-        const label = metricHeader(metric);
-        if (dropdownButton.childNodes && dropdownButton.childNodes[0]) {
-        dropdownButton.childNodes[0].textContent = label + ' ';
-        } else {
-        dropdownButton.textContent = label + ' ';
-        }
+function bindLeaderboardTabs() {
+    for (const [m, id] of Object.entries(LB_TABS)) {
+        const el = document.getElementById(id);
+        if (!el || el.dataset.bound) continue;
+        el.dataset.bound = '1';
+        el.addEventListener('click', () => {
+            try { clickSounds?.[0]?.play(); } catch {}
+            renderLeaderboardMenu(m);
+        });
     }
 }
 
-function bindDropdownHandlers() {
-    const bind = (id, metric) => {
-        const el = document.getElementById(id);
-        if (el && !el.dataset.bound) {
-        el.dataset.bound = '1';
-        el.addEventListener('click', (e) => {
-            e.preventDefault();
-            try { clickSounds?.[0]?.play(); } catch {}
-            renderLeaderboardMenu(metric);
+// shared First / Prev / [info] / Next / Last footer for paged tables
+function makePager() {
+    const footer = document.createElement('div');
+    footer.className = 'pager';
 
-            // Correctly close via Flowbite API
-            const dropdownEl = document.getElementById('dropdown');
-            const buttonEl   = document.getElementById('dropdownDefaultButton');
+    const info = document.createElement('span');
 
-            // Try to get Flowbite’s existing controller instance
-            let dropdownInstance = Flowbite?.Dropdown?.getInstance?.(dropdownEl);
-
-            // If Flowbite hasn’t created one yet, create it
-            if (!dropdownInstance && typeof Dropdown !== 'undefined') {
-            dropdownInstance = new Dropdown(dropdownEl, buttonEl);
-            }
-
-            // Ask Flowbite to close it (keeps internal state synced)
-            dropdownInstance?.hide();
-        });
-        }
+    const mk = (label, title) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.title = title;
+        b.className = 'btn btn-secondary btn-sm';
+        b.textContent = label;
+        return b;
     };
-    bind('lbAvgOption',     'avg');
-    bind('lbWinsOption',    'wins');
-    bind('lbGamesOption',   'games');
-    bind('lbLossOption',    'losses');
-    bind('lbSecondsOption', 'seconds');   
-    bind('lbThirdsOption',  'thirds');  
+    const firstBtn = mk('« First', 'First page');
+    const prevBtn  = mk('‹ Prev', 'Previous page');
+    const nextBtn  = mk('Next ›', 'Next page');
+    const lastBtn  = mk('Last »', 'Last page');
+
+    const btns = document.createElement('div');
+    btns.className = 'pager-buttons';
+    btns.append(firstBtn, prevBtn, nextBtn, lastBtn);
+    footer.append(info, btns);
+
+    return { footer, info, firstBtn, prevBtn, nextBtn, lastBtn };
 }
 
 async function renderLeaderboardMenu(metric = 'avg') {
-    const container = document.getElementById('leaderboardMenu');
-    const dropdownButton = document.getElementById('dropdownDefaultButton');
-    if (!container || !dropdownButton) return;
+    const body = document.getElementById('leaderboardMenuBody');
+    if (!body) return;
 
-    container.classList.remove('hidden');
+    bindLeaderboardTabs();
+    setLeaderboardTab(metric);
 
-    // ensure dropdown items are wired
-    bindDropdownHandlers();
+    body.replaceChildren();
 
-    // mark active + update button text
-    setDropdownActive(metric);
-
-    // remove prior table
-    const existing = document.getElementById('leaderboardWrapper');
-    if (existing) existing.remove();
-
-    // wrapper after the dropdown
     const wrapper = document.createElement('div');
     wrapper.id = 'leaderboardWrapper';
-    wrapper.className = 'mt-3 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden';
-    dropdownButton.insertAdjacentElement('afterend', wrapper);
+    wrapper.className = 'data-table-wrap';
+    body.appendChild(wrapper);
 
     const colOrder = {
         wins:    ['gp', 'win',  'second', 'third',  'loss'],
@@ -2563,143 +2590,118 @@ async function renderLeaderboardMenu(metric = 'avg') {
         avg:     ['gp', 'avg',    'win',  'second', 'third', 'loss'],
         games:   ['gp', 'win', 'second', 'third', 'loss'],
     };
+    const sortedCol = { avg: 'avg', wins: 'win', seconds: 'second', thirds: 'third', losses: 'loss', games: 'gp' }[metric] || 'avg';
+    const colLabels = { gp: 'Games', avg: 'Avg finish', win: 'Win %', second: '2nd %', third: '3rd %', loss: 'Loss %' };
+    const cols = colOrder[metric] || colOrder.avg;
 
-    const colHeaders = {
-        gp:     '<th class="px-4 py-3 font-semibold text-right w-16">GP</th>',
-        win:    '<th class="px-4 py-3 font-semibold text-right w-20 whitespace-nowrap">Win%</th>',
-        second: '<th class="px-4 py-3 font-semibold text-right w-20 whitespace-nowrap">2nd%</th>',
-        third:  '<th class="px-4 py-3 font-semibold text-right w-20 whitespace-nowrap">3rd%</th>',
-        loss:   '<th class="px-4 py-3 font-semibold text-right w-20 whitespace-nowrap">Loss%</th>',
-        avg:    '<th class="px-4 py-3 font-semibold text-right w-20 whitespace-nowrap">Avg</th>',
-    };
-
-    // table
     const table = document.createElement('table');
-    table.className = 'min-w-full table-fixed text-sm text-left';
+    table.className = 'data-table';
 
     const thead = document.createElement('thead');
-    thead.className = 'bg-gradient-to-r from-green-400 via-green-500 to-green-600 text-gray-800 dark:text-gray-100';
-    thead.innerHTML = `
-        <tr>
-        <th class="px-4 py-3 font-semibold w-10">#</th>
-        <th class="px-4 py-3 font-semibold">Player</th>
-        ${(colOrder[metric] || colOrder.avg).map(c => colHeaders[c]).join('')}
-        </tr>
-    `;
+    const htr = document.createElement('tr');
+    const th = (text, cls = '') => { const t = document.createElement('th'); t.className = cls; t.textContent = text; return t; };
+    htr.append(th('#', ''), th('Player', ''));
+    cols.forEach(c => htr.appendChild(th(colLabels[c], 'num' + (c === sortedCol ? ' is-sorted' : ''))));
+    htr.firstChild.style.width = '56px';
+    thead.appendChild(htr);
 
     const tbody = document.createElement('tbody');
-    tbody.className = 'divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-900';
-
-    // footer pager
-    const footer = document.createElement('div');
-    footer.className = 'flex items-center justify-between gap-3 px-4 py-3 bg-gray-100 border-t border-gray-300 dark:border-gray-700';
-    const info = document.createElement('span');
-    info.className = 'text-xs text-gray-700 dark:text-gray-400';
-
-    function makeBtn(label, title) {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.title = title || label;
-        btn.className = 'px-2.5 py-1 text-xs rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 font-medium shadow-sm transition';
-        btn.textContent = label;
-        return btn;
-    }
-    const firstBtn = makeBtn('« First', 'First page');
-    const prevBtn  = makeBtn('‹ Prev',  'Previous page');
-    const nextBtn  = makeBtn('Next ›',  'Next page');
-    const lastBtn  = makeBtn('Last »',  'Last page');
-
-    const pager = document.createElement('div');
-    pager.className = 'flex items-center gap-2';
-    pager.append(firstBtn, prevBtn, info, nextBtn, lastBtn);
-
-    footer.append(pager);
+    const pager = makePager();
 
     table.append(thead, tbody);
-    wrapper.append(table, footer);
+    wrapper.append(table, pager.footer);
 
-    // pagination state
+    const myId = pb?.authStore?.model?.id;
     let page = 1;
     const perPage = 10;
 
     async function renderPage() {
         const res = await fetchLeaderboardPage(pb, { page, perPage, metric });
-        tbody.innerHTML = '';
+        tbody.replaceChildren();
 
         if (!res.items.length) {
-        const empty = document.createElement('tr');
-       empty.innerHTML = `<td colspan="8" class="px-4 py-6 text-center text-gray-500 dark:text-gray-400 italic">No players yet</td>`;
-        tbody.appendChild(empty);
-        } else {
-        const rankStart = (res.page - 1) * res.perPage + 1;
-
-        res.items.forEach((row, i) => {
             const tr = document.createElement('tr');
-            tr.className =
-            (i % 2 === 0 ? 'bg-gray-200' : 'bg-white dark:bg-gray-900') +
-            ' hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors';
-
-            // position
-            tr.appendChild(td('px-4 py-2 font-mono text-xs text-gray-800 dark:text-gray-200 whitespace-nowrap', rankStart + i));
-
-            // player (avatar + name)
-            const playerTd = document.createElement('td');
-            playerTd.className = 'px-4 py-2';
-            const rowDiv = document.createElement('div');
-            rowDiv.className = 'flex items-center gap-3';
-
-            const img = document.createElement('img');
-            img.src = row.avatar;
-            img.alt = row.name;
-            img.loading = 'lazy';
-            img.decoding = 'async';
-            img.className = 'w-8 h-8 rounded-md object-cover border border-gray-300 dark:border-gray-600';
-            img.style.aspectRatio = '1 / 1';
-
-            const nameSpan = document.createElement('button');
-            nameSpan.type = 'button';
-            nameSpan.className = 'font-semibold text-blue-600 hover:text-blue-800 underline underline-offset-2 truncate cursor-pointer bg-transparent border-0 p-0 text-sm';
-            nameSpan.textContent = row.name;
-            nameSpan.addEventListener('click', async () => {
-                try { clickSounds?.[2]?.play(); } catch {}
-                const profileMenu = document.getElementById('profileMenu');
-                setHiddenSafe(profileMenu, false);
-                await renderProfileHeader(row.name);
-                await renderProfileTable(row.name);
-            });
-
-            rowDiv.append(img, nameSpan);
-            playerTd.appendChild(rowDiv);
-            tr.appendChild(playerTd);
-
-            // stat columns in metric-dependent order
-            const pct = (n) => n != null ? (n * 100).toFixed(1) + '%' : '—';
-            const colCells = {
-                gp:     () => td('px-4 py-2 text-right tabular-nums text-gray-700', row.games ?? 0),
-                win:    () => td('px-4 py-2 text-right tabular-nums text-green-700 font-semibold', pct(row.winPct)),
-                second: () => td('px-4 py-2 text-right tabular-nums text-blue-600', pct(row.secondPct)),
-                third:  () => td('px-4 py-2 text-right tabular-nums text-yellow-600', pct(row.thirdPct)),
-                loss:   () => td('px-4 py-2 text-right tabular-nums text-red-500', pct(row.lossPct)),
-                avg:    () => td('px-4 py-2 text-right tabular-nums font-bold text-gray-900', row.avg != null ? row.avg.toFixed(3) : '—'),
-            };
-            (colOrder[metric] || colOrder.avg).forEach(c => tr.appendChild(colCells[c]()));
-
+            tr.className = 'empty-row';
+            tr.innerHTML = `<td colspan="8">No games played yet — finish a game to get on the board.</td>`;
             tbody.appendChild(tr);
-        });
+        } else {
+            const rankStart = (res.page - 1) * res.perPage + 1;
+
+            res.items.forEach((row, i) => {
+                const rank = rankStart + i;
+                const tr = document.createElement('tr');
+                if (myId && row.userId === myId) tr.classList.add('is-me');
+
+                // rank
+                const rankTd = document.createElement('td');
+                const rankEl = document.createElement('span');
+                rankEl.className = 'rank-num' + (rank <= 3 ? ` place-${rank}` : '');
+                rankEl.textContent = rank;
+                rankTd.appendChild(rankEl);
+                tr.appendChild(rankTd);
+
+                // player (avatar + name → opens their profile)
+                const playerTd = document.createElement('td');
+                const cell = document.createElement('div');
+                cell.className = 'player-cell';
+
+                const img = document.createElement('img');
+                img.src = row.avatar;
+                img.alt = '';
+                img.loading = 'lazy';
+                img.decoding = 'async';
+                img.className = 'avatar avatar-sm';
+
+                const nameBtn = document.createElement('button');
+                nameBtn.type = 'button';
+                nameBtn.className = 'name-link';
+                nameBtn.textContent = row.name;
+                nameBtn.addEventListener('click', async () => {
+                    try { clickSounds?.[2]?.play(); } catch {}
+                    const profileMenu = document.getElementById('profileMenu');
+                    setHiddenSafe(profileMenu, false);
+                    await renderProfileHeader(row.name);
+                    await renderProfileTable(row.name);
+                });
+
+                cell.append(img, nameBtn);
+                if (myId && row.userId === myId) {
+                    const you = document.createElement('span');
+                    you.className = 'you-tag';
+                    you.textContent = 'You';
+                    cell.appendChild(you);
+                }
+                playerTd.appendChild(cell);
+                tr.appendChild(playerTd);
+
+                // stat columns in metric-dependent order
+                const pct = (n) => n != null ? (n * 100).toFixed(1) + '%' : '—';
+                const value = {
+                    gp:     row.games ?? 0,
+                    win:    pct(row.winPct),
+                    second: pct(row.secondPct),
+                    third:  pct(row.thirdPct),
+                    loss:   pct(row.lossPct),
+                    avg:    row.avg != null ? row.avg.toFixed(3) : '—',
+                };
+                cols.forEach(c => tr.appendChild(td('num' + (c === sortedCol ? ' is-sorted' : ''), value[c])));
+
+                tbody.appendChild(tr);
+            });
         }
 
-        info.textContent = `Page ${res.page} of ${res.totalPages} • ${res.totalItems} players`;
+        pager.info.textContent = `Page ${res.page} of ${Math.max(1, res.totalPages)} · ${res.totalItems} players`;
 
-        firstBtn.disabled = res.page <= 1;
-        prevBtn.disabled  = res.page <= 1;
-        nextBtn.disabled  = res.page >= res.totalPages;
-        lastBtn.disabled  = res.page >= res.totalPages;
+        pager.firstBtn.disabled = res.page <= 1;
+        pager.prevBtn.disabled  = res.page <= 1;
+        pager.nextBtn.disabled  = res.page >= res.totalPages;
+        pager.lastBtn.disabled  = res.page >= res.totalPages;
 
         const click = () => { try { clickSounds?.[0]?.play(); } catch {} };
-        firstBtn.onclick = () => { click(); page = 1; renderPage(); };
-        prevBtn.onclick  = () => { click(); if (page > 1) page -= 1; renderPage(); };
-        nextBtn.onclick  = () => { click(); if (page < res.totalPages) page += 1; renderPage(); };
-        lastBtn.onclick  = () => { click(); page = res.totalPages; renderPage(); };
+        pager.firstBtn.onclick = () => { click(); page = 1; renderPage(); };
+        pager.prevBtn.onclick  = () => { click(); if (page > 1) page -= 1; renderPage(); };
+        pager.nextBtn.onclick  = () => { click(); if (page < res.totalPages) page += 1; renderPage(); };
+        pager.lastBtn.onclick  = () => { click(); page = res.totalPages; renderPage(); };
     }
 
     await renderPage();
@@ -2707,6 +2709,7 @@ async function renderLeaderboardMenu(metric = 'avg') {
 
 async function renderProfileHeader(name) {
     const header = profileMenu.querySelector('#profileHeader');
+    const body = profileMenu.querySelector('#profileBody');
     if (!header) return;
 
     // Get pocketbase player object via querying with name given by server on auth
@@ -2718,270 +2721,139 @@ async function renderProfileHeader(name) {
     // Fetch stats via username query
     const stats = await fetchPlayerStats(pb, username) || {};
     const avg = stats?.avg_finish ?? null;
+    const tier = getAvgTier(avg);
+    const tierHex = TIER_HEX[tier.label] || '#9ca3af';
 
-    // Create elements
+    // ---- header: avatar, name, tier | average finish (tinted with the tier colour)
+    header.className = [tier.bg, tier.border].join(' ');
+    header.replaceChildren();
+
+    const left = document.createElement('div');
+    left.className = 'profile-id';
+
     const img = document.createElement('img');
-    const nameDiv = document.createElement('div');
-    const avgDiv = document.createElement('div');
-    const leftWrapper = document.createElement('div');
-
-    // Avatar
     if (u?.id && u?.avatar) {
         const url1x = pbAvatarUrl(u.id, u.avatar, '100x100');
         const url2x = pbAvatarUrl(u.id, u.avatar, '200x200');
         img.src = url1x;
         img.srcset = `${url1x} 1x, ${url2x} 2x`;
-        img.sizes = '4rem';
+        img.sizes = '64px';
     } else {
         img.src = 'src/css/avatars/avatar-placeholder.png';
-        img.removeAttribute('srcset');
-        img.removeAttribute('sizes');
     }
-
-    img.alt = username;
+    img.alt = '';
     img.loading = 'lazy';
     img.decoding = 'async';
-    img.className = 'w-16 h-16 object-cover rounded-md border border-gray-300 dark:border-gray-600 shadow-sm';
-    img.style.aspectRatio = '1 / 1';
+    img.className = 'avatar avatar-lg';
 
-    // Username
+    const idText = document.createElement('div');
+    idText.style.minWidth = '0';
+    const nameDiv = document.createElement('div');
+    nameDiv.className = 'profile-name';
     nameDiv.textContent = username;
-    nameDiv.className = 'text-xl font-semibold text-gray-900 dark:text-white truncate ml-3';
+    const tierWrap = document.createElement('div');
+    tierWrap.className = 'profile-tier';
+    const tierPill = document.createElement('span');
+    tierPill.className = 'pill';
+    tierPill.style.background = 'rgba(255,255,255,0.8)';
+    tierPill.style.color = tierHex;
+    tierPill.textContent = avg == null ? 'Unranked' : `${tier.label} tier`;
+    tierPill.title = tier.title;
+    tierWrap.appendChild(tierPill);
+    idText.append(nameDiv, tierWrap);
+    left.append(img, idText);
 
-    // Left side (avatar + name)
-    leftWrapper.className = 'flex items-center gap-3';
-    leftWrapper.append(img, nameDiv);
+    const score = document.createElement('div');
+    score.className = 'profile-score';
+    score.title = tier.title;
+    const scoreValue = document.createElement('div');
+    scoreValue.className = 'profile-score-value';
+    scoreValue.style.color = tierHex;
+    scoreValue.textContent = avg !== null ? avg.toFixed(3) : '—';
+    const scoreLabel = document.createElement('div');
+    scoreLabel.className = 'profile-score-label';
+    scoreLabel.textContent = 'Avg finish';
+    score.append(scoreValue, scoreLabel);
 
-    const tier = getAvgTier(avg);
+    header.append(left, score);
 
-    avgDiv.textContent = avg !== null ? avg.toFixed(3) : '—';
-    avgDiv.className = [
-        // core badge look
-        'px-4 py-1 rounded-lg tracking-wider whitespace-nowrap font-extrabold text-3xl',
-        'border shadow-md', tier.ring,
-        // dynamic colors
-        tier.text, tier.bg, tier.border
-    ].join(' ');
-
-    // Inject into header
-    header.innerHTML = '';
-    header.className = [
-        "flex items-center justify-between p-2 rounded-lg border shadow-sm",
-        // use tier’s bg + border color for contrast
-        tier.bg, tier.border,
-        // fallback for text and dark mode
-        "dark:text-gray-100 transition-colors"
-    ].join(" ");
-    header.append(leftWrapper, avgDiv);
-
-    // stats strip
-    // remove an existing strip if present
-    const oldStrip = profileMenu.querySelector('#profileStatsStrip');
-    if (oldStrip) oldStrip.remove();
-
-    const oldPctStrip = profileMenu.querySelector('#profileStatsPercentageStrip');
-    if (oldPctStrip) oldPctStrip.remove();
-
-    // Helpers
+    // ---- stat tiles: count + share of games for each placing
     const gp = stats.games_played ?? 0;
     const wins = stats.wins ?? 0;
     const seconds = stats.seconds ?? 0;
     const thirds = stats.thirds ?? 0;
     const fourths = stats.fourths ?? 0;        // treated as "Losses"
     const top2 = (wins + seconds) | 0;
-    const winRate = gp ? (wins / gp) : 0;
-    const top2Rate = gp ? (top2 / gp) : 0;
-    const pct = (x) => (isFinite(x) ? (x * 100).toFixed(1) + '%' : '—');
+    const pct = (n) => gp ? ((n / gp) * 100).toFixed(1) + '%' : '—';
 
-    const statsStrip = document.createElement('div');
-    statsStrip.id = 'profileStatsStrip';
-    statsStrip.className = `
-        mt-5
-        bg-violet-50
-        border border-gray-200 dark:border-gray-700
-        rounded-lg shadow-sm
-        overflow-x-auto
-    `;
+    const grid = document.createElement('div');
+    grid.id = 'profileStatsStrip';
+    grid.className = 'stat-grid';
 
-    const statsPercentageStrip = document.createElement('div');
-    statsPercentageStrip.id = 'profileStatsPercentageStrip';
-    statsPercentageStrip.className = `
-        mt-2
-        bg-violet-50
-        border border-gray-200 dark:border-gray-700
-        rounded-lg shadow-sm
-        overflow-x-auto
-    `;
-
-    const row = document.createElement('div');
-    row.className = `
-        flex gap-2 p-2
-        min-w-full
-        justify-between
-    `;
-
-    // --- Second row: percentage stats ---
-    const row2 = document.createElement('div');
-        row2.className = `
-        flex gap-2 p-2
-        min-w-full
-        justify-between
-    `;
-
-    // Pill builder
-    const makePill = (label, value, title = '') => {
-        const wrap = document.createElement('div');
-        wrap.className = `
-            flex flex-col items-center justify-center
-            w-20 
-            px-1 py-1 rounded-md
-            bg-gray-50 dark:bg-gray-900
-            border border-gray-200 dark:border-gray-700
-            shrink-0
-        `;
-        if (title) wrap.title = title;
-
-        const v = document.createElement('div');
-        v.className = 'text-[16px] font-semibold text-gray-900 dark:text-gray-100 leading-none';
-        v.textContent = value;
-
-        const l = document.createElement('div');
-        l.className = 'text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-1';
-        l.textContent = label;
-
-        wrap.append(v, l);
-        return wrap;
+    const tile = (label, value, sub) => {
+        const t = document.createElement('div');
+        t.className = 'stat-tile';
+        const l = document.createElement('div'); l.className = 'stat-label'; l.textContent = label;
+        const v = document.createElement('div'); v.className = 'stat-value'; v.textContent = value;
+        const s2 = document.createElement('div'); s2.className = 'stat-sub'; s2.textContent = sub;
+        t.append(l, v, s2);
+        return t;
     };
 
-    // thinner pill builder (percentages)
-    const makePill2 = (label, value, title = '') => {
-        const wrap = document.createElement('div');
-        wrap.className = `
-            flex flex-col items-center justify-center
-            w-20
-            px-1 py-1 rounded-md   /* thinner */
-            bg-gray-50 dark:bg-gray-900
-            border border-gray-200 dark:border-gray-700
-            shrink-0
-        `;
-        if (title) wrap.title = title;
-
-        const v = document.createElement('div');
-        v.className = 'text-[16px] font-semibold text-gray-900 dark:text-gray-100 leading-none';
-        v.textContent = value;
-
-        const l = document.createElement('div');
-        l.className = 'text-[10px] uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5';
-        l.textContent = label;
-
-        wrap.append(v, l);
-        return wrap;
-    };
-
-    row.append(
-        makePill('Games', gp),
-        makePill('Wins', wins),
-        makePill('Seconds', seconds),
-        makePill('Thirds', thirds),
-        makePill('Losses', fourths)
+    grid.append(
+        tile('Games', gp, 'played'),
+        tile('1st', wins, pct(wins)),
+        tile('2nd', seconds, pct(seconds)),
+        tile('3rd', thirds, pct(thirds)),
+        tile('4th', fourths, pct(fourths)),
+        tile('Top 2', pct(top2), `${top2} games`),
     );
 
-    // individual rates (safe if gp === 0)
-    const winPct    = pct(winRate);
-    const secondPct = pct(gp ? seconds / gp : 0);
-    const thirdPct  = pct(gp ? thirds / gp : 0);
-    const lossPct   = pct(gp ? fourths / gp : 0);
-    const top2Pct   = pct(top2Rate);
-
-    row2.append(
-        makePill2('Top 2 %', top2Pct),
-        makePill2('Win %', winPct),
-        makePill2('Second %', secondPct),
-        makePill2('Third %', thirdPct),
-        makePill2('Loss %', lossPct),
-    );
-
-    statsStrip.append(row);
-    statsPercentageStrip.append(row2);
-
-    // Insert strip *below* the header
-    header.insertAdjacentElement('afterend', statsStrip);
-    statsStrip.insertAdjacentElement('afterend', statsPercentageStrip);
+    if (body) body.replaceChildren(grid);
+    else header.insertAdjacentElement('afterend', grid);
 }
 
 async function renderProfileTable(username) {
-    const statsPercentageStrip = document.getElementById("profileStatsPercentageStrip");
-    if (!statsPercentageStrip) {
-        console.warn("profileStatsPercentageStrip not found");
-        return;
-    }
+    const body = document.getElementById("profileBody");
+    if (!body) return;
 
     document.getElementById("profileStatsTable")?.remove();
 
-    const wrapper = document.createElement("div");
-    wrapper.id = "profileStatsTable";
-    wrapper.className =
-        "mt-5 overflow-x-auto rounded-xl border border-gray-300 dark:border-gray-700 shadow-md bg-white dark:bg-gray-900";
+    const section = document.createElement("div");
+    section.id = "profileStatsTable";
+
+    const title = document.createElement("div");
+    title.className = "menu-section-title";
+    title.textContent = "Recent games";
+
+    const wrap = document.createElement("div");
+    wrap.className = "data-table-wrap";
+
     const table = document.createElement("table");
-    table.className =
-        "min-w-full text-sm text-left divide-y divide-gray-200 dark:divide-gray-700";
-
-    // Header
-    const thead = document.createElement("thead");
-    thead.className =
-        "bg-gradient-to-r from-green-400 via-green-500 to-green-600 text-grey-900 dark:text-gray-100 uppercase text-xs tracking-wider";
-    thead.innerHTML = `
-        <tr>
-            <th class="px-4 py-3 font-semibold">Game ID</th>
-            <th class="px-4 py-3 font-semibold">First</th>
-            <th class="px-4 py-3 font-semibold">Second</th>
-            <th class="px-4 py-3 font-semibold">Third</th>
-            <th class="px-4 py-3 font-semibold">Fourth</th>
-            <th class="px-4 py-3 font-semibold">Date</th>
-        </tr>
-    `;
-
-    // Body
+    table.className = "data-table";
+    table.innerHTML = `
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Result</th>
+                <th>1st</th>
+                <th>2nd</th>
+                <th>3rd</th>
+                <th>4th</th>
+                <th></th>
+            </tr>
+        </thead>`;
     const tbody = document.createElement("tbody");
-    tbody.className =
-        "divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-900";
+    table.appendChild(tbody);
 
-    // Footer / Pager
-    const footer = document.createElement("div");
-    footer.className =
-        "flex items-center justify-between gap-3 px-4 py-3 bg-gray-100 border-t border-gray-300 dark:border-gray-700 rounded-b-xl";
-
-    const info = document.createElement("span");
-    info.className = "text-xs text-gray-700 dark:text-gray-400";
-
-    function makeBtn(label, title) {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.title = title || label;
-        btn.className =
-            "px-2.5 py-1 text-xs rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 font-medium shadow-sm transition";
-        btn.textContent = label;
-        return btn;
-    }
-
-    const firstBtn = makeBtn("« First", "First page");
-    const prevBtn = makeBtn("‹ Prev", "Previous page");
-    const nextBtn = makeBtn("Next ›", "Next page");
-    const lastBtn = makeBtn("Last »", "Last page");
-
-    const pager = document.createElement("div");
-    pager.className = "flex items-center gap-2";
-    pager.append(firstBtn, prevBtn, info, nextBtn, lastBtn);
-
-    footer.append(pager);
-
-    table.append(thead, tbody);
-    wrapper.append(table, footer);
-    statsPercentageStrip.insertAdjacentElement("afterend", wrapper);
+    const pager = makePager();
+    wrap.append(table, pager.footer);
+    section.append(title, wrap);
+    body.appendChild(section);
 
     // Pagination state
     let page = 1;
-    const perPage = 6;
+    const perPage = 8;
 
     function fmtDate(iso) {
         const d = new Date(iso);
@@ -2994,6 +2866,26 @@ async function renderProfileTable(username) {
         });
     }
 
+    // name cell: the profile owner is plain bold text, everyone else links to their profile
+    function nameCell(name) {
+        const c = document.createElement("td");
+        if (!name) { c.textContent = "—"; return c; }
+        if (name === username) {
+            const s1 = document.createElement("span");
+            s1.className = "name-self";
+            s1.textContent = name;
+            c.appendChild(s1);
+        } else {
+            const a = document.createElement("a");
+            a.href = "#";
+            a.className = "name-link";
+            a.dataset.username = name;
+            a.textContent = name;
+            c.appendChild(a);
+        }
+        return c;
+    }
+
     async function renderPage() {
         const res = await fetchGameResultsForUsername(pb, username, {
             page,
@@ -3001,78 +2893,47 @@ async function renderProfileTable(username) {
             sort: "-created",
         });
 
-        tbody.innerHTML = "";
+        tbody.replaceChildren();
         if (!res.items.length) {
-            tbody.innerHTML =
-                `<tr><td colspan="6" class="px-4 py-6 text-center text-gray-500 dark:text-gray-400 italic">No games yet</td></tr>`;
+            tbody.innerHTML = `<tr class="empty-row"><td colspan="7">No games yet</td></tr>`;
         } else {
-            res.items.forEach((row, i) => {
+            res.items.forEach((row) => {
                 const tr = document.createElement("tr");
-                tr.className =
-                (i % 2 === 0 ? "bg-gray-200" : "bg-white dark:bg-gray-900") +
-                " hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors";
 
-                // helpers
-                const td = (cls, text) => {
-                    const c = document.createElement("td");
-                    c.className = cls;
-                    c.textContent = text; // << safe
-                    return c;
-                };
+                const dateTd = document.createElement("td");
+                dateTd.textContent = fmtDate(row.created);
 
-                tr.append(
-                    td("px-4 py-2 font-mono text-xs text-gray-800 dark:text-gray-200 whitespace-nowrap", row.id),
-                    td("px-4 py-2 text-xs truncate", row.first  ?? "—"),
-                    td("px-4 py-2 text-xs truncate", row.second ?? "—"),
-                    td("px-4 py-2 text-xs truncate", row.third  ?? "—"),
-                    td("px-4 py-2 text-xs truncate", row.fourth ?? "—"),
-                    td("px-4 py-2 text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap", fmtDate(row.created))
-                );
+                const order = [row.first, row.second, row.third, row.fourth];
+                const place = order.indexOf(username) + 1;
+                const resultTd = document.createElement("td");
+                if (place > 0) resultTd.appendChild(makePlaceBadge(place));
+                else resultTd.textContent = "—";
 
+                const viewTd = document.createElement("td");
+                viewTd.className = "num";
+                const view = document.createElement("a");
+                view.href = "#";
+                view.className = "btn-link";
+                view.dataset.gameId = row.id;
+                view.textContent = "View game ›";
+                viewTd.appendChild(view);
+
+                tr.append(dateTd, resultTd, ...order.map(nameCell), viewTd);
                 tbody.appendChild(tr);
             });
         }
 
-        info.textContent = `Page ${res.page} of ${res.totalPages} • ${res.totalItems} games`;
+        pager.info.textContent = `Page ${res.page} of ${Math.max(1, res.totalPages)} · ${res.totalItems} games`;
 
-        firstBtn.disabled = res.page <= 1;
-        prevBtn.disabled = res.page <= 1;
-        nextBtn.disabled = res.page >= res.totalPages;
-        lastBtn.disabled = res.page >= res.totalPages;
+        pager.firstBtn.disabled = res.page <= 1;
+        pager.prevBtn.disabled = res.page <= 1;
+        pager.nextBtn.disabled = res.page >= res.totalPages;
+        pager.lastBtn.disabled = res.page >= res.totalPages;
 
-        firstBtn.onclick = () => { clickSounds[0].play(); page = 1; renderPage(); };
-        prevBtn.onclick = () => { clickSounds[0].play(); if (page > 1) page -= 1; renderPage(); };
-        nextBtn.onclick = () => { clickSounds[2].play(); page += 1; renderPage(); };
-        lastBtn.onclick = () => { clickSounds[2].play(); page = res.totalPages; renderPage(); };
-
-        // Turn Game IDs in column 1 into clickable links
-        tbody.querySelectorAll("td:nth-child(1)").forEach(td => {
-            const id = td.textContent.trim();
-            if (id) {
-                const a = document.createElement("a");
-                a.href = "#";
-                a.dataset.gameId = id;
-                a.textContent = id;
-                a.className = "text-current no-underline hover:underline"; // inherit font + color
-                td.textContent = "";
-                td.appendChild(a);
-            }
-        });
-
-        // Turn names in columns 2–5 into clickable links
-        tbody.querySelectorAll("td:nth-child(2), td:nth-child(3), td:nth-child(4), td:nth-child(5)")
-        .forEach(td => {
-            const name = td.textContent.trim();
-            if (name && name !== "—") {
-                const a = document.createElement("a");
-                a.href = "#";
-                a.dataset.username = name;
-                a.textContent = name;
-                a.className = "text-blue-700 dark:text-blue-400 hover:underline";
-                td.textContent = "";
-                td.appendChild(a);
-            }
-        });
+        pager.firstBtn.onclick = () => { clickSounds[0].play(); page = 1; renderPage(); };
+        pager.prevBtn.onclick = () => { clickSounds[0].play(); if (page > 1) page -= 1; renderPage(); };
+        pager.nextBtn.onclick = () => { clickSounds[2].play(); if (page < res.totalPages) page += 1; renderPage(); };
+        pager.lastBtn.onclick = () => { clickSounds[2].play(); page = res.totalPages; renderPage(); };
     }
 
     await renderPage();
@@ -3116,9 +2977,9 @@ document.body.addEventListener("click", async (e) => {
 function getAvatarUrl(user) {
     if (!user) return "src/css/avatars/avatar-placeholder.png";
     try {
-        if (typeof pbAvatarUrl === "function") {
-        return pbAvatarUrl(user.id, user.avatar, "100x100");
-        }
+        // pbAvatarUrl returns '' when the user has no avatar → fall through to the placeholder
+        const url = typeof pbAvatarUrl === "function" ? pbAvatarUrl(user.id, user.avatar, "100x100") : '';
+        if (url) return url;
     } catch (_) {}
     // Fallback PocketBase thumb URL shape (adjust if your helper differs)
     if (user?.collectionId && user?.avatar) {
@@ -3127,40 +2988,24 @@ function getAvatarUrl(user) {
     return "src/css/avatars/avatar-placeholder.png";
 }
 
-// tiny badge style for places
-function placeBadge(place) {
-    const styles = {
-        "1st": "bg-yellow-100 text-yellow-800 border-yellow-200",
-        "2nd": "bg-gray-100 text-gray-800 border-gray-200",
-        "3rd": "bg-amber-100 text-amber-800 border-amber-200",
-        "Loser": "bg-rose-100 text-rose-800 border-rose-200",
-    };
-    return `inline-block text-[10px] px-1.5 py-0.5 rounded border ${styles[place] || "bg-gray-100 text-gray-700 border-gray-200"}`;
-}
-
-// compact player card (similar vibe to lobby cards, minus “ready”)
-function playerCard(placeLabel, user) {
+// compact finishing-order card for the game detail view
+function playerCard(place, user) {
     const name = user?.name ?? "—";
-    const avatar = getAvatarUrl(user);
 
     const wrap = document.createElement('div');
-    wrap.className = "flex flex-col items-center space-y-1 mb-2";
+    wrap.className = "game-player";
 
     const img = document.createElement('img');
-    img.src = avatar;
-    img.alt = name;
-    img.className = "w-12 h-12 rounded-md object-cover border border-gray-200 dark:border-gray-700";
+    img.src = getAvatarUrl(user);
+    img.alt = '';
+    img.className = "avatar avatar-sm";
     img.loading = "lazy";
 
     const nameDiv = document.createElement('div');
-    nameDiv.className = "text-xs font-medium text-gray-900 dark:text-gray-100";
+    nameDiv.className = "game-player-name";
     nameDiv.textContent = name;
 
-    const badge = document.createElement('span');
-    badge.className = placeBadge(placeLabel);
-    badge.textContent = placeLabel;
-
-    wrap.append(img, nameDiv, badge);
+    wrap.append(makePlaceBadge(place), img, nameDiv);
     return wrap;
 }
 
@@ -3199,63 +3044,36 @@ function cardGlyph({ rank, suit }) {
     return `${sym}${suitChar}`;
 }
 
-// 1) Make each card a fixed-size box so every glyph occupies same visual slot
+// one card glyph in the turn history
 function cardSpan(card) {
     const sym = rankToSymbol(Number(card.rank));
     const suitChar = ['♦','♣','♥','♠'][card.suit] ?? '?';
     const label = `${sym}${suitChar}`;
-    const glyph = cardGlyph(card);
     const isRed = card.suit === 0 || card.suit === 2;
-
-    return `
-        <span
-        class="inline-flex w-20 h-22 items-center justify-center text-[4rem] leading-none
-                ${isRed ? 'text-rose-600 dark:text-rose-400' : 'text-gray-900 dark:text-gray-100'}
-                align-middle select-none"
-        title="${label}" aria-label="${label}">
-        ${glyph}
-        </span>
-    `;
+    return `<span class="history-card${isRed ? ' red' : ''}" title="${label}" aria-label="${label}">${cardGlyph(card)}</span>`;
 }
 
-// 2) Use a two-column grid so the cards always start at the same x-position
+// one played hand: number, who played it, the cards
 function historyRow(h, idx) {
     const who = h?.username ?? `Seat ${h?.seat ?? '?'}`;
-    const action = h?.action ?? 'play';
     const cards = Array.isArray(h?.cards) ? h.cards.map(cardSpan).join('') : '';
-
     return `
-        <div class="grid grid-cols-[12rem,1fr] gap-3 py-1.5 px-2
-                    hover:bg-gray-100/70 dark:hover:bg-gray-800/60 rounded">
-        <div class="min-w-0">
-            <div class="text-xs font-medium text-gray-700 dark:text-gray-200 truncate">
-            ${idx + 1}. ${who} <span class="opacity-70">(${action})</span>
-            </div>
-        </div>
-
-        <div class="flex flex-wrap gap-x-1 gap-y-1">
-            ${cards || `<span class="text-xs opacity-70">—</span>`}
-        </div>
-        </div>
-    `;
+        <div class="history-row">
+            <span class="history-num">${idx + 1}</span>
+            <span class="history-who" title="${escapeHtml(who)}">${escapeHtml(who)}</span>
+            <div class="history-cards">${cards || '<span class="history-num">—</span>'}</div>
+        </div>`;
 }
 
-// Build the scrollable HTML
+// Build the turn history list
 function renderHistoryAsCards(playedHistory, cap = 200) {
     const total = Array.isArray(playedHistory) ? playedHistory.length : 0;
     const rows = (playedHistory || [])
         .slice(0, cap)
         .map((h, i) => historyRow(h, i))
         .join('');
-    const more = total > cap ? `<div class="px-2 py-1 text-[11px] opacity-70">…and ${total - cap} more</div>` : '';
-    return `
-        <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
-            <div class="max-h-84 overscroll-contain overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
-            ${rows || `<div class="px-3 py-2 text-xs opacity-70">No turns recorded</div>`}
-            ${more}
-            </div>
-        </div>
-        </div>`;
+    const more = total > cap ? `<div class="history-empty">…and ${total - cap} more</div>` : '';
+    return `<div class="history">${rows || '<div class="history-empty">No turns recorded</div>'}${more}</div>`;
 }
 
 // function handles opening another player's profile from gameProfileMenu
@@ -3264,65 +3082,42 @@ async function openGameProfile(gameId, container = document.getElementById("game
     const body = container.querySelector('#gameProfileBody');
     if (!body) return;
 
-    // Unhide + loading state (only the body, keep header/close button intact)
+    // Unhide + loading state (only the body, keep the close button intact)
     setHiddenSafe(container, false);
-    body.innerHTML = `
-        <div class="p-4 text-sm text-gray-600 dark:text-gray-300">Loading game ${gameId}…</div>
-    `;
+    body.innerHTML = `<div class="history-empty">Loading game…</div>`;
 
     try {
         const game = await pb.collection("game_results").getOne(gameId, {
             expand: "first,second,third,fourth",
         });
 
-        // keep playedHistory handy for the next step
         const playedHistory = Array.isArray(game?.playedHistory) ? game.playedHistory : [];
+        const createdStr = game?.created
+            ? new Date(game.created).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+            : "—";
 
-        const createdStr = game?.created ? new Date(game.created).toLocaleString() : "—";
-        const first  = game.expand?.first   ?? null;
-        const second = game.expand?.second  ?? null;
-        const third  = game.expand?.third   ?? null;
-        const fourth = game.expand?.fourth  ?? null; // loser
-
-        // Header row (like your profile header vibe, but lightweight)
-        const header = `
-        <div class="px-4 py-3 rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 flex items-center justify-between">
-            <div class="flex items-center gap-3">
-            <div class="text-base font-semibold text-gray-900 dark:text-gray-100">Game <span class="text-blue-600 dark:text-blue-400">${game.id}</span></div>
+        body.innerHTML = `
+            <div class="game-head">
+                <div class="menu-title">Game details</div>
+                <div class="menu-subtitle">${escapeHtml(createdStr)} · ${playedHistory.length} plays · ID ${escapeHtml(game.id)}</div>
             </div>
-            <div class="text-xs text-gray-600 dark:text-gray-300">Played: ${createdStr}</div>
-        </div>
+            <div class="menu-section-title">Finishing order</div>
+            <div id="playersGrid" class="game-players"></div>
+            <div class="menu-section-title">Turn history</div>
+            ${renderHistoryAsCards(playedHistory)}
         `;
 
-        // Players grid — mirrors the lobby’s compact card feel
-        const playersSectionHtml = `
-            <div class="mt-4 p-2 bg-gray-50 dark:bg-gray-900 rounded-lg mb-6 border 
-                        border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 shadow-inner">
-                <div id="playersGrid" class="grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
-            </div>
-            `;
-
-        // 
-        const historyPreview = renderHistoryAsCards(playedHistory);
-
-        // inject the strings, then append the card nodes
-        body.innerHTML = `${header}${playersSectionHtml}${historyPreview}`;
-
-        const grid = body.querySelector('#playersGrid');
-        grid.append(
-            playerCard("1st", first),
-            playerCard("2nd", second),
-            playerCard("3rd", third),
-            playerCard("Loser", fourth),
+        body.querySelector('#playersGrid').append(
+            playerCard(1, game.expand?.first ?? null),
+            playerCard(2, game.expand?.second ?? null),
+            playerCard(3, game.expand?.third ?? null),
+            playerCard(4, game.expand?.fourth ?? null),
         );
 
-        // return for any follow-up logic
         return { game, playedHistory };
     } catch (err) {
         console.error("Failed to fetch game:", err);
-        body.innerHTML = `
-        <div class="p-4 text-red-500">Error loading game data.</div>
-        `;
+        body.innerHTML = `<div class="history-empty" style="color:var(--m-danger)">Couldn't load this game. Please try again.</div>`;
         throw err;
     }
 }
@@ -3363,7 +3158,12 @@ async function joinRoomMenu(socket, username) {
         jrLeaderboardButton.parentNode.replaceChild(newJrLeaderboardButton, jrLeaderboardButton);
 
         const img = document.getElementById('jrAvatarImg');
-        
+
+        // who's signed in, and clear any error left from last time
+        const jrUsernameEl = document.getElementById('jrUsername');
+        if (jrUsernameEl) jrUsernameEl.textContent = username || pb?.authStore?.model?.name || 'Player';
+        errorMessage2.textContent = '';
+
 
         async function openProfile() {
             // show popup above everything
@@ -3505,12 +3305,15 @@ async function joinRoomMenu(socket, username) {
                 const okTypes = new Set(['image/png','image/jpeg','image/webp','image/jpg']);
                 if (!okTypes.has(file.type)) {
                     console.warn('Unsupported file type:', file.type);
+                    errorMessage2.textContent = 'Please choose a PNG, JPG or WebP image.';
                     return;
                 }
                 if (file.size > 2 * 1024 * 1024) { // 2 MB
                     console.warn('File too large (>2MB).');
+                    errorMessage2.textContent = 'That image is over 2 MB. Please pick a smaller one.';
                     return;
                 }
+                errorMessage2.textContent = '';
 
                 // 3) Preview immediately
                 try {
@@ -3558,66 +3361,72 @@ async function joinRoomMenu(socket, username) {
                     const fieldErrs = e?.data?.data ? JSON.stringify(e.data.data, null, 2) : '';
                     console.error('Avatar upload failed:', { status, message, fieldErrs });
                     console.error(`Avatar upload failed: ${message}\n${fieldErrs}`);
+                    errorMessage2.textContent = "Couldn't update your picture. Please try again.";
                 }
             });
         })();
 
         // Handler for updating available rooms
         function updateAvailableRooms(availableRooms) {
-            availableRoomsDiv.innerHTML = `
-                <h3 class="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide mb-2">
-                Available Rooms
-                </h3>
-            `;
+            availableRoomsDiv.replaceChildren();
+
+            // "N playing" pill next to the heading
+            const onlineEl = document.getElementById('jrOnlineCount');
+            const playing = (availableRooms || []).reduce((n, r) => n + (r.numClients || 0), 0);
+            if (onlineEl) {
+                onlineEl.textContent = `${playing} playing now`;
+                onlineEl.hidden = playing === 0;
+            }
 
             if (!availableRooms?.length) {
-                const p = document.createElement('p');
-                p.className = 'text-sm text-gray-500 dark:text-gray-400';
-                p.textContent = 'No available rooms';
+                const p = document.createElement('div');
+                p.className = 'room-empty';
+                p.textContent = 'No rooms available right now.';
                 availableRoomsDiv.appendChild(p);
                 return;
             }
 
             availableRooms.forEach(({ roomCode, numClients, usernames = [] }) => {
+                const full = numClients >= 4;
+
                 const btn = document.createElement('button');
                 btn.type = 'button';
                 btn.dataset.roomCode = roomCode;
-                btn.disabled = numClients >= 4;
+                btn.disabled = full;
+                btn.className = 'room-button room-card';
 
-                btn.className = [
-                    'room-button', 
-                    'w-full text-left select-none',
-                    'rounded-xl border border-gray-200 dark:border-gray-700',
-                    'bg-white dark:bg-gray-900',
-                    'hover:bg-indigo-50 dark:hover:bg-gray-800',       // soft background tint on hover
-                    'hover:border-indigo-300 dark:hover:border-indigo-500', // subtle border glow
-                    'hover:shadow-md dark:hover:shadow-lg',             // lift effect
-                    'transition-all duration-200 ease-out',             // smooth animation
-                    'active:scale-[0.98]',                              // click press feedback
-                    'px-4 py-3 shadow-sm',
-                    'cursor-pointer',
-                    'disabled:opacity-60 disabled:cursor-not-allowed'
-                ].join(' ');
+                const main = document.createElement('div');
+                main.className = 'room-card-main';
+                const title = document.createElement('div');
+                title.className = 'room-card-title';
+                title.textContent = `Room ${roomCode}`;
+                const names = document.createElement('div');
+                names.className = 'room-card-names' + (usernames.length ? '' : ' is-empty');
+                names.textContent = usernames.length ? usernames.join(', ') : 'Empty: be the first to sit down';
+                main.append(title, names);
 
-                const names = usernames.length ? usernames.join(', ') : '—';
-                const capacityBadge =
-                numClients >= 4
-                    ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300'
-                    : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300';
+                // one dot per seat
+                const dots = document.createElement('div');
+                dots.className = 'seat-dots';
+                dots.title = `${numClients} of 4 seats taken`;
+                for (let i = 0; i < 4; i++) {
+                    const d = document.createElement('span');
+                    if (i < numClients) d.className = 'on';
+                    dots.appendChild(d);
+                }
 
-                btn.innerHTML = `
-                    <div class="flex items-center justify-between gap-3">
-                        <div class="flex items-center gap-2">
-                        <span class="text-sm font-semibold text-gray-900 dark:text-gray-100">Room ${roomCode}</span>
-                        <span class="inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full ${capacityBadge}">
-                            ${numClients}/4
-                        </span>
-                        </div>
-                        <div id="roomNames" class="flex-1 text-right truncate text-xs text-gray-600 dark:text-gray-400"></div>
-                    </div>
-                `;
-                btn.querySelector('#roomNames').textContent = names; 
+                let end;
+                if (full) {
+                    end = document.createElement('span');
+                    end.className = 'pill pill-red';
+                    end.textContent = 'Full';
+                } else {
+                    end = document.createElement('span');
+                    end.className = 'room-card-chevron';
+                    end.textContent = '›';
+                }
 
+                btn.append(main, dots, end);
                 availableRoomsDiv.appendChild(btn);
             });
         }
@@ -3719,12 +3528,13 @@ async function spEndMenu(results) {
         console.warn("[spEndMenu] #resultsContainer not found inside #endMenu");
     } else {
         resultsContainer.innerHTML = `
-        <div class="bg-gray-50  shadow-md rounded-md p-4 mx-auto max-w-sm w-full mt-2 mb-6
-            border border-gray-100">
-            <h2 class="text-xl font-semibold mb-3 text-gray-900 text-center">Single Player Results</h2>
-            <div id="endMenuSummary" class="text-center text-sm text-gray-700 mb-3"></div>
-            <ul id="endMenuLeaderboard" class="divide-y divide-gray-200"></ul>
-        </div>
+            <div class="results-head">
+                <div class="menu-title">Results</div>
+                <div class="menu-subtitle">Solo match vs AI</div>
+            </div>
+            <div id="endMenuSummary" class="results-note"></div>
+            <div class="results-cols"><span>Player</span><span>Points</span></div>
+            <ul id="endMenuLeaderboard" class="results-list"></ul>
         `;
     }
 
@@ -3821,22 +3631,33 @@ async function spEndMenu(results) {
         const { player: p, name, total, earned } = rows[i];
 
         const li = document.createElement("li");
-        li.className = "flex items-center justify-between py-2";
+        const isMe = me && p === me;
+        li.className = "results-row" + (isMe ? " is-me" : "");
 
-        li.innerHTML = `
-            <div class="flex items-center">
-            <span class="place text-lg font-semibold mr-4 text-gray-700"></span>
-            <img class="player-avatar w-8 h-8 rounded-md border border-gray-300 mr-4 object-cover" alt="avatar">
-            <span class="name text-gray-800 font-semibold"></span>
-            </div>
-            <span class="player-avg text-gray-800 font-semibold"></span>
-        `;
+        const img = document.createElement("img");
+        img.alt = "";
+        img.className = "avatar avatar-sm";
 
-        li.querySelector(".place").textContent = String(i + 1);
-        li.querySelector(".name").textContent = name;
-        li.querySelector(".player-avg").textContent = `${total} (+${earned})`;
+        const nameEl = document.createElement("span");
+        nameEl.className = "results-name";
+        nameEl.textContent = name;
+        if (isMe) {
+            const you = document.createElement("span");
+            you.className = "you-tag";
+            you.textContent = "You";
+            nameEl.appendChild(you);
+        }
 
-        const img = li.querySelector(".player-avatar");
+        const valueEl = document.createElement("span");
+        valueEl.className = "results-value";
+        valueEl.textContent = String(total);
+        const earnedEl = document.createElement("span");
+        earnedEl.className = "results-delta" + (earned > 0 ? " down" : "");
+        earnedEl.textContent = `+${earned}`;
+        valueEl.appendChild(earnedEl);
+
+        li.append(makePlaceBadge(i + 1), img, nameEl, valueEl);
+
         img.src = `src/css/avatars/${p.avatar}`;
         img.onerror = () => {
             img.onerror = null;
@@ -3862,25 +3683,28 @@ async function spEndMenu(results) {
     if (summary) {
         const base =
             playerPlace > 0
-            ? `You placed #${playerPlace} - ${myEarned} pts (Total: ${myTotal})`
-            : `+${myEarned} pts (Total: ${myTotal})`;
+            ? `You finished ${PLACE_LABELS[playerPlace - 1] ?? '#' + playerPlace}: +${myEarned} pts (total ${myTotal})`
+            : `+${myEarned} pts (total ${myTotal})`;
 
+        summary.replaceChildren();
+        const line1 = document.createElement('div');
+        line1.textContent = base;
+        const line2 = document.createElement('div');
         if (matchWinner) {
-            const wName = matchWinner.name;
-            summary.textContent = `${base} • MATCH OVER: ${wName} wins!`;
+            const strong = document.createElement('strong');
+            strong.textContent = `Match over: ${matchWinner.name} wins!`;
+            line2.appendChild(strong);
         } else {
-            summary.innerHTML = `
-            <div>${base}</div>
-            <div class="mt-1 text-gray-600">
-                First to ${TARGET_POINTS} (win by ${WIN_BY})
-            </div>
-            `;
+            line2.textContent = `First to ${TARGET_POINTS} points (win by ${WIN_BY})`;
         }
+        summary.append(line1, line2);
     }
 
     // --- buttons
-    continueBtn.textContent = "Play Again";
-    backBtn.textContent = "Back";
+    continueBtn.classList.remove('is-on');
+    continueBtn.title = '';
+    continueBtn.textContent = matchWinner ? "New match" : "Next game";
+    backBtn.textContent = "Back to menu";
 
     const handleContinue = () => {
         clickSounds?.[0]?.play?.();
@@ -3939,18 +3763,23 @@ async function endMenu(socket, roomCode, results) {
         setHiddenSafe(div, true);
     }
 
-    // Create a clean leaderboard layout
+    // Results: finishing order with each player's average finish (and how this game moved it)
     const resultsContainer = endMenu.querySelector("#resultsContainer");
     resultsContainer.innerHTML = `
-    <div class="bg-gray-50 shadow-md rounded-md p-4 mx-auto max-w-sm w-full mt-2 mb-12
-        border border-gray-100">
-        <h2 class="text-xl font-semibold mb-4 text-gray-900 text-center">Game Results</h2>
-        <ul id="resultsList" class="divide-y divide-gray-200"></ul>
-    </div>
+        <div class="results-head">
+            <div class="menu-title">Game results</div>
+            <div class="menu-subtitle">Average finish after this game: lower is better</div>
+        </div>
+        <div class="results-cols"><span>Player</span><span>Avg finish</span></div>
+        <ul id="resultsList" class="results-list"></ul>
     `;
 
     const ul = resultsContainer.querySelector("#resultsList");
     const preMap = getPreGameAvgMap(); // { [pbId]: avg_before }
+    const myName = pb?.authStore?.model?.name || '';
+
+    backBtn.textContent = 'Leave';
+    continueBtn.classList.remove('is-on');
 
     // populate endMenu results container
     for (let i = 0; i < results.length; i++) {
@@ -3977,11 +3806,12 @@ async function endMenu(socket, roomCode, results) {
                 if (Number.isFinite(avgBefore)) {
                 const delta = avgNow - avgBefore;
                 const sgn = delta >= 0 ? '+' : '';
-                const color = delta >= 0 ? 'text-rose-500' : 'text-emerald-500'; // make avg delta text red if plus and green if minus
-                pointsHtml = `<span class="font-semibold">${avgNow.toFixed(3)}</span> <span class="${color}">(${sgn}${delta.toFixed(3)})</span>`;
+                // a higher average finish is worse, so up = red, down = green
+                const dir = delta > 0.0005 ? 'up' : delta < -0.0005 ? 'down' : '';
+                pointsHtml = `${avgNow.toFixed(3)}<span class="results-delta ${dir}">${sgn}${delta.toFixed(3)}</span>`;
                 } else {
                 // no snapshot → just show current
-                pointsHtml = `<span class="font-semibold">${avgNow.toFixed(3)}</span>`;
+                pointsHtml = `${avgNow.toFixed(3)}`;
                 }
             }
         } catch (e) {
@@ -3989,23 +3819,28 @@ async function endMenu(socket, roomCode, results) {
         }
 
         const li = document.createElement("li");
-        li.className = "flex items-center justify-between py-2";
-        if (i !== results.length - 1) {
-            li.classList.add("border-b", "border-gray-200");
+        li.className = "results-row" + (name && name === myName ? " is-me" : "");
+
+        const img = document.createElement("img");
+        img.src = avatar;
+        img.alt = "";
+        img.className = "avatar avatar-sm";
+
+        const nameEl = document.createElement("span");
+        nameEl.className = "results-name";
+        nameEl.textContent = name ?? "—";
+        if (name && name === myName) {
+            const you = document.createElement("span");
+            you.className = "you-tag";
+            you.textContent = "You";
+            nameEl.appendChild(you);
         }
 
-        li.innerHTML = `
-        <div class="flex items-center">
-            <span class="place text-lg font-semibold mr-4 text-gray-700"></span>
-            <img src="${avatar}" alt="" class="w-8 h-8 rounded-md border border-gray-300 mr-4 object-cover">
-            <span class="name text-gray-800 font-semibold"></span>
-        </div>
-        <span class="player-avg">${pointsHtml}</span> <!-- numeric HTML we generate -->
-        `;
+        const valueEl = document.createElement("span");
+        valueEl.className = "results-value";
+        valueEl.innerHTML = pointsHtml; // numeric HTML we generate
 
-        // set dynamic string fields safely
-        li.querySelector('.place').textContent = String(place);
-        li.querySelector('.name').textContent  = name ?? "—";
+        li.append(makePlaceBadge(place), img, nameEl, valueEl);
 
         ul.appendChild(li);
     }
@@ -4014,9 +3849,11 @@ async function endMenu(socket, roomCode, results) {
 
     // label helper
     const setContinueLabel = (count) => {
+        continueBtn.classList.toggle('is-on', isReady);
         continueBtn.textContent = isReady
-        ? `Uncontinue ${count}/4`
-        : `Continue ${count}/4`;
+        ? `✓ Ready (${count}/4)`
+        : `Play again (${count}/4)`;
+        continueBtn.title = isReady ? 'Tap again to cancel' : '';
     };
 
     // toggle my ready state; server will rebroadcast counts
@@ -4097,73 +3934,68 @@ async function lobbyMenu(socket, roomCode){
     let isReady = false; // Track the local client's ready state
 
     lobbyHeadingEl.textContent = 'Room ' + roomCode;
+    const lobbySubEl = document.getElementById('lobbySubheading');
+    if (lobbySubEl) lobbySubEl.textContent = 'Waiting for players…';
+    readyButton.classList.remove('is-on');
+    readyButton.textContent = 'Ready up (0/4)';
 
     // Display lobbyMenu
     setHiddenSafe(lobbyMenu, false);
     
+    // Four seats, always: taken seats show avatar + ready state, the rest are open
     function updateClientList(clientList = []) {
-        // 1) reset the container each render
-        connectedClientsDiv.innerHTML = ``;
+        connectedClientsDiv.replaceChildren();
 
-        if (!clientList.length) {
-            const p = document.createElement('p');
-            p.className = 'm-0 text-sm text-gray-500 dark:text-gray-400';
-            p.textContent = 'No players connected';
-            connectedClientsDiv.appendChild(p);
-            return;
-        }
+        const myId = pb?.authStore?.model?.id;
 
-        // 2) build a fresh grid
-        const grid = document.createElement('div');
-        grid.className = 'grid grid-cols-4 gap-3 mt-2 justify-items-center';
+        for (let i = 0; i < 4; i++) {
+            const c = clientList[i];
+            const seat = document.createElement('div');
 
-        clientList.forEach(c => {
-            const wrapper = document.createElement('div');
-            wrapper.className = 'flex flex-col items-center space-y-1 mb-2';
+            if (!c) {
+                seat.className = 'seat is-open';
+                const icon = document.createElement('div');
+                icon.className = 'seat-open-icon';
+                icon.textContent = '+';
+                const name = document.createElement('div');
+                name.className = 'seat-name';
+                name.textContent = 'Open seat';
+                seat.append(icon, name);
+                connectedClientsDiv.appendChild(seat);
+                continue;
+            }
 
-            // avatar
-            const img = document.createElement('img');
+            seat.className = 'seat' + (c.isReady ? ' is-ready' : '');
 
             // If this entry is ME, prefer my freshly-synced authStore record
-            const isMe = (c.pbId && pb?.authStore?.model?.id && String(c.pbId) === String(pb.authStore.model.id));
+            const isMe = (c.pbId && myId && String(c.pbId) === String(myId));
             const freshAvatarFile = isMe ? pb.authStore.model.avatar : c.avatar;
 
+            const img = document.createElement('img');
             const url1x = pbAvatarUrl(c.pbId, freshAvatarFile, '100x100');
             const url2x = pbAvatarUrl(c.pbId, freshAvatarFile, '200x200');
             if (url1x) {
                 img.src = url1x;
                 img.srcset = `${url1x} 1x, ${url2x} 2x`;
-                img.sizes = '48px';
+                img.sizes = '52px';
             } else {
                 img.src = 'src/css/avatars/avatar-placeholder.png';
             }
-            img.className = [
-            'w-12 h-12 object-cover rounded-md border shadow-sm',
-            c.isReady ? 'border-emerald-500 dark:border-emerald-400'
-                        : 'border-gray-300 dark:border-gray-600 opacity-80'
-            ].join(' ');
-            img.alt = c.username;
+            img.alt = '';
+            img.className = 'avatar';
 
-            // username
             const name = document.createElement('div');
-            name.className = 'text-xs font-medium text-gray-700 dark:text-gray-300 text-center';
+            name.className = 'seat-name';
             name.textContent = c.username;
+            name.title = c.username;
 
-            // ready badge
-            const badge = document.createElement('div');
-            badge.className = [
-            'text-[10px] px-2 py-[1px] rounded-full mt-0.5',
-            c.isReady ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
-                        : 'bg-gray-200 text-gray-500 dark:text-gray-400'
-            ].join(' ');
-            badge.textContent = c.isReady ? '✅ Ready' : '💤 Waiting';
+            const badge = document.createElement('span');
+            badge.className = c.isReady ? 'pill pill-green' : 'pill';
+            badge.textContent = c.isReady ? '✓ Ready' : 'Not ready';
 
-            wrapper.append(img, name, badge);
-            grid.appendChild(wrapper);
-        });
-
-        // 3) append exactly one grid per render
-        connectedClientsDiv.appendChild(grid);
+            seat.append(img, name, badge);
+            connectedClientsDiv.appendChild(seat);
+        }
     }
 
 
@@ -4278,9 +4110,20 @@ async function lobbyMenu(socket, roomCode){
 
             // update counts + label
             const readyPlayersCount = clientList.filter(c => c.isReady).length;
+            readyButton.classList.toggle('is-on', myReadyNow);
+            readyButton.title = myReadyNow ? 'Tap again to cancel' : '';
             readyButton.textContent = myReadyNow
-                ? `Unready up ${readyPlayersCount}/4`
-                : `Ready up ${readyPlayersCount}/4`;
+                ? `✓ Ready (${readyPlayersCount}/4)`
+                : `Ready up (${readyPlayersCount}/4)`;
+
+            // status line under the room name
+            if (lobbySubEl) {
+                const n = clientList.length;
+                lobbySubEl.textContent =
+                    n < 4 ? `${n}/4 players · waiting for ${4 - n} more`
+                    : readyPlayersCount === 4 ? 'Everyone is ready. Starting…'
+                    : `${readyPlayersCount}/4 ready · the game starts when everyone is ready`;
+            }
             
         });
 
