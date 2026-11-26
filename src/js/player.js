@@ -1137,7 +1137,7 @@ export default class Player{
         // clean up any old handlers before arming again ---
         if (this._playHandler) playButton.removeEventListener("click", this._playHandler);
         if (this._passHandler) passButton.removeEventListener("click", this._passHandler);
-        if (this._clearHandler) passButton.removeEventListener("click", this._clearHandler);
+        if (this._clearHandler) clearButton.removeEventListener("click", this._clearHandler);
         if (this._sortHandler) sortSelect?.removeEventListener("change", this._sortHandler);
         this._playHandler = null;
         this._passHandler = null;
