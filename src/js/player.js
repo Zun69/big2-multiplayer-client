@@ -1143,6 +1143,7 @@ export default class Player{
         this._passHandler = null;
         this._clearHandler = null;
         this._sortHandler = null;
+        this.disarmTurnTimer(socket); // drop any timer listeners left from a previous turn
 
         if (sortSelect) {
             sortSelect.disabled = false;
@@ -1260,6 +1261,7 @@ export default class Player{
                 clearButton.removeEventListener("click", self._clearHandler);
                 sortSelect?.removeEventListener("change", self._sortHandler);
                 self._playHandler = self._passHandler = self._clearHandler = self._sortHandler =  null;
+                self.disarmTurnTimer(socket);
 
                 if (sortSelect) sortSelect.disabled = true;
 
@@ -1409,6 +1411,7 @@ export default class Player{
                 clearButton.removeEventListener("click", self._clearHandler);
                 sortSelect?.removeEventListener("change", self._sortHandler);
                 self._playHandler = self._passHandler = self._clearHandler = self._sortHandler =  null;
+                self.disarmTurnTimer(socket);
 
                 if (sortSelect) sortSelect.disabled = true;
                 
@@ -1489,9 +1492,51 @@ export default class Player{
             passButton.addEventListener("click", this._passHandler, { once: true });
             clearButton.addEventListener("click", this._clearHandler);
             sortSelect?.addEventListener("change", this._sortHandler);
+
+            // --- turn timer: server says time is running out / up ---
+            this._turnWarningHandler = ({ msLeft } = {}) => {
+                const secs = Math.round((msLeft || 10000) / 1000);
+                showToast(passButton.disabled
+                    ? `${secs}s left — your lowest card will be played`
+                    : `${secs}s left — you'll auto-pass`);
+            };
+
+            // act through the same buttons a player would, so the normal play/pass flow
+            // (server verdict, animations, ack barriers) runs exactly as usual
+            this._turnTimeoutHandler = () => {
+                if (!self._playHandler && !self._passHandler) return; // already acted this turn
+
+                if (!passButton.disabled) {
+                    passButton.click();
+                    return;
+                }
+
+                // free lead (or first move): pass isn't allowed, so play the lowest single.
+                // On the first move that's 3♦, which the leader always holds.
+                if (hand.length) clearClickListener();
+                const weight = (r) => (r === 1 ? 14 : r === 2 ? 15 : r);
+                const lowest = [...self.cards].sort((a, b) =>
+                    weight(Number(a.rank)) - weight(Number(b.rank)) || Number(a.suit) - Number(b.suit)
+                )[0];
+                if (!lowest) return;
+
+                cardClickListener(lowest);
+                if (!playButton.disabled) playButton.click();
+            };
+
+            socket.on('turn:warning', this._turnWarningHandler);
+            socket.on('turn:timeout', this._turnTimeoutHandler);
         });
 
         return myPromise;
+    }
+
+    // remove this turn's timer listeners (called on play, pass, and when a new turn is armed)
+    disarmTurnTimer(socket) {
+        if (this._turnWarningHandler) socket.off('turn:warning', this._turnWarningHandler);
+        if (this._turnTimeoutHandler) socket.off('turn:timeout', this._turnTimeoutHandler);
+        this._turnWarningHandler = null;
+        this._turnTimeoutHandler = null;
     }
 }
 

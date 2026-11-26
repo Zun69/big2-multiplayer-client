@@ -1873,6 +1873,12 @@ async function loginMenu() {
             socket.on('authenticated', onAuthed);
             socket.on('connect', onAuthed);
 
+            // server kicked this connection because the same account connected again elsewhere
+            // (newest connection wins). Socket.io won't auto-reconnect after a server-side disconnect.
+            socket.on('session:replaced', () => {
+                showToast('Signed in on another tab or device — this one is now disconnected');
+            });
+
             socket.on('connect_error', (error) => {
                 const msg = (error && error.message) || 'Authentication failed';
                 if (msg === 'Email not verified') {
@@ -4916,6 +4922,8 @@ function detachGameEvents(socket) {
         'passedTurn',
         'wonRound',
         'allHandAckComplete',
+        'turn:warning',
+        'turn:timeout',
 
         // sorting / animations
         'sortAfterTurnComplete',
